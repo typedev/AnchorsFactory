@@ -3,6 +3,8 @@
 A module for working with the rules for placing anchors in a font.
 The rule describes the position of one or several anchors at once.
 Several rules can be applied to one fingerboard at once.
+The rules are stored in a separate text file, for example 
+[anchors-list.txt](anchors-list.txt)
 
 ### General recording format:
 
