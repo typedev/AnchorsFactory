@@ -44,6 +44,7 @@ after `$GlyphName` you can write the fractional value of the anchor height using
 For example:
 
 `@bar=bar:center:$H*2/3` - `@bar` label, `bar` anchor, aligned to the center of the character width, height - `2/3` of the `H` glyph height
+
 `@back=back:left:700` - `@back` label, `back` anchor, on the left border of the glyph, at height `700`
 
 
