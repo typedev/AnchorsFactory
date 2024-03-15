@@ -16,7 +16,7 @@ UFOfile_anchored = '_anchored.ufo'
 # output UFO will be saved as <ufopath>_anchored.ufo
 saveOutputUFOfile = True
 
-AnchorsRulesFile = 'anchors-list.txt'
+AnchorsRulesFile = 'anchors-list-GLapp.txt'
 # if the file with the rules is not specified (None), there will be a search by the name of the font file with an addition to the name - .anchors_list.txt
 saveExistingAnchors = True
 
