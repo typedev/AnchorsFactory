@@ -222,9 +222,15 @@ def setAnchor2Glyph(font, glyphname, code, sfxlist, shiftX=0):
 				removeAnchors(glyph)
 			for anchor_code in code.split(','):
 				
-				anchorname = anchor_code.split(':')[0]
-				align = anchor_code.split(':')[1]
-				Ypos = anchor_code.split(':')[2]
+				try:
+					anchorname = anchor_code.split(":")[0]
+					align = anchor_code.split(":")[1]
+					Ypos = anchor_code.split(":")[2]
+				except:
+					print(
+						'ERROR 0 !!! Invalid anchor code:\n\t%s=%s'
+						% (glyphname_, anchor_code)
+					)
 				
 				if Ypos.startswith('$'):
 					Ypos = Ypos.replace('$','')
