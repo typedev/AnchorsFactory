@@ -9,14 +9,14 @@ replace_anchors = False
 # False = If the glyph has an anchor with the same name, save it, but add new ones
 # True = Delete with the same name and add a new one
 
-UFOfile = '...'
+UFOfile = ''
 # input UFO file or CurrentFont() - see main() section
 
 UFOfile_anchored = '_anchored.ufo'
 # output UFO will be saved as <ufopath>_anchored.ufo
 saveOutputUFOfile = True
 
-AnchorsRulesFile = 'anchors-list-GLapp.txt'
+AnchorsRulesFile = 'anchors-list.txt'
 # if the file with the rules is not specified (None), there will be a search by the name of the font file with an addition to the name - .anchors_list.txt
 saveExistingAnchors = True
 
@@ -340,8 +340,10 @@ def setAnchorsFromFile(font, saveExistingAnchors = True, anchorsFilePath = None)
 	placeAnchors(font, anchorsListConstruction)
 
 def main():
-	font = OpenFont(UFOfile)
-	# font = CurrentFont()
+	if UFOfile:
+		font = OpenFont(UFOfile)
+	else:
+		font = CurrentFont()
 	setAnchorsFromFile(font, saveExistingAnchors = saveExistingAnchors, anchorsFilePath = AnchorsRulesFile)
 	if saveOutputUFOfile:
 		font.save(font.path.replace('.ufo',UFOfile_anchored))
