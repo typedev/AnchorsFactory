@@ -2,10 +2,10 @@ from fontParts.world import *
 import math, os
 
 
-clear_exist_anchors = False
+clear_exist_anchors = True
 # Clear all existing anchors
 
-replace_anchors = False
+replace_anchors = True
 # False = If the glyph has an anchor with the same name, save it, but add new ones
 # True = Delete with the same name and add a new one
 
@@ -14,11 +14,11 @@ UFOfile = ''
 
 UFOfile_anchored = '_anchored.ufo'
 # output UFO will be saved as <ufopath>_anchored.ufo
-saveOutputUFOfile = True
+saveOutputUFOfile = False
 
-AnchorsRulesFile = 'anchors-list.txt'
+AnchorsRulesFile = 'anchors-list-Greek.txt'
 # if the file with the rules is not specified (None), there will be a search by the name of the font file with an addition to the name - .anchors_list.txt
-saveExistingAnchors = True
+saveExistingAnchors = False
 
 
 def glyphHasAnchor (glyph):

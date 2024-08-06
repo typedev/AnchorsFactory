@@ -1,0 +1,31 @@
+# anchors labels
+@=top:center:700,bottom:center:0
+@_=_top:center:700
+@tonos=tonos:leftinter:$H
+@_tonos=_tonos:rightinter:$H
+
+
+# compositions basic glyphs
+A=@tonos
+E=@tonos
+H=@tonos
+I=@tonos
+O=@tonos
+Y=@tonos
+Omega=@tonos
+
+a=@
+alpha=@
+epsilon=@
+n=@
+eta=@
+iota=@
+o=@
+omicron=@
+upsilon=@
+omega=@
+
+# top accents
+tonos=@_
+Tonos=@_,@_tonos
+dieresistonos=@_
