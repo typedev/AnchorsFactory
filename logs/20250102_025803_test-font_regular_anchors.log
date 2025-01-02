@@ -1,0 +1,179 @@
+2025-01-02 02:58:03,815 - INFO - Processing font: test/test-font.ufo
+2025-01-02 02:58:03,815 - INFO - ============================================================
+2025-01-02 02:58:03,816 - INFO - Evacode Mono Regular
+2025-01-02 02:58:03,816 - INFO - Loading anchors list from file:
+2025-01-02 02:58:03,816 - INFO - anchors-list.txt
+2025-01-02 02:58:03,817 - INFO - Processing glyph: A
+2025-01-02 02:58:03,842 - INFO - Processing glyph: B
+2025-01-02 02:58:03,843 - INFO - Processing glyph: C
+2025-01-02 02:58:03,844 - INFO - Processing glyph: D
+2025-01-02 02:58:03,845 - INFO - Processing glyph: E
+2025-01-02 02:58:03,862 - INFO - Processing glyph: F
+2025-01-02 02:58:03,863 - INFO - Processing glyph: G
+2025-01-02 02:58:03,864 - INFO - Processing glyph: H
+2025-01-02 02:58:03,909 - INFO - Processing glyph: I
+2025-01-02 02:58:03,925 - INFO - Processing glyph: J
+2025-01-02 02:58:03,926 - INFO - Processing glyph: K
+2025-01-02 02:58:03,927 - INFO - Processing glyph: L
+2025-01-02 02:58:03,927 - INFO - Processing glyph: M
+2025-01-02 02:58:03,960 - INFO - Processing glyph: N
+2025-01-02 02:58:03,961 - INFO - Processing glyph: O
+2025-01-02 02:58:03,961 - INFO - Processing glyph: P
+2025-01-02 02:58:03,962 - INFO - Processing glyph: Q
+2025-01-02 02:58:03,963 - INFO - Processing glyph: R
+2025-01-02 02:58:03,963 - INFO - Processing glyph: S
+2025-01-02 02:58:03,964 - INFO - Processing glyph: T
+2025-01-02 02:58:03,979 - INFO - Processing glyph: U
+2025-01-02 02:58:03,990 - INFO - Processing glyph: V
+2025-01-02 02:58:03,991 - INFO - Processing glyph: W
+2025-01-02 02:58:03,992 - INFO - Processing glyph: X
+2025-01-02 02:58:04,018 - INFO - Processing glyph: Y
+2025-01-02 02:58:04,019 - INFO - Processing glyph: Z
+2025-01-02 02:58:04,019 - INFO - Processing glyph: a
+2025-01-02 02:58:04,027 - INFO - Processing glyph: b
+2025-01-02 02:58:04,028 - INFO - Processing glyph: c
+2025-01-02 02:58:04,029 - INFO - Processing glyph: d
+2025-01-02 02:58:04,030 - INFO - Processing glyph: e
+2025-01-02 02:58:04,045 - INFO - Processing glyph: f
+2025-01-02 02:58:04,046 - INFO - Processing glyph: g
+2025-01-02 02:58:04,048 - INFO - Processing glyph: h
+2025-01-02 02:58:04,082 - INFO - Processing glyph: i
+2025-01-02 02:58:04,115 - INFO - Processing glyph: j
+2025-01-02 02:58:04,117 - INFO - Processing glyph: k
+2025-01-02 02:58:04,117 - INFO - Processing glyph: l
+2025-01-02 02:58:04,118 - INFO - Processing glyph: m
+2025-01-02 02:58:04,119 - INFO - Processing glyph: n
+2025-01-02 02:58:04,119 - INFO - Processing glyph: o
+2025-01-02 02:58:04,120 - INFO - Processing glyph: p
+2025-01-02 02:58:04,121 - INFO - Processing glyph: q
+2025-01-02 02:58:04,121 - INFO - Processing glyph: r
+2025-01-02 02:58:04,122 - INFO - Processing glyph: s
+2025-01-02 02:58:04,123 - INFO - Processing glyph: t
+2025-01-02 02:58:04,123 - INFO - Processing glyph: u
+2025-01-02 02:58:04,154 - INFO - Processing glyph: v
+2025-01-02 02:58:04,155 - INFO - Processing glyph: w
+2025-01-02 02:58:04,155 - INFO - Processing glyph: x
+2025-01-02 02:58:04,181 - INFO - Processing glyph: y
+2025-01-02 02:58:04,182 - INFO - Processing glyph: z
+2025-01-02 02:58:04,183 - INFO - Processing glyph: afii10017
+2025-01-02 02:58:04,184 - INFO - Processing glyph: afii10018
+2025-01-02 02:58:04,184 - INFO - Processing glyph: afii10019
+2025-01-02 02:58:04,185 - INFO - Processing glyph: afii10020
+2025-01-02 02:58:04,196 - INFO - Processing glyph: afii10021
+2025-01-02 02:58:04,197 - INFO - Processing glyph: afii10022
+2025-01-02 02:58:04,197 - INFO - Processing glyph: afii10023
+2025-01-02 02:58:04,198 - INFO - Processing glyph: afii10024
+2025-01-02 02:58:04,340 - INFO - Processing glyph: afii10025
+2025-01-02 02:58:04,342 - INFO - Processing glyph: afii10026
+2025-01-02 02:58:04,385 - INFO - Processing glyph: afii10027
+2025-01-02 02:58:04,387 - INFO - Processing glyph: afii10028
+2025-01-02 02:58:04,450 - INFO - Processing glyph: afii10029
+2025-01-02 02:58:04,525 - INFO - Processing glyph: afii10030
+2025-01-02 02:58:04,527 - INFO - Processing glyph: afii10031
+2025-01-02 02:58:04,527 - INFO - Processing glyph: afii10032
+2025-01-02 02:58:04,528 - INFO - Processing glyph: afii10033
+2025-01-02 02:58:04,542 - INFO - Processing glyph: afii10034
+2025-01-02 02:58:04,542 - INFO - Processing glyph: afii10035
+2025-01-02 02:58:04,543 - INFO - Processing glyph: afii10036
+2025-01-02 02:58:04,544 - INFO - Processing glyph: afii10037
+2025-01-02 02:58:04,544 - INFO - Processing glyph: afii10038
+2025-01-02 02:58:04,545 - INFO - Processing glyph: afii10039
+2025-01-02 02:58:04,546 - INFO - Processing glyph: afii10040
+2025-01-02 02:58:04,546 - INFO - Processing glyph: afii10041
+2025-01-02 02:58:04,608 - INFO - Processing glyph: afii10042
+2025-01-02 02:58:04,609 - INFO - Processing glyph: afii10043
+2025-01-02 02:58:04,610 - INFO - Processing glyph: afii10044
+2025-01-02 02:58:04,610 - INFO - Processing glyph: afii10045
+2025-01-02 02:58:04,611 - INFO - Processing glyph: afii10046
+2025-01-02 02:58:04,611 - INFO - Processing glyph: afii10047
+2025-01-02 02:58:04,612 - INFO - Processing glyph: afii10048
+2025-01-02 02:58:04,613 - INFO - Processing glyph: afii10049
+2025-01-02 02:58:04,613 - INFO - Processing glyph: afii10065
+2025-01-02 02:58:04,614 - INFO - Processing glyph: afii10066
+2025-01-02 02:58:04,615 - INFO - Processing glyph: afii10067
+2025-01-02 02:58:04,615 - INFO - Processing glyph: afii10068
+2025-01-02 02:58:04,625 - INFO - Processing glyph: afii10069
+2025-01-02 02:58:04,626 - INFO - Processing glyph: afii10070
+2025-01-02 02:58:04,626 - INFO - Processing glyph: afii10072
+2025-01-02 02:58:04,627 - INFO - Processing glyph: afii10073
+2025-01-02 02:58:04,628 - INFO - Processing glyph: afii10074
+2025-01-02 02:58:04,679 - INFO - Processing glyph: afii10075
+2025-01-02 02:58:04,680 - INFO - Processing glyph: afii10076
+2025-01-02 02:58:04,739 - INFO - Processing glyph: afii10077
+2025-01-02 02:58:04,794 - INFO - Processing glyph: afii10078
+2025-01-02 02:58:04,823 - INFO - Processing glyph: afii10079
+2025-01-02 02:58:04,864 - INFO - Processing glyph: afii10080
+2025-01-02 02:58:04,864 - INFO - Processing glyph: afii10081
+2025-01-02 02:58:04,885 - INFO - Processing glyph: afii10082
+2025-01-02 02:58:04,886 - INFO - Processing glyph: afii10083
+2025-01-02 02:58:04,887 - INFO - Processing glyph: afii10084
+2025-01-02 02:58:04,901 - INFO - Processing glyph: afii10085
+2025-01-02 02:58:04,902 - INFO - Processing glyph: afii10086
+2025-01-02 02:58:04,903 - INFO - Processing glyph: afii10087
+2025-01-02 02:58:04,904 - INFO - Processing glyph: afii10088
+2025-01-02 02:58:04,904 - INFO - Processing glyph: afii10089
+2025-01-02 02:58:04,963 - INFO - Processing glyph: afii10090
+2025-01-02 02:58:04,964 - INFO - Processing glyph: afii10091
+2025-01-02 02:58:04,965 - INFO - Processing glyph: afii10092
+2025-01-02 02:58:04,966 - INFO - Processing glyph: afii10093
+2025-01-02 02:58:04,966 - INFO - Processing glyph: afii10094
+2025-01-02 02:58:04,967 - INFO - Processing glyph: afii10095
+2025-01-02 02:58:04,968 - INFO - Processing glyph: afii10096
+2025-01-02 02:58:04,969 - INFO - Processing glyph: afii10097
+2025-01-02 02:58:04,969 - INFO - Processing glyph: dotlessi
+2025-01-02 02:58:04,970 - INFO - Processing glyph: dotlessj
+2025-01-02 02:58:04,970 - INFO - Processing glyph: acute
+2025-01-02 02:58:04,971 - INFO - Processing glyph: breve
+2025-01-02 02:58:04,971 - INFO - Processing glyph: caron
+2025-01-02 02:58:04,972 - INFO - Processing glyph: circumflex
+2025-01-02 02:58:04,972 - INFO - Processing glyph: dieresis
+2025-01-02 02:58:04,973 - INFO - Processing glyph: cyrbreve
+2025-01-02 02:58:04,973 - INFO - Processing glyph: cyrBreve
+2025-01-02 02:58:04,974 - INFO - Processing glyph: grave
+2025-01-02 02:58:04,974 - INFO - Processing glyph: dotaccent
+2025-01-02 02:58:04,975 - INFO - Processing glyph: hungarumlaut
+2025-01-02 02:58:04,975 - INFO - Processing glyph: macron
+2025-01-02 02:58:04,976 - INFO - Processing glyph: ring
+2025-01-02 02:58:04,977 - INFO - Processing glyph: tilde
+2025-01-02 02:58:04,977 - INFO - Processing glyph: afii57929
+2025-01-02 02:58:04,978 - INFO - Processing glyph: acutecomb
+2025-01-02 02:58:04,978 - INFO - Processing glyph: accent
+2025-01-02 02:58:04,979 - INFO - Processing glyph: Acute
+2025-01-02 02:58:04,979 - INFO - Processing glyph: Breve
+2025-01-02 02:58:04,980 - INFO - Processing glyph: Caron
+2025-01-02 02:58:04,980 - INFO - Processing glyph: Circumflex
+2025-01-02 02:58:04,981 - INFO - Processing glyph: Dieresis
+2025-01-02 02:58:04,981 - INFO - Processing glyph: Grave
+2025-01-02 02:58:04,982 - INFO - Processing glyph: Dotaccent
+2025-01-02 02:58:04,982 - INFO - Processing glyph: Hungarumlaut
+2025-01-02 02:58:04,983 - INFO - Processing glyph: Macron
+2025-01-02 02:58:04,983 - INFO - Processing glyph: Ring
+2025-01-02 02:58:04,984 - INFO - Processing glyph: Tilde
+2025-01-02 02:58:04,984 - INFO - Processing glyph: Apostrophe
+2025-01-02 02:58:04,985 - INFO - Processing glyph: Accent
+2025-01-02 02:58:04,986 - WARNING - Glyph not found: Caronl=_top:center:700
+2025-01-02 02:58:04,986 - WARNING - Glyph not found: caronl=_top:center:700
+2025-01-02 02:58:04,986 - INFO - Processing glyph: cedilla
+2025-01-02 02:58:04,986 - INFO - Processing glyph: commaaccent
+2025-01-02 02:58:04,987 - INFO - Processing glyph: ogonek
+2025-01-02 02:58:04,989 - INFO - Processing glyph: Cedilla
+2025-01-02 02:58:04,990 - INFO - Processing glyph: Commaaccent
+2025-01-02 02:58:04,990 - INFO - Processing glyph: Ogonek
+2025-01-02 02:58:04,991 - WARNING - Glyph not found: dotsubnosp=_bottom:center:0
+2025-01-02 02:58:04,991 - WARNING - Glyph not found: Desc=_desc:left:0
+2025-01-02 02:58:04,992 - WARNING - Glyph not found: desc=_desc:left:0
+2025-01-02 02:58:04,992 - WARNING - Glyph not found: Descang=_desc:left:0
+2025-01-02 02:58:04,992 - WARNING - Glyph not found: descang=_desc:left:0
+2025-01-02 02:58:04,992 - WARNING - Glyph not found: Descrever=_descrever:rightinter:0
+2025-01-02 02:58:04,992 - WARNING - Glyph not found: descrever=_descrever:rightinter:0
+2025-01-02 02:58:04,992 - WARNING - Glyph not found: Tail=_bottom:center:0
+2025-01-02 02:58:04,992 - WARNING - Glyph not found: tail=_bottom:center:0
+2025-01-02 02:58:04,992 - WARNING - Glyph not found: Hook=_hook:rightinter:0
+2025-01-02 02:58:04,992 - WARNING - Glyph not found: hook=_hook:rightinter:0
+2025-01-02 02:58:04,992 - WARNING - Glyph not found: Barlong=_bar:center:0,_bar.alt:left:0
+2025-01-02 02:58:04,992 - WARNING - Glyph not found: barlong=_bar:center:0,_bar.alt:left:0
+2025-01-02 02:58:04,992 - WARNING - Glyph not found: Barshort=_back:center:0
+2025-01-02 02:58:04,992 - WARNING - Glyph not found: barshort=_back:center:0
+2025-01-02 02:58:04,992 - WARNING - Glyph not found: Hookdesc=_hookdesc:left:0
+2025-01-02 02:58:04,992 - WARNING - Glyph not found: hookdesc=_hookdesc:left:0
+2025-01-02 02:58:05,431 - INFO - Saved anchored font to: test/test-font_anchored.ufo

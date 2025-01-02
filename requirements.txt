@@ -1,0 +1,15 @@
+# requirements.txt
+
+appdirs
+booleanOperations
+defcon
+fontMath
+fontParts
+fontPens
+fonttools
+fs
+lxml
+pyclipper
+setuptools
+six
+unicodedata2

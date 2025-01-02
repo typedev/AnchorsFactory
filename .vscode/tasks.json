@@ -1,0 +1,57 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        // {
+        //     "label": "Run TDAnchorsFactory",
+        //     "type": "shell",
+        //     "command": "python",
+        //     "args": [
+        //         "${workspaceFolder}/tdAnchorsFactory.py"
+        //     ],
+        //     "group": {
+        //         "kind": "build",
+        //         "isDefault": true
+        //     },
+        //     "presentation": {
+        //         "reveal": "always",
+        //         "panel": "new",
+        //         "clear": true
+        //     },
+        //     "problemMatcher": []
+        // },
+        {
+            "label": "Run AnchorsFactory with custom UFO",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "${workspaceFolder}/tdAnchorsFactory.py",
+                "--ufo",
+                "${input:ufoPath}",
+                "--rules",
+                "${input:rulesPath}",
+                "--save-output"
+            ],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new",
+                "clear": true
+            },
+            "problemMatcher": []
+        }
+    ],
+    "inputs": [
+        {
+            "id": "ufoPath",
+            "type": "promptString",
+            "description": "Path to UFO file",
+            "default": "test/test-font.ufo"
+        },
+        {
+            "id": "rulesPath",
+            "type": "promptString",
+            "description": "Path to anchors rules file",
+            "default": "anchors-list.txt"
+        }
+    ]
+} 
