@@ -7,9 +7,10 @@ import argparse
 
 # TODO: add rule to calculate x position by top and bottom extremums (for circular glyphs, eg. o e c, etc.)
 # TODO: add rule to calculate x position by two top and bottom points (for accents, eg. grave, acute, etc.)
+# TODO: add unicode identifier for glyphs and accents
 
 class TDAnchorsFactory:
-	def __init__(self, UFOfile='', AnchorsRulesFile='anchors-list.txt', clear_exist_anchors=True, 
+	def __init__(self, UFOfile='', AnchorsRulesFile='default-anchors-list.txt', clear_exist_anchors=True, 
                  replace_anchors=True, saveOutputUFOfile=False, saveExistingAnchors=False, 
                  log_directory='logs'):
 		self.clear_exist_anchors = clear_exist_anchors
@@ -87,9 +88,7 @@ class TDAnchorsFactory:
 		return f"{base_name}_anchors_{timestamp}.txt"
 
 	def _clean_line(self, text):
-		text = text.lstrip()
-		text = text.rstrip()
-		text = text.replace(' ', '')
+		text = text.replace(' ', '').strip()
 		return text
 
 	def _parse_anchors_rules(self, text: str):
@@ -100,7 +99,7 @@ class TDAnchorsFactory:
 		for line in text:
 			line = self._clean_line(line)
 			if line and not line.startswith('#'):
-				if line.startswith('@'):
+				if line.startswith('@'): # rule label
 					namelabel = line.split('=')[0]
 					content = line.split('=')[1]
 					if namelabel == '@SFXLIST':
@@ -112,7 +111,7 @@ class TDAnchorsFactory:
 						shiftX = int(content)
 					else:
 						labels[namelabel] = content
-				else:
+				else: # glyph name
 					glyphname = line.split('=')[0]
 					content = line.split('=')[1]
 					glyphs[glyphname] = content
@@ -200,7 +199,7 @@ class TDAnchorsFactory:
 				x1,y1,x2,y2 = glyph.bounds
 				return (x2-x1)/2 + x1
 			except (AttributeError, TypeError):
-				self.logger.warning(f'Invalid bounds for centerpos calculation in glyph {glyph.name}. Using default value.')
+				self.logger.warning(f'Invalid bounds for centerpos calculation in glyph {glyph.name}. Using default value =0.')
 				return 0
 		else:
 			try:
@@ -376,7 +375,7 @@ class TDAnchorsFactory:
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description='Process UFO files and add anchors.')
 	parser.add_argument('--ufo', type=str, help='Path to UFO file', default='test/test-font.ufo')
-	parser.add_argument('--rules', type=str, help='Path to anchors rules file', default='anchors-list.txt')
+	parser.add_argument('--rules', type=str, help='Path to anchors rules file', default='default-anchors-list.txt')
 	parser.add_argument('--clear-anchors', action='store_true', help='Clear existing anchors')
 	parser.add_argument('--replace-anchors', action='store_true', help='Replace existing anchors')
 	parser.add_argument('--save-output', action='store_true', help='Save output UFO file')

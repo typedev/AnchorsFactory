@@ -51,7 +51,7 @@
             "id": "rulesPath",
             "type": "promptString",
             "description": "Path to anchors rules file",
-            "default": "anchors-list.txt"
+            "default": "default-anchors-list.txt"
         }
     ]
 } 
