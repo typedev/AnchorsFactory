@@ -8,12 +8,12 @@ The rules are stored in a separate text file, for example
 
 ### General recording format:
 
- 
 ```
 @Label1=Anchor:Alignment:VertPosition
 @Label2=..
 # a comment
 GlyphName=@Label1,@Label2,..
+&FFFF=@Label1,@Label2,..
 ```
 
 ### General rules syntax
@@ -25,15 +25,12 @@ GlyphName=@Label1,@Label2,..
 
 `Anchor` - the name of the anchor, in names to indicate anchors in accents you must use the `_` sign
 
-
 `Alignment` - horizontal alignment of the anchor.
 If a numeric value is specified, this will be the horizontal position of the anchor.
 `left`/`center`/`right` - anchor position on the left/right border of the glyph (glyph.bounds) or in the middle of the glyph glyph.width/2;
 `centerpos` - in the middle glyph.bounds
 
 `leftinter`/`rightinter` - position is calculated by intersection with the glyph outline at the height specified after `$..` (intersection)
-
-
 
 `VertPosition` - anchor height. Numeric value, or the height of the glyph indicated by `$..`
 after `$GlyphName` you can write the fractional value of the anchor height using the `*` sign
@@ -46,7 +43,6 @@ For example:
 `@bar=bar:center:$H*2/3` - `@bar` label, `bar` anchor, aligned to the center of the character width, height - `2/3` of the `H` glyph height
 
 `@back=back:left:700` - `@back` label, `back` anchor, on the left border of the glyph, at height `700`
-
 
 If the glyph name ends with `_` the height is calculated by its lower bound glyph.bounds, can be used for multi-story accents
 

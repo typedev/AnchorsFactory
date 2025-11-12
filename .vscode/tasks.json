@@ -4,7 +4,7 @@
         // {
         //     "label": "Run TDAnchorsFactory",
         //     "type": "shell",
-        //     "command": "python",
+        //     "command": "python3",
         //     "args": [
         //         "${workspaceFolder}/tdAnchorsFactory.py"
         //     ],
@@ -22,14 +22,14 @@
         {
             "label": "Run AnchorsFactory with custom UFO",
             "type": "shell",
-            "command": "python",
+            "command": "python3",
             "args": [
                 "${workspaceFolder}/tdAnchorsFactory.py",
                 "--ufo",
                 "${input:ufoPath}",
                 "--rules",
                 "${input:rulesPath}",
-                "--save-output"
+                "--output"
             ],
             "group": "build",
             "presentation": {
