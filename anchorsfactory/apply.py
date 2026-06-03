@@ -33,8 +33,12 @@ def _remove_named(glyph, name):
             glyph.removeAnchor(anchor)
 
 
-def apply_document(font, doc: Document, *, clear=True, replace=True, round_coords=False):
-    """Place all anchors described by *doc* onto *font* (in place)."""
+def apply_document(font, doc: Document, *, clear=True, replace=True, round_coords=True):
+    """Place all anchors described by *doc* onto *font* (in place).
+
+    ``round_coords`` rounds placed anchors to whole units (the usual choice for
+    a UFO); the golden regression passes ``False`` to compare raw precision.
+    """
     cmap = font.getCharacterMapping()
 
     # Resolve selectors to glyph names once; later rules win for the same glyph
