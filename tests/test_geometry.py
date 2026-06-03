@@ -47,12 +47,16 @@ def test_box_edges_match_bounds(font):
 
 
 # --- outline crossings: the core fix vs the old pixel scan ----------------- #
-def test_outline_right_is_rightmost_crossing(font):
-    """`outline.right` must equal the true max crossing (the O=550 fix)."""
+def test_outline_envelope_is_min_max_crossing(font):
+    """With no run, outline.left/right are the leftmost/rightmost crossings,
+    and every crossing stays within the glyph's bounding box (the bounded-
+    intersection guarantee — no phantom infinite-line roots)."""
     g = _has(font, "O")
-    y = g.bounds[3] * 0.2  # low in the bowl, where the old scan went wrong
+    y = g.bounds[3] * 0.2
+    xMin, _, xMax, _ = g.bounds
     xs = _crossings(g, y)
     assert xs, "expected the scanline to cross the O outline"
+    assert all(xMin - 1 <= x <= xMax + 1 for x in xs), "crossing outside bbox"
     assert resolve_x(font, g, X(Frame.OUTLINE, HAlign.RIGHT), y) == pytest.approx(max(xs))
     assert resolve_x(font, g, X(Frame.OUTLINE, HAlign.LEFT), y) == pytest.approx(min(xs))
 

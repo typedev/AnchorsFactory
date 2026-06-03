@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 from typing import Optional
 
-from fontTools.misc.bezierTools import segmentSegmentIntersections
+from fontTools.misc.bezierTools import curveLineIntersections
 from fontTools.pens.recordingPen import DecomposingRecordingPen
 
 from .model import (
@@ -22,6 +22,10 @@ from .model import (
 # Crossings closer than this (font units) are treated as one — collapses the
 # duplicate roots you get when a scanline passes through a shared on-curve point.
 _MERGE_EPS = 1.0
+
+# How far inside the ink to sample when a scanline lands on a horizontal
+# extreme (baseline / top), where the outline is tangent to the line.
+_EDGE_INSET = 1.0
 
 
 def _segments(glyph):
@@ -69,17 +73,40 @@ def _segments(glyph):
             cur = start
 
 
+def _seg_crossings(seg, y: float) -> list[float]:
+    """X-coords where one segment crosses the horizontal line at *y*.
+
+    Computed explicitly and clamped to the segment: lines analytically (with a
+    y-range check), curves via ``curveLineIntersections`` (which clamps to the
+    curve's t in [0, 1]). This avoids the unbounded infinite-line intersection
+    that ``segmentSegmentIntersections`` returns for the line case.
+    """
+    if len(seg) == 2:
+        (x0, y0), (x1, y1) = seg
+        if y0 == y1:                       # horizontal: collinear, no crossing
+            return []
+        if not (min(y0, y1) <= y <= max(y0, y1)):
+            return []
+        t = (y - y0) / (y1 - y0)
+        return [x0 + t * (x1 - x0)]
+    if len(seg) == 3:                      # quadratic -> elevate to cubic
+        p0, c, p1 = seg
+        seg = (
+            p0,
+            (p0[0] + 2 / 3 * (c[0] - p0[0]), p0[1] + 2 / 3 * (c[1] - p0[1])),
+            (p1[0] + 2 / 3 * (c[0] - p1[0]), p1[1] + 2 / 3 * (c[1] - p1[1])),
+            p1,
+        )
+    return [ix.pt[0] for ix in curveLineIntersections(seg, ((0, y), (1, y)))]
+
+
 def _crossings(glyph, y: float) -> list[float]:
     """Sorted x-coordinates where the outline crosses the horizontal line at *y*."""
-    bounds = glyph.bounds
-    if bounds is None:
+    if glyph.bounds is None:
         return []
-    xMin, _, xMax, _ = bounds
-    scanline = ((xMin - 1000, y), (xMax + 1000, y))
     xs: list[float] = []
     for seg in _segments(glyph):
-        for ix in segmentSegmentIntersections(seg, scanline):
-            xs.append(ix.pt[0])
+        xs.extend(_seg_crossings(seg, y))
     xs.sort()
     return xs
 
@@ -140,9 +167,16 @@ def resolve_x(font, glyph, xspec, y: float) -> float:
     # OUTLINE — sample where the ink actually is.
     sample = y
     if xspec.at is VEdge.TOP:
-        sample = yMax - 1
+        sample = yMax
     elif xspec.at is VEdge.BOTTOM:
-        sample = yMin + 1
+        sample = yMin
+    # A scanline exactly on a horizontal extreme is tangent/collinear with the
+    # outline there, which yields degenerate crossings. Sample just inside the
+    # ink instead (the principled form of the legacy ±1 nudge).
+    if sample <= yMin + _EDGE_INSET:
+        sample = yMin + _EDGE_INSET
+    elif sample >= yMax - _EDGE_INSET:
+        sample = yMax - _EDGE_INSET
 
     xs = _crossings(glyph, sample)
     if not xs:
