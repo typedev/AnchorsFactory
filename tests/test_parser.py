@@ -5,7 +5,7 @@ import pytest
 from anchorsfactory.parser import parse_document, ParseError
 from anchorsfactory.model import (
     Frame, HAlign, VEdge, Frac,
-    X, XAbs, Y, YAbs, AnchorSpec, GlyphName, Unicode,
+    X, XAbs, Y, YAbs, AnchorSpec, LabelRef, GlyphName, Unicode,
 )
 
 
@@ -50,12 +50,12 @@ def test_glyph_rule_mixes_inline_and_label():
         "@bot=bottom:centerpos:0",
         "L=top:left:$H,caron:right:$H,@bot",
     ])
-    sel, op, specs = doc.rules[0]
+    sel, op, items = doc.rules[0]
     assert sel == GlyphName("L")
-    assert specs == [
+    assert items == [
         AnchorSpec("top", X(Frame.BOX, HAlign.LEFT), Y("H", VEdge.TOP)),
         AnchorSpec("caron", X(Frame.BOX, HAlign.RIGHT), Y("H", VEdge.TOP)),
-        AnchorSpec("bottom", X(Frame.BOX, HAlign.CENTER), YAbs(0)),  # expanded @bot
+        LabelRef("@bot"),                                  # kept as a ref (late-bound)
     ]
 
 
@@ -64,9 +64,9 @@ def test_unicode_selector_and_label_expansion():
         "@=top:centerpos:$H",
         "&0413=@,@",          # Г, label used twice
     ])
-    sel, op, specs = doc.rules[0]
+    sel, op, items = doc.rules[0]
     assert sel == Unicode(0x0413)
-    assert len(specs) == 2 and specs[0].name == "top"
+    assert items == [LabelRef("@"), LabelRef("@")]   # refs, resolved at apply
 
 
 def test_directives_and_comments():

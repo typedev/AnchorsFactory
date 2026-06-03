@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from .model import (
     Frame, HAlign, VEdge, Frac,
-    X, XAbs, Y, YAbs, AnchorSpec,
+    X, XAbs, Y, YAbs, AnchorSpec, LabelRef,
     GlyphName, Unicode, Op, Document,
 )
 
@@ -88,6 +88,26 @@ def _clean(line: str) -> str:
     return line.replace(" ", "").split("#", 1)[0].strip()
 
 
+def _to_items(tokens, n, labels=None):
+    """Turn comma-split tokens into items (LabelRef / AnchorSpec), no expansion.
+
+    If *labels* is given, label references are checked to exist (legacy files
+    are self-contained, so a missing label is an error at parse time).
+    """
+    items = []
+    for tok in tokens:
+        if tok.startswith("@"):
+            if labels is not None and tok not in labels:
+                raise ParseError(f"line {n}: undefined label {tok!r}")
+            items.append(LabelRef(tok))
+        else:
+            try:
+                items.append(_parse_spec(tok))
+            except ParseError as e:
+                raise ParseError(f"line {n}: {e}")
+    return items
+
+
 def parse_document(lines) -> Document:
     """Parse rule-file lines into a :class:`Document` (font-independent).
 
@@ -120,10 +140,7 @@ def parse_document(lines) -> Document:
                 except ValueError:
                     raise ParseError(f"line {n}: @SHIFTX needs an integer, got {content!r}")
                 continue
-            try:
-                labels[head] = [_parse_spec(t) for t in content.split(",")]
-            except ParseError as e:
-                raise ParseError(f"line {n}: {e}")
+            labels[head] = _to_items(content.split(","), n)
             continue
 
         if head.startswith("&"):
@@ -135,20 +152,10 @@ def parse_document(lines) -> Document:
             selector = GlyphName(head)
         raw_rows.append((selector, content.split(","), n))
 
-    # Phase 2: expand label references into concrete specs.
+    # Phase 2: keep label references as LabelRefs (resolved late, at apply time);
+    # validate they exist now since legacy files are self-contained.
     for selector, items, n in raw_rows:
-        specs: list[AnchorSpec] = []
-        for item in items:
-            if item.startswith("@"):
-                if item not in labels:
-                    raise ParseError(f"line {n}: undefined label {item!r}")
-                specs.extend(labels[item])
-            else:
-                try:
-                    specs.append(_parse_spec(item))
-                except ParseError as e:
-                    raise ParseError(f"line {n}: {e}")
-        rules.append((selector, Op.REPLACE, specs))
+        rules.append((selector, Op.REPLACE, _to_items(items, n, labels)))
 
     return Document(labels=labels, rules=rules, shift_x=shift_x, suffixes=suffixes)
 

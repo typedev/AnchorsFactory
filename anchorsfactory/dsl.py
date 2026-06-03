@@ -16,7 +16,7 @@ import re
 
 from .model import (
     Frame, HAlign, VEdge, Run, Frac,
-    X, XAbs, Y, YAbs, AnchorSpec,
+    X, XAbs, Y, YAbs, AnchorSpec, LabelRef,
     GlyphName, Unicode, UnicodeRange, Glob, Category, Op, Document,
 )
 
@@ -31,7 +31,9 @@ _RUN = {"first": Run.FIRST, "last": Run.LAST}
 _EDGE = {"top": VEdge.TOP, "middle": VEdge.MIDDLE, "bottom": VEdge.BOTTOM}
 
 _ANCHOR_RE = re.compile(r"^(\S+)\s*\(\s*(\S+)\s+(\S+)\s*\)$")
-_RULE_RE = re.compile(r"^(.*?)\s*(\+=|=)\s*(.*)$")
+_RULE_RE = re.compile(r"^(.*?)\s*(\+=|-=|=)\s*(.*)$")
+_NAME_RE = re.compile(r"^[\w.]+$")
+_OPS = {"=": Op.REPLACE, "+=": Op.ADD, "-=": Op.REMOVE}
 
 
 # --------------------------------------------------------------------------- #
@@ -142,19 +144,30 @@ def parse_dsl(lines) -> Document:
             if stmt:
                 raw_lines.append((n, stmt))
 
-    def expand(rhs: str, n: int) -> list[AnchorSpec]:
-        specs: list[AnchorSpec] = []
+    def parse_items(rhs: str, n: int) -> list:
+        # anchors and label refs, unresolved (labels are bound late, at apply)
+        items = []
         for item in _split_items(rhs):
             if item.startswith("@"):
-                if item not in labels:
-                    raise DSLError(f"line {n}: undefined label {item!r}")
-                specs.extend(labels[item])
+                items.append(LabelRef(item))
             else:
                 try:
-                    specs.append(_parse_anchor(item))
+                    items.append(_parse_anchor(item))
                 except DSLError as e:
                     raise DSLError(f"line {n}: {e}")
-        return specs
+        return items
+
+    def parse_remove(rhs: str, n: int) -> list:
+        # '-=' takes anchor names (bare) or @labels to strip
+        targets = []
+        for item in _split_items(rhs):
+            if item.startswith("@"):
+                targets.append(LabelRef(item))
+            elif _NAME_RE.match(item):
+                targets.append(item)
+            else:
+                raise DSLError(f"line {n}: '-=' takes anchor names or @labels, got {item!r}")
+        return targets
 
     for n, stmt in raw_lines:
         if stmt.startswith("!"):
@@ -182,10 +195,11 @@ def parse_dsl(lines) -> Document:
         if lhs.startswith("@"):
             if op_tok != "=":
                 raise DSLError(f"line {n}: labels only support '='")
-            labels[lhs] = expand(rhs, n)
+            labels[lhs] = parse_items(rhs, n)
         else:
-            op = Op.ADD if op_tok == "+=" else Op.REPLACE
-            rules.append((_parse_selector(lhs), op, expand(rhs, n)))
+            op = _OPS[op_tok]
+            items = parse_remove(rhs, n) if op is Op.REMOVE else parse_items(rhs, n)
+            rules.append((_parse_selector(lhs), op, items))
 
     return Document(labels=labels, rules=rules, shift_x=shift_x, suffixes=suffixes)
 

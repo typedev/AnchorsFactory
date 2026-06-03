@@ -24,7 +24,7 @@ Sigils at a glance:
 | `#` | comment |
 | `name ( X Y )` | an anchor placement |
 | `,` | separates anchors / labels in a list |
-| `=` | assign (replace) · `+=` add (accumulate) |
+| `=` `+=` `-=` | replace / add / remove anchors |
 
 ## Anchor placement: `name ( X Y )`
 
@@ -108,10 +108,17 @@ matches it:
 
 - `selector  = …`  → **replace**: discard the accumulator, set it to `…`
 - `selector += …`  → **add**: append `…` to the accumulator
+- `selector -= a, b, @label` → **remove**: drop accumulated anchors by name
+  (a bare name, or every name a label contributes)
 
 The accumulator after the last matching rule is what gets placed. If two
 anchors share a name, the later one wins (the placement engine keeps the last).
 A glyph matched by no rule is left untouched.
+
+Labels are **late-bound**: a `@label` in a rule is resolved against the final
+label table, so redefining a label affects rules written before it too. This
+is what makes inheritance work — a file may extend defaults and override a
+shared label once.
 
 > ⚠️ `=` is a *hard reset*. A later `=` on a glyph already covered by a range
 > default wipes everything that range gave it — intentional, but mind the order.

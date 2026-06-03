@@ -6,7 +6,7 @@ from anchorsfactory.dsl import parse_dsl, DSLError
 from anchorsfactory.apply import accumulate
 from anchorsfactory.model import (
     Frame, HAlign, VEdge, Run, Frac,
-    X, XAbs, Y, YAbs, AnchorSpec,
+    X, XAbs, Y, YAbs, AnchorSpec, LabelRef,
     GlyphName, Unicode, UnicodeRange, Glob, Category, Op,
 )
 
@@ -67,9 +67,44 @@ def test_labels_mix_and_directives():
     ])
     assert doc.suffixes == ["", ".alt", ".sc"]
     assert doc.shift_x == -15
-    sel, op, specs = doc.rules[0]
+    sel, op, items = doc.rules[0]
     assert sel == GlyphName("L") and op is Op.REPLACE
-    assert [s.name for s in specs] == ["bottom", "top"]
+    assert items == [LabelRef("@bot"), AnchorSpec("top", X(Frame.BOX, HAlign.LEFT), Y("H"))]
+    assert [s.name for s in accumulate(doc, "L", [])] == ["bottom", "top"]   # resolved
+
+
+def test_label_override_is_late_bound():
+    """Redefining a label changes rules written before the redefinition too."""
+    doc = parse_dsl([
+        "@ = top (box.center $H)",
+        "A = @",
+        "@ = bottom (box.center 0)",          # override after use
+    ])
+    assert [s.name for s in accumulate(doc, "A", [])] == ["bottom"]
+
+
+def test_undefined_label_errors_at_apply():
+    doc = parse_dsl(["A = @nope"])            # not validated at parse (late binding)
+    with pytest.raises(ValueError):
+        accumulate(doc, "A", [])
+
+
+def test_remove_operator():
+    doc = parse_dsl([
+        "@ = top (box.center $H), bottom (box.center 0)",
+        "A = @, ogonek (outline.right 0)",
+        "A -= ogonek",
+    ])
+    assert [s.name for s in accumulate(doc, "A", [])] == ["top", "bottom"]
+
+
+def test_remove_via_label():
+    doc = parse_dsl([
+        "@x = a (box.center 0), b (box.center 0)",
+        "G = @x, c (box.center 0)",
+        "G -= @x",                            # drop everything @x contributed
+    ])
+    assert [s.name for s in accumulate(doc, "G", [])] == ["c"]
 
 
 def test_canonical_roundtrip():
@@ -108,7 +143,6 @@ def test_replace_is_a_hard_reset():
     "A = top box.center $H",       # missing parens
     "A = top (box.bogus $H)",      # bad align
     "A = top (box.center 0",       # unbalanced paren
-    "A = @nope",                   # undefined label
     "noequals",                    # missing operator
     "!unknown = 1",                # unknown directive
 ])

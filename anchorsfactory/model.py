@@ -175,10 +175,25 @@ class AnchorSpec:
         return f"{self.name} ({self.x} {self.y})"
 
 
+@dataclass(frozen=True)
+class LabelRef:
+    """A reference to a label, resolved late (at apply time) against the merged
+    label table — so a later file may override a label used by an earlier one."""
+    name: str            # includes the leading '@'
+
+    def __str__(self):
+        return self.name
+
+
+# An item in a rule/label body: a concrete anchor or a (late-bound) label ref.
+Item = Union["AnchorSpec", "LabelRef"]
+
+
 class Op(Enum):
     """How a rule's anchors combine with what a glyph already accumulated."""
-    REPLACE = "="    # discard the accumulator, set it to these anchors
-    ADD = "+="       # append these anchors to the accumulator
+    REPLACE = "="     # discard the accumulator, set it to these anchors
+    ADD = "+="        # append these anchors to the accumulator
+    REMOVE = "-="     # drop accumulated anchors by name (payload = names/labels)
 
 
 @dataclass(frozen=True)
@@ -220,8 +235,13 @@ Selector = Union[GlyphName, Unicode, UnicodeRange, Glob, Category]
 
 @dataclass
 class Document:
-    """A parsed rule file: reusable labels + ordered selector applications."""
-    labels: dict[str, list[AnchorSpec]] = field(default_factory=dict)
-    rules: list[tuple[Selector, Op, list[AnchorSpec]]] = field(default_factory=list)
+    """A parsed rule file: reusable labels + ordered selector applications.
+
+    Bodies hold :data:`Item`\\ s (anchors and unresolved :class:`LabelRef`\\ s);
+    for ``REMOVE`` rules the body is the set of names/labels to drop. Labels are
+    resolved late, at apply time, against the (possibly merged) label table.
+    """
+    labels: dict[str, list] = field(default_factory=dict)
+    rules: list[tuple[Selector, Op, list]] = field(default_factory=list)
     shift_x: int = 0                          # document-wide X offset (!shiftx)
     suffixes: list[str] = field(default_factory=lambda: [""])  # variants (!suffixes)

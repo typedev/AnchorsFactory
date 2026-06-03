@@ -17,11 +17,37 @@ import unicodedata
 
 from .geometry import resolve
 from .model import (
-    Document, Op,
+    Document, Op, LabelRef,
     GlyphName, Unicode, UnicodeRange, Glob, Category,
 )
 
 log = logging.getLogger(__name__)
+
+
+def _resolve_items(items, labels, _seen=()):
+    """Expand LabelRefs to concrete AnchorSpecs against *labels* (late binding)."""
+    specs = []
+    for it in items:
+        if isinstance(it, LabelRef):
+            if it.name in _seen:
+                raise ValueError(f"label cycle through {it.name}")
+            if it.name not in labels:
+                raise ValueError(f"undefined label {it.name}")
+            specs.extend(_resolve_items(labels[it.name], labels, _seen + (it.name,)))
+        else:
+            specs.append(it)
+    return specs
+
+
+def _remove_targets(items, labels):
+    """Names to drop for a REMOVE rule: bare names plus the names a label defines."""
+    names = set()
+    for it in items:
+        if isinstance(it, LabelRef):
+            names.update(s.name for s in _resolve_items([it], labels))
+        else:
+            names.add(it)
+    return names
 
 
 def _matches(selector, name: str, unicodes) -> bool:
@@ -39,11 +65,21 @@ def _matches(selector, name: str, unicodes) -> bool:
 
 
 def accumulate(doc: Document, name: str, unicodes) -> list:
-    """Build a glyph's anchor list by applying matching rules in order."""
+    """Build a glyph's anchor list by applying matching rules in order.
+
+    ``=`` replaces, ``+=`` appends, ``-=`` drops by anchor name. Labels are
+    resolved here, against ``doc.labels``, so overrides take effect late.
+    """
     acc: list = []
-    for selector, op, specs in doc.rules:
-        if _matches(selector, name, unicodes):
-            acc = list(specs) if op is Op.REPLACE else acc + list(specs)
+    for selector, op, items in doc.rules:
+        if not _matches(selector, name, unicodes):
+            continue
+        if op is Op.REMOVE:
+            drop = _remove_targets(items, doc.labels)
+            acc = [s for s in acc if s.name not in drop]
+        else:
+            specs = _resolve_items(items, doc.labels)
+            acc = specs if op is Op.REPLACE else acc + specs
     return acc
 
 
