@@ -1,0 +1,117 @@
+"""Tests for the new-syntax parser (dsl.py) and the accumulation model."""
+
+import pytest
+
+from anchorsfactory.dsl import parse_dsl, DSLError
+from anchorsfactory.apply import accumulate
+from anchorsfactory.model import (
+    Frame, HAlign, VEdge, Run, Frac,
+    X, XAbs, Y, YAbs, AnchorSpec,
+    GlyphName, Unicode, UnicodeRange, Glob, Category, Op,
+)
+
+
+def _one(doc, label="@x"):
+    return doc.labels[label][0]
+
+
+def test_anchor_paren_form():
+    doc = parse_dsl(["@x = top (box.center $H)"])
+    assert _one(doc) == AnchorSpec("top", X(Frame.BOX, HAlign.CENTER), Y("H", VEdge.TOP))
+
+
+@pytest.mark.parametrize("tok, x", [
+    ("width.center", X(Frame.ADVANCE, HAlign.CENTER)),
+    ("box.left", X(Frame.BOX, HAlign.LEFT)),
+    ("outline.right", X(Frame.OUTLINE, HAlign.RIGHT)),
+    ("outline.first.center", X(Frame.OUTLINE, HAlign.CENTER, run=Run.FIRST)),
+    ("outline.last.center", X(Frame.OUTLINE, HAlign.CENTER, run=Run.LAST)),
+    ("outline.2.center", X(Frame.OUTLINE, HAlign.CENTER, run=2)),
+    ("outline.center@top", X(Frame.OUTLINE, HAlign.CENTER, at=VEdge.TOP)),
+    ("250", XAbs(250)),
+])
+def test_x_tokens(tok, x):
+    assert _one(parse_dsl([f"@x = a ({tok} 0)"])).x == x
+
+
+@pytest.mark.parametrize("tok, y", [
+    ("$H", Y("H", VEdge.TOP)),
+    ("$H.bottom", Y("H", VEdge.BOTTOM)),
+    ("$H.middle", Y("H", VEdge.MIDDLE)),
+    ("$H*5/6", Y("H", Frac(5, 6))),
+    ("$bar.alt", Y("bar.alt", VEdge.TOP)),   # dotted glyph name, not an edge
+    ("575", YAbs(575)),
+])
+def test_y_tokens(tok, y):
+    assert _one(parse_dsl([f"@x = a (box.center {tok})"])).y == y
+
+
+@pytest.mark.parametrize("tok, sel", [
+    ("A", GlyphName("A")),
+    ("U+0413", Unicode(0x0413)),
+    ("U+0410..U+044F", UnicodeRange(0x0410, 0x044F)),
+    ("*.sc", Glob("*.sc")),
+    ("{Lu}", Category("Lu")),
+])
+def test_selectors(tok, sel):
+    doc = parse_dsl(["@a = x (box.center 0)", f"{tok} = @a"])
+    assert doc.rules[0][0] == sel
+
+
+def test_labels_mix_and_directives():
+    doc = parse_dsl([
+        "@bot = bottom (box.center 0)",
+        "!suffixes = .alt, sc",
+        "!shiftx = -15",
+        "L = @bot, top (box.left $H)",
+    ])
+    assert doc.suffixes == ["", ".alt", ".sc"]
+    assert doc.shift_x == -15
+    sel, op, specs = doc.rules[0]
+    assert sel == GlyphName("L") and op is Op.REPLACE
+    assert [s.name for s in specs] == ["bottom", "top"]
+
+
+def test_canonical_roundtrip():
+    """Rendering a parsed anchor reproduces its canonical DSL token."""
+    spec = _one(parse_dsl(["@x = bar (outline.first.center $h*5/6)"]))
+    assert str(spec) == "bar (outline.first.center $h*5/6)"
+
+
+# --- accumulation model: = replaces, += accumulates ------------------------ #
+def _names(specs):
+    return [s.name for s in specs]
+
+
+def test_range_default_then_add_override():
+    doc = parse_dsl([
+        "@ = top (box.center $H)",
+        "@desc = desc (outline.right 0)",
+        "U+0410..U+044F = @",
+        "U+0413 += @desc",
+    ])
+    assert _names(accumulate(doc, "ge", [0x0413])) == ["top", "desc"]   # Г: default + add
+    assert _names(accumulate(doc, "a", [0x0410])) == ["top"]            # plain range member
+    assert accumulate(doc, "x", [0x0041]) == []                        # outside range
+
+
+def test_replace_is_a_hard_reset():
+    doc = parse_dsl([
+        "@ = top (box.center $H)",
+        "U+0410..U+044F = @",
+        "U+0413 = bar (width.center 0)",     # hard reset wipes the @ default
+    ])
+    assert _names(accumulate(doc, "ge", [0x0413])) == ["bar"]
+
+
+@pytest.mark.parametrize("line", [
+    "A = top box.center $H",       # missing parens
+    "A = top (box.bogus $H)",      # bad align
+    "A = top (box.center 0",       # unbalanced paren
+    "A = @nope",                   # undefined label
+    "noequals",                    # missing operator
+    "!unknown = 1",                # unknown directive
+])
+def test_errors(line):
+    with pytest.raises(DSLError):
+        parse_dsl([line])

@@ -19,6 +19,7 @@ dev = ["pytest"]
 
 [project.scripts]
 anchorsfactory = "anchorsfactory.cli:main"
+anchorsfactory-convert = "anchorsfactory.convert:main"
 
 [tool.setuptools]
 packages = ["anchorsfactory"]

@@ -21,7 +21,7 @@ from __future__ import annotations
 from .model import (
     Frame, HAlign, VEdge, Frac,
     X, XAbs, Y, YAbs, AnchorSpec,
-    GlyphName, Unicode, Document,
+    GlyphName, Unicode, Op, Document,
 )
 
 
@@ -148,7 +148,7 @@ def parse_document(lines) -> Document:
                     specs.append(_parse_spec(item))
                 except ParseError as e:
                     raise ParseError(f"line {n}: {e}")
-        rules.append((selector, specs))
+        rules.append((selector, Op.REPLACE, specs))
 
     return Document(labels=labels, rules=rules, shift_x=shift_x, suffixes=suffixes)
 

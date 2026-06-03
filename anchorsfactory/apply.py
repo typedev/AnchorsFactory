@@ -1,36 +1,50 @@
 """Apply a parsed :class:`Document` to a font: place the anchors.
 
-This layer owns the *mutation* policy (clear / replace, suffix variants,
-the document-wide X shift) and delegates all coordinate maths to
-:mod:`anchorsfactory.geometry`. Behaviour intentionally mirrors the legacy
-tool so the golden regression compares like with like; the safer-default and
-rounding changes are layered on top afterwards.
+Resolution follows the accumulation model: rules are scanned in file order and
+every rule whose selector matches a glyph mutates that glyph's anchor list —
+``=`` replaces it, ``+=`` appends. This single path serves both front-ends
+(the legacy parser emits all-``REPLACE`` rules, so each glyph matched once
+behaves exactly as before).
+
+Coordinate maths is delegated to :mod:`anchorsfactory.geometry`.
 """
 
 from __future__ import annotations
 
+import fnmatch
 import logging
+import unicodedata
 
 from .geometry import resolve
-from .model import Document, GlyphName, Unicode
+from .model import (
+    Document, Op,
+    GlyphName, Unicode, UnicodeRange, Glob, Category,
+)
 
 log = logging.getLogger(__name__)
 
 
-def _resolve_selector(selector, cmap):
-    """Return the target glyph name, or None if a unicode is not in the font."""
+def _matches(selector, name: str, unicodes) -> bool:
     if isinstance(selector, GlyphName):
-        return selector.name
+        return name == selector.name
     if isinstance(selector, Unicode):
-        names = cmap.get(selector.codepoint)
-        return names[0] if names else None
+        return selector.codepoint in unicodes
+    if isinstance(selector, UnicodeRange):
+        return any(selector.start <= u <= selector.end for u in unicodes)
+    if isinstance(selector, Glob):
+        return fnmatch.fnmatchcase(name, selector.pattern)
+    if isinstance(selector, Category):
+        return any(unicodedata.category(chr(u)).startswith(selector.value) for u in unicodes)
     raise TypeError(f"unknown selector {selector!r}")
 
 
-def _remove_named(glyph, name):
-    for anchor in list(glyph.anchors):
-        if anchor.name == name:
-            glyph.removeAnchor(anchor)
+def accumulate(doc: Document, name: str, unicodes) -> list:
+    """Build a glyph's anchor list by applying matching rules in order."""
+    acc: list = []
+    for selector, op, specs in doc.rules:
+        if _matches(selector, name, unicodes):
+            acc = list(specs) if op is Op.REPLACE else acc + list(specs)
+    return acc
 
 
 def apply_document(font, doc: Document, *, clear=True, replace=True, round_coords=True):
@@ -39,27 +53,20 @@ def apply_document(font, doc: Document, *, clear=True, replace=True, round_coord
     ``round_coords`` rounds placed anchors to whole units (the usual choice for
     a UFO); the golden regression passes ``False`` to compare raw precision.
     """
-    cmap = font.getCharacterMapping()
-
-    # Resolve selectors to glyph names once; later rules win for the same glyph
-    # (matches the legacy dict-overwrite semantics).
-    resolved: dict[str, list] = {}
-    for selector, specs in doc.rules:
-        name = _resolve_selector(selector, cmap)
-        if name is None:
-            log.error("Unicode selector not in font: U+%04X", selector.codepoint)
-            continue
-        resolved[name] = specs
-
-    for base_name, specs in resolved.items():
-        if base_name not in font:
-            log.warning("Glyph not found: %s", base_name)
+    for glyph in font:
+        specs = accumulate(doc, glyph.name, list(glyph.unicodes))
+        if not specs:
             continue
         for sfx in doc.suffixes:
-            gname = base_name + sfx
-            if gname not in font:
-                continue
-            _place(font, font[gname], specs, doc.shift_x, clear, replace, round_coords)
+            gname = glyph.name + sfx
+            if gname in font:
+                _place(font, font[gname], specs, doc.shift_x, clear, replace, round_coords)
+
+
+def _remove_named(glyph, name):
+    for anchor in list(glyph.anchors):
+        if anchor.name == name:
+            glyph.removeAnchor(anchor)
 
 
 def _place(font, glyph, specs, shift_x, clear, replace, round_coords):

@@ -15,11 +15,22 @@ import os
 from fontParts.world import OpenFont
 
 from .apply import apply_document
+from .dsl import parse_dsl_file
 from .parser import parse_file
 
 log = logging.getLogger(__name__)
 
 ANCHORED_SUFFIX = "_anchored.ufo"
+
+
+def load_document(rules_path: str):
+    """Parse a rules file, choosing the front-end by extension.
+
+    ``.af`` / ``.dsl`` -> new language; anything else -> legacy ``.txt`` format.
+    """
+    if rules_path.endswith((".af", ".dsl")):
+        return parse_dsl_file(rules_path)
+    return parse_file(rules_path)
 
 
 def dump_existing_anchors(font) -> str:
@@ -58,7 +69,7 @@ def process_ufo(
 ) -> str:
     """Apply *rules_path* to *ufo_path* and save. Returns the saved path."""
     font = OpenFont(ufo_path)
-    doc = parse_file(rules_path)
+    doc = load_document(rules_path)
     log.info("%s %s", font.info.familyName, font.info.styleName)
 
     if backup_dir is not None:

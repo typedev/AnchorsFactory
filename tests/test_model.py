@@ -39,7 +39,7 @@ def test_y_token_rendering(spec, token):
 
 def test_anchorspec_rendering():
     spec = AnchorSpec("top", X(Frame.OUTLINE, HAlign.CENTER, run=Run.FIRST), Y("h", Frac(5, 6)))
-    assert str(spec) == "top:outline.first.center:$h*5/6"
+    assert str(spec) == "top (outline.first.center $h*5/6)"
 
 
 # --- validation: illegal combinations are rejected at construction --------- #

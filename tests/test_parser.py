@@ -50,7 +50,7 @@ def test_glyph_rule_mixes_inline_and_label():
         "@bot=bottom:centerpos:0",
         "L=top:left:$H,caron:right:$H,@bot",
     ])
-    sel, specs = doc.rules[0]
+    sel, op, specs = doc.rules[0]
     assert sel == GlyphName("L")
     assert specs == [
         AnchorSpec("top", X(Frame.BOX, HAlign.LEFT), Y("H", VEdge.TOP)),
@@ -64,7 +64,7 @@ def test_unicode_selector_and_label_expansion():
         "@=top:centerpos:$H",
         "&0413=@,@",          # Г, label used twice
     ])
-    sel, specs = doc.rules[0]
+    sel, op, specs = doc.rules[0]
     assert sel == Unicode(0x0413)
     assert len(specs) == 2 and specs[0].name == "top"
 

@@ -172,7 +172,13 @@ class AnchorSpec:
     y: YStrategy
 
     def __str__(self):
-        return f"{self.name}:{self.x}:{self.y}"
+        return f"{self.name} ({self.x} {self.y})"
+
+
+class Op(Enum):
+    """How a rule's anchors combine with what a glyph already accumulated."""
+    REPLACE = "="    # discard the accumulator, set it to these anchors
+    ADD = "+="       # append these anchors to the accumulator
 
 
 @dataclass(frozen=True)
@@ -187,13 +193,35 @@ class Unicode:
     codepoint: int
 
 
-Selector = Union[GlyphName, Unicode]
+@dataclass(frozen=True)
+class UnicodeRange:
+    """Selector: target glyphs in an inclusive code-point range."""
+    start: int
+    end: int
+
+
+@dataclass(frozen=True)
+class Glob:
+    """Selector: target glyphs whose name matches a shell glob (`*`, `?`)."""
+    pattern: str
+
+
+@dataclass(frozen=True)
+class Category:
+    """Selector: target glyphs by Unicode general category (e.g. ``Lu``).
+
+    A one-letter value (``L``) matches any subcategory (``Lu``, ``Ll``, ...).
+    """
+    value: str
+
+
+Selector = Union[GlyphName, Unicode, UnicodeRange, Glob, Category]
 
 
 @dataclass
 class Document:
-    """A parsed rule file: reusable labels + per-selector applications."""
+    """A parsed rule file: reusable labels + ordered selector applications."""
     labels: dict[str, list[AnchorSpec]] = field(default_factory=dict)
-    rules: list[tuple[Selector, list[AnchorSpec]]] = field(default_factory=list)
-    shift_x: int = 0                          # @SHIFTX — document-wide X offset
-    suffixes: list[str] = field(default_factory=lambda: [""])  # @SFXLIST variants
+    rules: list[tuple[Selector, Op, list[AnchorSpec]]] = field(default_factory=list)
+    shift_x: int = 0                          # document-wide X offset (!shiftx)
+    suffixes: list[str] = field(default_factory=lambda: [""])  # variants (!suffixes)
