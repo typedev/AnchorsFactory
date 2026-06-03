@@ -22,7 +22,10 @@ anchorsfactory = "anchorsfactory.cli:main"
 anchorsfactory-convert = "anchorsfactory.convert:main"
 
 [tool.setuptools]
-packages = ["anchorsfactory"]
+packages = ["anchorsfactory", "anchorsfactory.rules"]
+
+[tool.setuptools.package-data]
+"anchorsfactory.rules" = ["*.af"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

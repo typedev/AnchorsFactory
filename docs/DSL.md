@@ -142,8 +142,23 @@ U+0413         = bar (width.center $H)   # Г → [bar(…)] only — the @ defa
 ## Directives
 
 ```
+!extends  default         # inherit a base ruleset, then layer this file on top
 !suffixes = .alt, .sc     # also place every rule on base+suffix glyph variants
 !shiftx   = -15           # add a constant X offset to every placed anchor
+```
+
+`!extends` takes a **bundled preset name** (`default`, `default-italics` — no
+extension/separator) or a **path** resolved relative to the file containing the
+directive (absolute paths allowed but discouraged). Multiple `!extends` layer
+in order, then this file's own rules apply last; cycles are rejected. This is
+the inheritance model: ship a big standalone file, or `!extends default` plus a
+small set of `+=` / `-=` / `=` adjustments.
+
+```
+!extends default
+U+0413 += hook (outline.right 0)   # Г: defaults plus a hook
+A      -= ogonek                   # A: defaults minus the ogonek anchor
+O       = top (box.center $H)       # O: replace entirely
 ```
 
 ## A complete example

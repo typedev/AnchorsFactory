@@ -133,6 +133,7 @@ def parse_dsl(lines) -> Document:
     rules: list = []
     shift_x = 0
     suffixes = [""]
+    extends: list[str] = []
 
     raw_lines = []
     for n, line in enumerate(lines, 1):
@@ -171,8 +172,13 @@ def parse_dsl(lines) -> Document:
 
     for n, stmt in raw_lines:
         if stmt.startswith("!"):
-            name, _, value = stmt[1:].partition("=")
-            name, value = name.strip(), value.strip()
+            body = stmt[1:].strip()
+            if "=" in body:
+                name, _, value = body.partition("=")
+                name, value = name.strip(), value.strip()
+            else:                                  # e.g. "!extends default"
+                head, _, rest = body.partition(" ")
+                name, value = head.strip(), rest.strip()
             if name == "suffixes":
                 suffixes.extend((s.strip() if s.strip().startswith(".") else "." + s.strip())
                                 for s in value.split(",") if s.strip())
@@ -181,6 +187,10 @@ def parse_dsl(lines) -> Document:
                     shift_x = int(value)
                 except ValueError:
                     raise DSLError(f"line {n}: !shiftx needs an integer, got {value!r}")
+            elif name == "extends":
+                if not value:
+                    raise DSLError(f"line {n}: !extends needs a base name or path")
+                extends.append(value)
             else:
                 raise DSLError(f"line {n}: unknown directive !{name}")
             continue
@@ -201,7 +211,8 @@ def parse_dsl(lines) -> Document:
             items = parse_remove(rhs, n) if op is Op.REMOVE else parse_items(rhs, n)
             rules.append((_parse_selector(lhs), op, items))
 
-    return Document(labels=labels, rules=rules, shift_x=shift_x, suffixes=suffixes)
+    return Document(labels=labels, rules=rules, shift_x=shift_x,
+                    suffixes=suffixes, extends=extends)
 
 
 def parse_dsl_file(path: str) -> Document:

@@ -245,3 +245,4 @@ class Document:
     rules: list[tuple[Selector, Op, list]] = field(default_factory=list)
     shift_x: int = 0                          # document-wide X offset (!shiftx)
     suffixes: list[str] = field(default_factory=lambda: [""])  # variants (!suffixes)
+    extends: list[str] = field(default_factory=list)  # base rules to inherit (!extends)

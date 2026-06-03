@@ -14,8 +14,10 @@ import os
 
 from fontParts.world import OpenFont
 
+from . import presets
 from .apply import apply_document
-from .dsl import parse_dsl_file
+from .dsl import parse_dsl, parse_dsl_file
+from .model import Document
 from .parser import parse_file
 
 log = logging.getLogger(__name__)
@@ -23,14 +25,43 @@ log = logging.getLogger(__name__)
 ANCHORED_SUFFIX = "_anchored.ufo"
 
 
-def load_document(rules_path: str):
-    """Parse a rules file, choosing the front-end by extension.
+def _merge(base: Document, child: Document) -> Document:
+    """Layer *child* on top of *base*: child labels win, rules concatenate."""
+    return Document(
+        labels={**base.labels, **child.labels},
+        rules=base.rules + child.rules,
+        shift_x=child.shift_x or base.shift_x,
+        suffixes=list(dict.fromkeys(base.suffixes + child.suffixes)),
+    )
 
-    ``.af`` / ``.dsl`` -> new language; anything else -> legacy ``.txt`` format.
+
+def _load(ref: str, base_dir, seen: tuple) -> Document:
+    if presets.is_preset(ref):
+        ident, this_dir = f"preset:{ref}", None
+        doc = parse_dsl(presets.preset_text(ref).splitlines())
+    else:
+        path = ref if os.path.isabs(ref) else os.path.join(base_dir or "", ref)
+        ident = os.path.abspath(path)
+        this_dir = os.path.dirname(ident)
+        doc = parse_dsl_file(path) if path.endswith((".af", ".dsl")) else parse_file(path)
+
+    if ident in seen:
+        raise ValueError(f"!extends cycle at {ref}")
+    seen = seen + (ident,)
+
+    if not doc.extends:
+        return doc
+    merged = Document()
+    for base_ref in doc.extends:        # bases first, in order...
+        merged = _merge(merged, _load(base_ref, this_dir, seen))
+    return _merge(merged, doc)          # ...then this file on top
+
+
+def load_document(rules: str) -> Document:
+    """Resolve a rules reference (preset name or file path) to a Document,
+    inheriting any ``!extends`` bases. Legacy ``.txt`` files have no inheritance.
     """
-    if rules_path.endswith((".af", ".dsl")):
-        return parse_dsl_file(rules_path)
-    return parse_file(rules_path)
+    return _load(rules, base_dir=None, seen=())
 
 
 def dump_existing_anchors(font) -> str:
