@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import re
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -165,8 +166,17 @@ def main() -> None:
 
     try:
         print("\nBuilding artifacts ...")
+        # Start from an empty dist/ so we only ever publish what we just built
+        # (uv build does not clear stale or pre-existing artifacts itself).
+        dist_dir = ROOT / "dist"
+        if dist_dir.exists():
+            shutil.rmtree(dist_dir)
         run(["uv", "build"])
-        dist_files = sorted(str(p) for p in (ROOT / "dist").glob("*") if p.is_file())
+        dist_files = sorted(
+            str(p)
+            for p in dist_dir.glob("*")
+            if p.is_file() and p.name.endswith((".whl", ".tar.gz"))
+        )
         if not dist_files:
             raise subprocess.CalledProcessError(1, "uv build")
         print("\nChecking artifacts ...")
