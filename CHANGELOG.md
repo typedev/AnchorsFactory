@@ -6,6 +6,10 @@ Sections below the *Unreleased* heading are filled in automatically by
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-04
+
+- No changes recorded.
+
 ## [0.1.0] - 2026-06-04
 
 - Initial public release.
