@@ -32,7 +32,7 @@ An anchor is a point. It is written as the anchor name followed by a
 parenthesised **X Y** pair:
 
 ```
-top (box.center $H)
+top (box.center capHeight)
 ```
 
 The parentheses group the placement explicitly (clear boundaries, a safe home
@@ -76,18 +76,22 @@ references; they don't depend on any particular glyph being present.
 A label names a reusable list of anchors:
 
 ```
-@      = top (box.center $H), bottom (box.center 0)
+@      = top (box.center capHeight), bottom (box.center 0)
 @desc  = desc (outline.right 0)
-@bar   = bar (width.center $H*1/2)
-@_     = _top (outline.center@bottom $H)
+@bar   = bar (width.center capHeight*1/2)
+@_     = _top (outline.center@bottom capHeight)
 ```
+
+Prefer font metrics (`capHeight`, `xHeight`, …) over a glyph's bbox top
+(`$H`, `$x`) for heights — they don't depend on a particular glyph being
+present. Use `$Glyph` when you specifically need *that glyph's* geometry.
 
 Reference labels (and mix with inline anchors) when marking a glyph:
 
 ```
 A = @, @ogonek
-L = @bot, top (box.left $H), caron (box.right $H)
-t = @, barlow (width.center $x*2/3)
+L = @bot, top (box.left capHeight), caron (box.right capHeight)
+t = @, barlow (width.center xHeight*2/3)
 ```
 
 ## Selectors — what a rule applies to
@@ -170,16 +174,18 @@ O       = top (box.center $H)       # O: replace entirely
 
 ```
 # --- labels ---
-@      = top (box.center $H), bottom (box.center 0)
+@      = top (box.center capHeight), bottom (box.center 0)
+@bot   = bottom (box.center 0)
+@_     = _top (outline.center@bottom capHeight)
 @desc  = desc (outline.right 0)
-@bar   = bar (width.center $H*1/2)
+@bar   = bar (width.center capHeight*1/2)
 @hook  = hook (outline.right 0)
 @ogonek = ogonek (outline.right 0)
 
 # --- Latin ---
 A = @, @ogonek
 H = @, @hook, @desc, @bar
-L = @bot, top (box.left $H), caron (box.right $H)
+L = @bot, top (box.left capHeight), caron (box.right capHeight)
 
 # --- Cyrillic: one default + exceptions ---
 U+0410..U+044F = @
@@ -208,4 +214,8 @@ The old `name:align:vert` triples map mechanically:
 | `&0413=@` | `U+0413 = @` |
 | `@SFXLIST=alt` | `!suffixes = .alt` |
 
-A converter will translate existing rule files automatically.
+Convert existing files automatically — the conversion is checked lossless:
+
+```
+anchorsfactory-convert examples/default-anchors-list.txt -o my-rules.af
+```

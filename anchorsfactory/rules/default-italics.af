@@ -2,7 +2,7 @@
 #
 # Same structure as default.af, tuned for italics: top anchors centre on the
 # slanted ink (outline.center@top), lowercase x-height letters use @x, and
-# marks attach at x-height (@_x / @_bxc). See default.af / docs/DSL.md.
+# marks attach at x-height (@_x / @_bxc). See default.af / docs/anchor-rules.md.
 
 # ============================================================
 #  LABELS

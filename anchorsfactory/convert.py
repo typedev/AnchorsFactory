@@ -1,4 +1,4 @@
-"""Convert a legacy ``.txt`` rule file to the new DSL (docs/DSL.md).
+"""Convert a legacy ``.txt`` rule file to the new DSL (docs/anchor-rules.md).
 
 Reuses the IR as the bridge: parse the legacy file to a :class:`Document`
 (via :mod:`anchorsfactory.parser`), then render that Document back out in the

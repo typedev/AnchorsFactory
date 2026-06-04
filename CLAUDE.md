@@ -61,7 +61,7 @@ each layer is testable and the DSL surface is decoupled from the engine.
 
 ## Rule language
 
-See `docs/DSL.md` (full spec) and `README.md`. Key points: an anchor is
+See `docs/anchor-rules.md` (full spec) and `README.md`. Key points: an anchor is
 `name (X Y)`; X is `width/box/outline . [run] . align [@edge]`; Y is a number, a
 font metric keyword (`capHeight`, `xHeight`, …), or `$Glyph[.edge|*frac]`;
 selectors include ranges/globs/categories; `!extends` inherits a base.

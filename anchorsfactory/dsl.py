@@ -1,4 +1,4 @@
-"""Parser for the new rule language (docs/DSL.md) -> IR (:class:`Document`).
+"""Parser for the new rule language (docs/anchor-rules.md) -> IR (:class:`Document`).
 
 A second front-end alongside :mod:`anchorsfactory.parser`; both produce the
 same :class:`Document`, so the engine is unchanged. Surface form::

@@ -59,7 +59,7 @@ U+0413 += desc (outline.right 0)   # Г also gets a descender anchor
 - Selectors: name, `U+XXXX`, range `U+A..U+B`, glob `*.sc`, category `{Lu}`.
 - `=` replace · `+=` add · `-=` remove; `!extends default` inherits a ruleset.
 
-Full reference: **[docs/DSL.md](docs/DSL.md)**.
+Full reference: **[docs/anchor-rules.md](docs/anchor-rules.md)**.
 
 ### Presets and migration
 
