@@ -13,7 +13,7 @@ assemble composite glyphs by snapping mark anchors to base anchors.
 ## Install
 
 ```bash
-pip install anchorsfactory          # once published
+pip install anchorsfactory
 # or, from a checkout:
 pip install -e .
 ```
@@ -90,8 +90,14 @@ font.save()
 make venv      # create .venv, install the package (editable) + dev deps, via uv
 make test      # run the test suite
 make build     # build sdist + wheel into dist/
+make release   # bump minor, update CHANGELOG, build, upload to PyPI, tag + push
 ```
+
+Releases are cut with `make release`: it bumps the minor version, fills in a
+[CHANGELOG](CHANGELOG.md) section from the commit log, publishes to PyPI, and
+tags `vX.Y.Z`. Set `UV_PUBLISH_TOKEN` first; use `make release-test` to rehearse
+against TestPyPI.
 
 ## License
 
-See [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
