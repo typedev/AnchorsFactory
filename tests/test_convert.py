@@ -1,8 +1,12 @@
 """Round-trip: legacy text -> IR -> new DSL text -> IR must be equivalent."""
 
+from pathlib import Path
+
+import pytest
+
 from anchorsfactory.parser import parse_document
 from anchorsfactory.dsl import parse_dsl
-from anchorsfactory.convert import render_document
+from anchorsfactory.convert import render_document, verify_conversion
 
 
 LEGACY = [
@@ -33,3 +37,10 @@ def test_dsl_text_is_parseable_and_uses_new_syntax():
     assert "U+0413" in new_text
     assert "$endash.middle" in new_text          # legacy $endash- -> .middle
     assert ":" not in new_text.replace("# ", "")  # no legacy colon triples remain
+
+
+@pytest.mark.parametrize("legacy", sorted(str(p) for p in Path(".").glob("*-anchors-list*.txt"))
+                         + sorted(str(p) for p in Path(".").glob("anchors-list*.txt")))
+def test_real_legacy_files_convert_losslessly(legacy):
+    """Every legacy rule file in the repo round-trips with no loss."""
+    assert verify_conversion(legacy) == []
