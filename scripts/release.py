@@ -21,6 +21,9 @@ What it does, in order:
   6. *Only after* a successful upload: commits, tags `vX.Y.Z`, and pushes both
      the commit and the tag. If anything before the upload fails, the working
      tree is restored and git history is left untouched.
+  7. For a real (non --test) release, creates a GitHub Release for the tag with
+     the changelog section as notes and the artifacts attached (best-effort —
+     needs an authenticated `gh`; a failure here leaves PyPI/tag intact).
 
 Authentication: set a token in the environment before running, e.g.
     export UV_PUBLISH_TOKEN=pypi-...
@@ -207,6 +210,24 @@ def main() -> None:
     run(["git", "tag", "-a", tag, "-m", f"Release {tag}"])
     run(["git", "push", "origin", "master"])
     run(["git", "push", "origin", tag])
+
+    # A real release also gets a GitHub Release, with the changelog section as
+    # notes and the built artifacts attached. Best-effort: a missing/unauth'd
+    # `gh` must not undo a successful PyPI publish, so just warn.
+    if not args.test:
+        print(f"\nCreating GitHub release {tag} ...")
+        try:
+            run(
+                ["gh", "release", "create", tag, "--title", tag,
+                 "--notes", body, *dist_files]
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            print(
+                f"  ! Could not create the GitHub release for {tag} "
+                "(is `gh` installed and authenticated?).\n"
+                "    The PyPI publish and the git tag are unaffected; create it\n"
+                f"    later with:  gh release create {tag} --notes \"...\""
+            )
 
     print(f"\n✓ Published {new} to {target} and pushed {tag}.")
 
