@@ -16,7 +16,7 @@ _UFOS = sorted(Path("ufo-test").glob("*.ufo"))
 if not _UFOS:
     pytest.skip("no test UFO available in ufo-test/", allow_module_level=True)
 
-RULES = "default-anchors-list.txt"
+RULES = "default"          # bundled preset
 
 
 @pytest.fixture

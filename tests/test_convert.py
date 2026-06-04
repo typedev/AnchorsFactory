@@ -39,8 +39,12 @@ def test_dsl_text_is_parseable_and_uses_new_syntax():
     assert ":" not in new_text.replace("# ", "")  # no legacy colon triples remain
 
 
-@pytest.mark.parametrize("legacy", sorted(str(p) for p in Path(".").glob("*-anchors-list*.txt"))
-                         + sorted(str(p) for p in Path(".").glob("anchors-list*.txt")))
+_LEGACY_RULES = sorted(
+    str(p) for p in Path("examples").glob("*anchors-list*.txt")
+)  # the retired .txt rule files (excludes the afii_to_GLapp mapping table)
+
+
+@pytest.mark.parametrize("legacy", _LEGACY_RULES)
 def test_real_legacy_files_convert_losslessly(legacy):
-    """Every legacy rule file in the repo round-trips with no loss."""
+    """Every retired rule file round-trips with no loss."""
     assert verify_conversion(legacy) == []
