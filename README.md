@@ -87,8 +87,9 @@ font.save()
 ## Development
 
 ```bash
-uv venv && uv pip install -r requirements.txt -r requirements-dev.txt
-python -m pytest
+make venv      # create .venv, install the package (editable) + dev deps, via uv
+make test      # run the test suite
+make build     # build sdist + wheel into dist/
 ```
 
 ## License

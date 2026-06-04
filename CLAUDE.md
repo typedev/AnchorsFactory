@@ -21,15 +21,17 @@ Dependencies are not in the system Python — use the project-local `.venv`
 (managed with **uv**).
 
 ```bash
-uv venv --python 3.12
-VIRTUAL_ENV="$(pwd)/.venv" uv pip install -r requirements.txt -r requirements-dev.txt
-.venv/bin/python -m pytest          # tests
+make venv                           # create .venv, install package + dev deps
+make test                           # run the test suite
+make build                          # build sdist + wheel (uv build) into dist/
+# equivalently, by hand:
+.venv/bin/python -m pytest
 .venv/bin/python -m anchorsfactory <ufo> --rules default        # run the CLI
 .venv/bin/python -m anchorsfactory.convert <legacy.txt>         # convert old rules
 ```
 
 **uv gotcha:** if an unrelated `$VIRTUAL_ENV` is exported, `uv pip install`
-targets that env; prefix installs with `VIRTUAL_ENV="$(pwd)/.venv"`.
+targets that env; prefix manual installs with `VIRTUAL_ENV="$(pwd)/.venv"`.
 
 No real font ships with the repo; see "test fonts" below.
 
@@ -40,13 +42,15 @@ each layer is testable and the DSL surface is decoupled from the engine.
 
 - `model.py` — the IR (the parser/engine contract). `frame.position` vocabulary:
   `Frame{ADVANCE,BOX,OUTLINE}`×`HAlign`, `Run` (which ink span/stem), `VEdge`,
-  `Frac`, `FontMetric`; selectors `GlyphName/Unicode/UnicodeRange/Glob/Category`;
-  `Op{REPLACE,ADD,REMOVE}`; `LabelRef`; `Document`. Dataclass `__str__`s render
-  canonical DSL tokens (so they double as the serializer).
+  `Frac`, `FontMetric`, `YSum` (summed heights); selectors
+  `GlyphName/Unicode/UnicodeRange/Glob/Category`; `Op{REPLACE,ADD,REMOVE}`;
+  `LabelRef`; `Document`. Dataclass `__str__`s render canonical DSL tokens (so
+  they double as the serializer).
 - `geometry.py` — resolves an `AnchorSpec` to (x, y). **Analytic** contour
   intersection via `fontTools.misc.bezierTools` (not a pixel scan); decomposes
   components, pairs crossings into stems, applies italic shift, insets 1u from
-  horizontal extremes. Reads `font.info` for metrics.
+  horizontal extremes. Reads `font.info` for metrics; `X.at` may sample the
+  contour at a fixed height (metric/number) decoupled from the anchor's Y.
 - `parser.py` — legacy `.txt` → IR. `dsl.py` — the new language → IR. Both
   produce a `Document`; the engine never sees surface syntax.
 - `apply.py` — the **accumulation model**: rules scanned in order, each matching
@@ -62,20 +66,23 @@ each layer is testable and the DSL surface is decoupled from the engine.
 ## Rule language
 
 See `docs/anchor-rules.md` (full spec) and `README.md`. Key points: an anchor is
-`name (X Y)`; X is `width/box/outline . [run] . align [@edge]`; Y is a number, a
-font metric keyword (`capHeight`, `xHeight`, …), or `$Glyph[.edge|*frac]`;
-selectors include ranges/globs/categories; `!extends` inherits a base.
+`name (X Y)`; X is `width/box/outline . [run] . align [@edge]` where `@edge` is a
+glyph extreme (`@top`/`@bottom`) or a fixed sample height (`@xHeight`, `@<n>`);
+Y is a number, a font metric keyword (`capHeight`, `xHeight`, …), `$Glyph[.edge|
+*frac]`, or a `+`-sum of those (no spaces); operators `=`/`+=`/`-=`; selectors
+include ranges/globs/categories; `!extends` inherits a base.
 
 ## Conventions
 
 - **Test fonts in `ufo-test/` are confidential and gitignored.** Never write
   their filenames into commits, code, docs, or any tracked file; refer to them
-  generically. `ufo-test/` and `*.ufo` stay in `.gitignore`.
+  generically. `ufo-test/` and `*.ufo` stay in `.gitignore`. (Some fonts there
+  carry proprietary licenses, not OFL — also not redistributable / bundleable.)
 - **Never run the CLI directly on `ufo-test/` originals** without `--output`/a
   copy — the tool can overwrite in place. Process copies in `/tmp`.
 - `dev/` (gitignored) holds local golden baselines (`dev/golden/font*.anchors.txt`,
   from confidential fonts) and validation scripts (`golden_diff.py`,
-  `check_numbers.py`, `validate_dsl.py`). The golden harness asserts the engine
-  reproduces the legacy output bar intended fixes — run it after engine changes.
-- Validate rule changes against the golden / via per-glyph `accumulate`
-  equivalence before committing.
+  `check_numbers.py`, `validate_dsl.py`). Re-run after engine changes; verify
+  rule changes against the golden / via per-glyph `accumulate` equivalence.
+- No font ships in the wheel; the golden tests glob `ufo-test/` and skip if
+  absent, so the public suite needs no fixture.
