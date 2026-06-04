@@ -11,3 +11,6 @@ __pycache__
 /build
 *.egg-info
 .vscode/
+.pytest_cache/
+.claude/
+/output
