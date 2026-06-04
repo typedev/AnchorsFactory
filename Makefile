@@ -7,7 +7,7 @@
 
 PY := .venv/bin/python
 
-.PHONY: help venv test build check publish-test publish clean
+.PHONY: help venv test build check publish-test publish release release-test clean
 
 help:
 	@echo "venv         create .venv and install the package (editable) + dev deps"
@@ -16,6 +16,8 @@ help:
 	@echo "check        build, then validate the artifacts (twine check)"
 	@echo "publish-test upload to TestPyPI"
 	@echo "publish      upload to PyPI"
+	@echo "release      bump minor, changelog, build, upload to PyPI, tag + push"
+	@echo "release-test same as release, but upload to TestPyPI"
 	@echo "clean        remove build artifacts and caches"
 
 venv:
@@ -40,6 +42,15 @@ publish-test: build
 
 publish: build
 	uv publish dist/*
+
+# One-shot release: bump minor, build CHANGELOG, build, upload, tag, push.
+# Needs a token, e.g.  export UV_PUBLISH_TOKEN=pypi-...
+# Pass extra flags via ARGS, e.g.  make release ARGS=--no-bump
+release:
+	$(PY) scripts/release.py $(ARGS)
+
+release-test:
+	$(PY) scripts/release.py --test $(ARGS)
 
 clean:
 	rm -rf dist build *.egg-info anchorsfactory.egg-info
