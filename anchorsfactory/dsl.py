@@ -15,8 +15,8 @@ from __future__ import annotations
 import re
 
 from .model import (
-    Frame, HAlign, VEdge, Run, Frac,
-    X, XAbs, Y, YAbs, AnchorSpec, LabelRef,
+    Frame, HAlign, VEdge, Run, Frac, FONT_METRICS,
+    X, XAbs, Y, YAbs, FontMetric, AnchorSpec, LabelRef,
     GlyphName, Unicode, UnicodeRange, Glob, Category, Op, Document,
 )
 
@@ -72,6 +72,17 @@ def _parse_x(tok: str):
 
 def _parse_y(tok: str):
     if not tok.startswith("$"):
+        base, star, frac = tok.partition("*")
+        if base in FONT_METRICS:                 # font metric, optionally *d1/d2
+            if not star:
+                return FontMetric(base)
+            if "/" not in frac:
+                raise DSLError(f"fraction must be d1/d2 in {tok!r}")
+            d1, d2 = frac.split("/", 1)
+            try:
+                return FontMetric(base, Frac(int(d1), int(d2)))
+            except ValueError as e:
+                raise DSLError(f"bad fraction in {tok!r}: {e}")
         try:
             return YAbs(int(tok))
         except ValueError:

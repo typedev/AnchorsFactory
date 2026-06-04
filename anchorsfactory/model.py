@@ -157,8 +157,30 @@ class YAbs:
         return str(self.y)
 
 
+# Font-wide vertical metrics from font.info (plus the convenience `baseline`).
+FONT_METRICS = ("ascender", "descender", "capHeight", "xHeight", "unitsPerEm", "baseline")
+
+
+@dataclass(frozen=True)
+class FontMetric:
+    """A height taken from a font-wide vertical metric, optionally a fraction.
+
+    Names match ``font.info`` (``ascender``, ``descender``, ``capHeight``,
+    ``xHeight``, ``unitsPerEm``); ``baseline`` is 0.
+    """
+    name: str
+    frac: Optional[Frac] = None
+
+    def __post_init__(self):
+        if self.name not in FONT_METRICS:
+            raise ValueError(f"unknown font metric {self.name!r}; one of {FONT_METRICS}")
+
+    def __str__(self):
+        return f"{self.name}*{self.frac}" if self.frac else self.name
+
+
 XStrategy = Union[X, XAbs]
-YStrategy = Union[Y, YAbs]
+YStrategy = Union[Y, YAbs, FontMetric]
 
 
 # --------------------------------------------------------------------------- #

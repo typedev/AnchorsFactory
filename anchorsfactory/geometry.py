@@ -14,10 +14,14 @@ from typing import Optional
 from fontTools.misc.bezierTools import curveLineIntersections
 from fontTools.pens.recordingPen import DecomposingRecordingPen
 
+import logging
+
 from .model import (
     Frame, HAlign, VEdge, Run, Frac,
-    X, XAbs, Y, YAbs, AnchorSpec,
+    X, XAbs, Y, YAbs, FontMetric, AnchorSpec,
 )
+
+log = logging.getLogger(__name__)
 
 # Crossings closer than this (font units) are treated as one — collapses the
 # duplicate roots you get when a scanline passes through a shared on-curve point.
@@ -127,10 +131,23 @@ def _italic_shift(font, y: float) -> float:
     return y * math.tan(math.radians(-angle))
 
 
+def _font_metric(font, name: str) -> float:
+    if name == "baseline":
+        return 0.0
+    value = getattr(font.info, name, None)
+    if value is None:
+        log.warning("font has no %s metric; using 0", name)
+        return 0.0
+    return float(value)
+
+
 def resolve_y(font, yspec) -> float:
     """Resolve a Y strategy to a height in font units."""
     if isinstance(yspec, YAbs):
         return float(yspec.y)
+    if isinstance(yspec, FontMetric):
+        value = _font_metric(font, yspec.name)
+        return value * yspec.frac.num / yspec.frac.den if yspec.frac else value
     glyph = font[yspec.glyph]              # KeyError if the reference is missing
     bounds = glyph.bounds
     if bounds is None:

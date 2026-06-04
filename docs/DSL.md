@@ -64,7 +64,12 @@ is used.
 | `$G.bottom` | bottom of G's box |
 | `$G.middle` | vertical middle of G's box |
 | `$G*d1/d2` | fraction of G's height, from the baseline (e.g. `$H*5/6`) |
+| `ascender` `descender` `capHeight` `xHeight` `unitsPerEm` `baseline` | a font-wide vertical metric from `font.info` (`baseline` = 0) |
+| `capHeight*2/3` | a fraction of a metric |
 | `<number>` | absolute Y in font units |
+
+Font metrics are bare keywords (no `$`), so they never collide with glyph
+references; they don't depend on any particular glyph being present.
 
 ## Labels
 

@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from anchorsfactory.geometry import resolve_x, resolve_y, _crossings, _spans
-from anchorsfactory.model import Frame, HAlign, VEdge, Run, Frac, X, Y
+from anchorsfactory.model import Frame, HAlign, VEdge, Run, Frac, X, Y, FontMetric
 
 fontParts_world = pytest.importorskip("fontParts.world")
 
@@ -107,3 +107,10 @@ def test_y_edges_and_fraction(font):
     assert resolve_y(font, Y("H", VEdge.BOTTOM)) == pytest.approx(yMin)
     assert resolve_y(font, Y("H", VEdge.MIDDLE)) == pytest.approx((yMin + yMax) / 2)
     assert resolve_y(font, Y("H", Frac(5, 6))) == pytest.approx(yMax * 5 / 6)
+
+
+def test_font_metric_heights(font):
+    assert resolve_y(font, FontMetric("xHeight")) == pytest.approx(font.info.xHeight)
+    assert resolve_y(font, FontMetric("descender")) == pytest.approx(font.info.descender)
+    assert resolve_y(font, FontMetric("capHeight", Frac(2, 3))) == pytest.approx(font.info.capHeight * 2 / 3)
+    assert resolve_y(font, FontMetric("baseline")) == 0.0

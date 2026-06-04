@@ -6,7 +6,7 @@ from anchorsfactory.dsl import parse_dsl, DSLError
 from anchorsfactory.apply import accumulate
 from anchorsfactory.model import (
     Frame, HAlign, VEdge, Run, Frac,
-    X, XAbs, Y, YAbs, AnchorSpec, LabelRef,
+    X, XAbs, Y, YAbs, FontMetric, AnchorSpec, LabelRef,
     GlyphName, Unicode, UnicodeRange, Glob, Category, Op,
 )
 
@@ -41,6 +41,10 @@ def test_x_tokens(tok, x):
     ("$H*5/6", Y("H", Frac(5, 6))),
     ("$bar.alt", Y("bar.alt", VEdge.TOP)),   # dotted glyph name, not an edge
     ("575", YAbs(575)),
+    ("xHeight", FontMetric("xHeight")),
+    ("descender", FontMetric("descender")),
+    ("capHeight*2/3", FontMetric("capHeight", Frac(2, 3))),
+    ("baseline", FontMetric("baseline")),
 ])
 def test_y_tokens(tok, y):
     assert _one(parse_dsl([f"@x = a (box.center {tok})"])).y == y
