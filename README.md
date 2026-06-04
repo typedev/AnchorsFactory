@@ -1,60 +1,96 @@
 # AnchorsFactory
 
-A module for working with the rules for placing anchors in a font.
-The rule describes the position of one or several anchors at once.
-Several rules can be applied to one glyph at once.
-The rules are stored in a separate text file, for example
-[anchors-list.txt](anchors-list.txt)
+Rule-driven **anchor placement** for [UFO](https://unifiedfontobject.org/)
+fonts. You describe, in a compact text file, where anchors should sit on your
+glyphs; AnchorsFactory computes the coordinates from each glyph's own geometry
+and writes the anchors into the font.
 
-### General recording format:
+It does the *pre-marking* step of accent handling: place `top`/`bottom`/`_top`/…
+anchors consistently across hundreds of glyphs, so a tool like
+[GlyphConstruction](https://github.com/typemytype/GlyphConstruction) can then
+assemble composite glyphs by snapping mark anchors to base anchors.
 
-```
-@Label1=Anchor:Alignment:VertPosition
-@Label2=..
-# a comment
-GlyphName=@Label1,@Label2,..
-&FFFF=@Label1,@Label2,..
-```
+## Install
 
-### General rules syntax
-```
-@Label=Anchor:Alignment:VertPosition, ...
+```bash
+pip install anchorsfactory          # once published
+# or, from a checkout:
+pip install -e .
 ```
 
-`@Label` - the name of the rule label, always starting with `@`
+Requires Python 3.10+, `fontParts` and `fontTools`.
 
-`Anchor` - the name of the anchor, in names to indicate anchors in accents you must use the `_` sign
+## Quick start
 
-`Alignment` - horizontal alignment of the anchor.
-If a numeric value is specified, this will be the horizontal position of the anchor.
-`left`/`center`/`right` - anchor position on the left/right border of the glyph (glyph.bounds) or in the middle of the glyph glyph.width/2;
-`centerpos` - in the middle glyph.bounds
+```bash
+# place anchors using the bundled default ruleset, save to font_anchored.ufo
+anchorsfactory MyFont.ufo --rules default
 
-`leftinter`/`rightinter` - position is calculated by intersection with the glyph outline at the height specified after `$..` (intersection)
+# your own rules, overwrite in place, with a backup of existing anchors
+anchorsfactory MyFont.ufo --rules my-rules.af --in-place --backup-dir backups/
 
-`VertPosition` - anchor height. Numeric value, or the height of the glyph indicated by `$..`
-after `$GlyphName` you can write the fractional value of the anchor height using the `*` sign
-`1/2` - in the middle in height,
-`1/3` - in the first lower third of the height,
-`2/3` - in the upper third of the height
+# a whole folder of UFOs
+anchorsfactory masters/ --rules default
+```
 
-For example:
+By default the source UFO is never overwritten — output goes to
+`*_anchored.ufo` unless you pass `--in-place`.
 
-`@bar=bar:center:$H*2/3` - `@bar` label, `bar` anchor, aligned to the center of the character width, height - `2/3` of the `H` glyph height
+## The rule language
 
-`@back=back:left:700` - `@back` label, `back` anchor, on the left border of the glyph, at height `700`
+Rules are stacked: define reusable **labels**, then **mark** glyphs with them,
+mixing labels and one-off anchors. An anchor is a name and a parenthesised
+`X Y` placement.
 
-If the glyph name ends with `_` the height is calculated by its lower bound glyph.bounds, can be used for multi-story accents
+```
+# a label
+@ = top (box.center capHeight), bottom (box.center 0)
 
-Example:
+# apply it, by name / unicode / range
+A = @, ogonek (outline.right 0)
+U+0410..U+044F = @            # all Russian Cyrillic
+U+0413 += desc (outline.right 0)   # Г also gets a descender anchor
+```
 
-`@_grave=_grave:center:$gravecomb_`
-the `_grave` anchor will be centered, but at the height of the bottom border of the `gravecomb` glyph
+- **X** is `frame.position`: `width.*` (advance), `box.*` (bounding box) or
+  `outline.*` (the contour at height Y, with `.first`/`.last` to pick a stem).
+- **Y** is a number, a font metric (`capHeight`, `xHeight`, `ascender`, …), or a
+  reference glyph (`$H`, `$H.bottom`, `$H*5/6`).
+- Selectors: name, `U+XXXX`, range `U+A..U+B`, glob `*.sc`, category `{Lu}`.
+- `=` replace · `+=` add · `-=` remove; `!extends default` inherits a ruleset.
 
-One rule can have several anchors; they are listed with a comma
+Full reference: **[docs/DSL.md](docs/DSL.md)**.
 
-`@=top:center:700,bottom:center:0`
+### Presets and migration
 
-If there are alternatives in the font, they can be indicated via a label
-`@SFXLIST=alt,alt01`
-in this case, alternatives with suffixes `*.alt`, `*.alt01` will be found for all glyphs listed in the file and the same anchor rules will be applied as for the base character
+Bundled rulesets `default` and `default-italics` are usable by name in
+`--rules` or `!extends`. Old `.txt` rule files (see `examples/`) convert to the
+new syntax — verified lossless:
+
+```bash
+anchorsfactory-convert examples/default-anchors-list.txt -o my-rules.af
+```
+
+## Library API
+
+```python
+from anchorsfactory import process_ufo, load_document, apply_document
+
+process_ufo("MyFont.ufo", "default")          # high-level: open, apply, save
+
+from fontParts.world import OpenFont
+font = OpenFont("MyFont.ufo")
+apply_document(font, load_document("my-rules.af"))
+font.save()
+```
+
+## Development
+
+```bash
+uv venv && uv pip install -r requirements.txt -r requirements-dev.txt
+python -m pytest
+```
+
+## License
+
+See [LICENSE](LICENSE).

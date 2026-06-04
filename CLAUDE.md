@@ -4,60 +4,78 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-AnchorsFactory automatically places **anchors** in UFO fonts according to a text-based rule file. Anchors are the attachment points used for mark positioning (accents/combining marks). One rule can define several anchors at once, and several rules can apply to one glyph. Built on `fontParts` (the defcon/RoboFont object model).
+AnchorsFactory places **anchors** in UFO fonts from a text rule file: anchors
+are the attachment points used for mark positioning. It computes each anchor's
+coordinates from the glyph's own geometry (advance, bounding box, or contour
+intersection) and writes them into the font. It is the *pre-marking* half of a
+pipeline whose second half (composite assembly by snapping mark anchors to base
+anchors) is done by GlyphConstruction.
+
+The codebase is mid-rewrite on the **`refactor`** branch toward a PyPI release;
+the new code is the `anchorsfactory/` package. The original module script lives
+in `examples/legacy/` for reference only.
 
 ## Environment & commands
 
-Dependencies are NOT in the system Python — use the project-local `.venv` (managed with **uv**).
+Dependencies are not in the system Python — use the project-local `.venv`
+(managed with **uv**).
 
 ```bash
-# Create env + install deps
 uv venv --python 3.12
-VIRTUAL_ENV="$(pwd)/.venv" uv pip install -r requirements.txt
-
-# Run on one font (always invoke the venv interpreter explicitly)
-.venv/bin/python tdAnchorsFactory.py --ufo ufo-test/<font>.ufo --rules default-anchors-list.txt --output
-
-# Batch over a folder of UFOs (edit the `folder` path in batch.py first)
-.venv/bin/python batch.py
+VIRTUAL_ENV="$(pwd)/.venv" uv pip install -r requirements.txt -r requirements-dev.txt
+.venv/bin/python -m pytest          # tests
+.venv/bin/python -m anchorsfactory <ufo> --rules default        # run the CLI
+.venv/bin/python -m anchorsfactory.convert <legacy.txt>         # convert old rules
 ```
 
-**uv gotcha:** if an unrelated `$VIRTUAL_ENV` is exported in the shell, `uv pip install` targets *that* env instead of the local `.venv`. Always prefix installs with `VIRTUAL_ENV="$(pwd)/.venv"` to be sure packages land in the project venv.
+**uv gotcha:** if an unrelated `$VIRTUAL_ENV` is exported, `uv pip install`
+targets that env; prefix installs with `VIRTUAL_ENV="$(pwd)/.venv"`.
 
-There is no test framework, linter, or build step — verification is done by running the tool against a real UFO and inspecting the resulting anchors / the log in `logs/`.
-
-### CLI flags (`tdAnchorsFactory.py`)
-- `--ufo` path to UFO (default `test/test-font.ufo`, which does **not** exist in the repo — always pass a real path).
-- `--rules` path to an anchor-rules file (default `default-anchors-list.txt`).
-- `--output` save to `<name>_anchored.ufo` instead of overwriting. **Without `--output` the tool calls `font.save()` and overwrites the input UFO in place** — pass `--output` (or work on a copy) when you don't want the source modified.
-- `--save-existing` dumps the font's current anchors to a timestamped `.txt` before applying new ones.
+No real font ships with the repo; see "test fonts" below.
 
 ## Architecture
 
-Single class `TDAnchorsFactory` in `tdAnchorsFactory.py`. The pipeline (`run` → `process_anchors_from_file` → `apply_anchors`):
+The pipeline is `parse → validate → resolve geometry → apply → save`, split so
+each layer is testable and the DSL surface is decoupled from the engine.
 
-1. **Parse** (`_parse_anchors_rules`) — reads the rules file into `labels` (reusable `@label` definitions), `glyphs` (per-glyph rule references), plus the special `@SFXLIST` (alternate suffixes) and `@SHIFTX` (global X offset) directives.
-2. **Resolve** (`_process_anchor_labels`) — expands each glyph's `@label` references into concrete anchor codes; a glyph is skipped entirely if any referenced label is missing.
-3. **Place** (`set_glyph_anchor`) — for each anchor code `name:align:Ypos`, computes Y (a number, or derived from a reference glyph's bounds), computes X via `_calculate_anchor_position`, and appends the anchor. Applies to the base glyph and every suffixed variant from `@SFXLIST`.
+- `model.py` — the IR (the parser/engine contract). `frame.position` vocabulary:
+  `Frame{ADVANCE,BOX,OUTLINE}`×`HAlign`, `Run` (which ink span/stem), `VEdge`,
+  `Frac`, `FontMetric`; selectors `GlyphName/Unicode/UnicodeRange/Glob/Category`;
+  `Op{REPLACE,ADD,REMOVE}`; `LabelRef`; `Document`. Dataclass `__str__`s render
+  canonical DSL tokens (so they double as the serializer).
+- `geometry.py` — resolves an `AnchorSpec` to (x, y). **Analytic** contour
+  intersection via `fontTools.misc.bezierTools` (not a pixel scan); decomposes
+  components, pairs crossings into stems, applies italic shift, insets 1u from
+  horizontal extremes. Reads `font.info` for metrics.
+- `parser.py` — legacy `.txt` → IR. `dsl.py` — the new language → IR. Both
+  produce a `Document`; the engine never sees surface syntax.
+- `apply.py` — the **accumulation model**: rules scanned in order, each matching
+  selector mutates a glyph's anchor list (`=` replace, `+=` add, `-=` remove);
+  labels resolved late. Plus `accumulate`, `validate_document` (pre-flight).
+- `runner.py` — file IO + `!extends` resolution/merge; safe-save default
+  (`*_anchored.ufo`, never overwrites unless `--in-place`). `cli.py` — the
+  `anchorsfactory` command; loads+validates rules once, then per-font.
+- `convert.py` — legacy → new DSL, with a lossless round-trip check.
+- `presets.py` + `rules/*.af` — bundled `default`/`default-italics`, read via
+  `importlib.resources`, referenced by bare name in `--rules`/`!extends`.
 
-`batch.py` instantiates `TDAnchorsFactory` once per UFO in a folder and calls `.run()`.
+## Rule language
 
-Everything is logged (INFO + errors) to both stdout and a timestamped file in `logs/`.
-
-## Anchor rule DSL
-
-See `README.md` for the full reference. Key points for editing rule files (`default-anchors-list.txt`, `default-anchors-list-italics.txt`, `anchors-list-*.txt`):
-
-- `@Label=anchor:align:Ypos,...` defines a reusable label; `GlyphName=@Label1,@Label2` applies labels to a glyph.
-- `&FFFF=@Label` targets a glyph by **Unicode hex** (resolved via the font's cmap) instead of by name.
-- `#` starts a comment (inline and full-line).
-- **align**: number | `left`/`center`/`right` | `centerpos` (center of bounds) | `leftinter`/`rightinter` (outline intersection at Ypos) | `topcenter`/`bottomcenter` (center of the outline slice at the top/bottom edge).
-- **Ypos**: a number, or `$Glyph` (top of a reference glyph's bounds), `$Glyph_` (bottom bound), `$Glyph-` (vertical midpoint), `$Glyph*1/2` etc. (fraction of the reference glyph's height).
-- Anchors used by combining marks are prefixed with `_` (e.g. `_top`).
-
-`afii_to_GLapp.txt` and `anchors-list-GLapp.txt` map legacy `afii*` Cyrillic glyph names to GLApp/Unicode names — reference tables, not run inputs.
+See `docs/DSL.md` (full spec) and `README.md`. Key points: an anchor is
+`name (X Y)`; X is `width/box/outline . [run] . align [@edge]`; Y is a number, a
+font metric keyword (`capHeight`, `xHeight`, …), or `$Glyph[.edge|*frac]`;
+selectors include ranges/globs/categories; `!extends` inherits a base.
 
 ## Conventions
 
-- **Test fonts in `ufo-test/` are confidential and gitignored.** Never write their filenames into commits, `CLAUDE.md`, the README, code, or any tracked file. Refer to them generically (e.g. "a test UFO"). `ufo-test/` and `*.ufo` must stay in `.gitignore`.
-- `logs/` and `*.ufo` are gitignored.
+- **Test fonts in `ufo-test/` are confidential and gitignored.** Never write
+  their filenames into commits, code, docs, or any tracked file; refer to them
+  generically. `ufo-test/` and `*.ufo` stay in `.gitignore`.
+- **Never run the CLI directly on `ufo-test/` originals** without `--output`/a
+  copy — the tool can overwrite in place. Process copies in `/tmp`.
+- `dev/` (gitignored) holds local golden baselines (`dev/golden/font*.anchors.txt`,
+  from confidential fonts) and validation scripts (`golden_diff.py`,
+  `check_numbers.py`, `validate_dsl.py`). The golden harness asserts the engine
+  reproduces the legacy output bar intended fixes — run it after engine changes.
+- Validate rule changes against the golden / via per-glyph `accumulate`
+  equivalence before committing.
