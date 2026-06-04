@@ -1,6 +1,6 @@
 """AnchorsFactory — rule-driven anchor placement for UFO fonts."""
 
-from .apply import apply_document, accumulate
+from .apply import apply_document, accumulate, validate_document
 from .parser import parse_document, parse_file, ParseError
 from .dsl import parse_dsl, parse_dsl_file, DSLError
 from .convert import convert_file, render_document, verify_conversion
@@ -10,6 +10,7 @@ from .runner import process_ufo, load_document
 __all__ = [
     "apply_document",
     "accumulate",
+    "validate_document",
     "parse_document",
     "parse_file",
     "ParseError",

@@ -97,10 +97,15 @@ def process_ufo(
     clear: bool = True,
     replace: bool = True,
     round_coords: bool = True,
+    document=None,
 ) -> str:
-    """Apply *rules_path* to *ufo_path* and save. Returns the saved path."""
+    """Apply rules to *ufo_path* and save. Returns the saved path.
+
+    Pass a pre-loaded *document* to skip loading (e.g. when processing many
+    fonts with the same rules); otherwise *rules_path* is loaded.
+    """
     font = OpenFont(ufo_path)
-    doc = load_document(rules_path)
+    doc = document if document is not None else load_document(rules_path)
     log.info("%s %s", font.info.familyName, font.info.styleName)
 
     if backup_dir is not None:

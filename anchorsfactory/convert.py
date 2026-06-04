@@ -13,22 +13,11 @@ hand-edit it to use labels / ranges afterwards.
 from __future__ import annotations
 
 from .dsl import parse_dsl
-from .model import GlyphName, Unicode, UnicodeRange, Glob, Category
 from .parser import parse_file
 
 
 def render_selector(sel) -> str:
-    if isinstance(sel, GlyphName):
-        return sel.name
-    if isinstance(sel, Unicode):
-        return f"U+{sel.codepoint:04X}"
-    if isinstance(sel, UnicodeRange):
-        return f"U+{sel.start:04X}..U+{sel.end:04X}"
-    if isinstance(sel, Glob):
-        return sel.pattern
-    if isinstance(sel, Category):
-        return f"{{{sel.value}}}"
-    raise TypeError(f"unknown selector {sel!r}")
+    return str(sel)
 
 
 def render_document(doc) -> str:

@@ -148,7 +148,10 @@ def resolve_y(font, yspec) -> float:
     if isinstance(yspec, FontMetric):
         value = _font_metric(font, yspec.name)
         return value * yspec.frac.num / yspec.frac.den if yspec.frac else value
-    glyph = font[yspec.glyph]              # KeyError if the reference is missing
+    if yspec.glyph not in font:
+        log.warning("reference glyph %r not found; using 0", yspec.glyph)
+        return 0.0
+    glyph = font[yspec.glyph]
     bounds = glyph.bounds
     if bounds is None:
         return 0.0

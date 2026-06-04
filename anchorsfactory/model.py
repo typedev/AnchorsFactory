@@ -223,11 +223,17 @@ class GlyphName:
     """Selector: target a glyph by its name."""
     name: str
 
+    def __str__(self):
+        return self.name
+
 
 @dataclass(frozen=True)
 class Unicode:
     """Selector: target a glyph by its Unicode code point."""
     codepoint: int
+
+    def __str__(self):
+        return f"U+{self.codepoint:04X}"
 
 
 @dataclass(frozen=True)
@@ -236,11 +242,17 @@ class UnicodeRange:
     start: int
     end: int
 
+    def __str__(self):
+        return f"U+{self.start:04X}..U+{self.end:04X}"
+
 
 @dataclass(frozen=True)
 class Glob:
     """Selector: target glyphs whose name matches a shell glob (`*`, `?`)."""
     pattern: str
+
+    def __str__(self):
+        return self.pattern
 
 
 @dataclass(frozen=True)
@@ -250,6 +262,9 @@ class Category:
     A one-letter value (``L``) matches any subcategory (``Lu``, ``Ll``, ...).
     """
     value: str
+
+    def __str__(self):
+        return f"{{{self.value}}}"
 
 
 Selector = Union[GlyphName, Unicode, UnicodeRange, Glob, Category]

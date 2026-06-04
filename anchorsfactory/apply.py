@@ -64,6 +64,24 @@ def _matches(selector, name: str, unicodes) -> bool:
     raise TypeError(f"unknown selector {selector!r}")
 
 
+def validate_document(doc: Document) -> list[str]:
+    """Pre-flight check (font-independent): every @label reference resolves.
+
+    Returns a list of human-readable problems (empty = ok). Catches typo'd
+    label names up front instead of at apply time, glyph by glyph.
+    """
+    problems = []
+    for lname, items in doc.labels.items():
+        for it in items:
+            if isinstance(it, LabelRef) and it.name not in doc.labels:
+                problems.append(f"label {lname}: undefined label {it.name}")
+    for sel, op, items in doc.rules:
+        for it in items:
+            if isinstance(it, LabelRef) and it.name not in doc.labels:
+                problems.append(f"rule {sel}: undefined label {it.name}")
+    return problems
+
+
 def accumulate(doc: Document, name: str, unicodes) -> list:
     """Build a glyph's anchor list by applying matching rules in order.
 

@@ -18,7 +18,8 @@ import os
 import sys
 from datetime import datetime
 
-from .runner import process_ufo
+from .apply import validate_document
+from .runner import load_document, process_ufo
 
 log = logging.getLogger("anchorsfactory")
 
@@ -80,6 +81,19 @@ def main(argv: list[str] | None = None) -> int:
         log.error("--output cannot be used with multiple inputs; use --in-place or default naming")
         return 2
 
+    # Load + validate the rules once, up front: fail fast on rule errors before
+    # touching any font.
+    try:
+        document = load_document(args.rules)
+    except Exception as e:  # noqa: BLE001 — surface a clean message, not a traceback
+        log.error("cannot load rules %s: %s", args.rules, e)
+        return 2
+    problems = validate_document(document)
+    if problems:
+        for msg in problems:
+            log.error("rules: %s", msg)
+        return 2
+
     failures = 0
     for ufo in inputs:
         fh = _font_log_handler(args.log_dir, ufo) if args.log_dir else None
@@ -93,6 +107,7 @@ def main(argv: list[str] | None = None) -> int:
                 backup_dir=args.backup_dir,
                 clear=not args.keep_existing,
                 round_coords=not args.no_round,
+                document=document,
             )
         except Exception as e:  # noqa: BLE001 — report per-font, continue the batch
             log.error("Failed on %s: %s", ufo, e)
