@@ -3,10 +3,14 @@
 # Sections: labels · base glyphs (Latin, Cyrillic, punctuation) · diacritics
 # · custom component marks.
 #
-# Diacritics are matched by BOTH conventional name AND Unicode (spacing ;
-# combining): the name catches fonts that name marks conventionally (even when
-# a combining mark is left unencoded), the code point catches fonts that name
-# them oddly (uni0301, …) but encode them. Anchors land on whatever exists.
+# Uppercase bases and capital-height marks reference capHeight. Lowercase bases
+# and lowercase marks reference the cap/x midpoint (capHeight*1/2+xHeight*1/2),
+# so a mark's _top sits at the same height as the base top it attaches to and
+# composites don't shift. Round lowercase letters centre their top anchor on
+# the x-height crossing and their bottom on the baseline crossing.
+#
+# Combining marks are matched by Unicode (a font should encode them); spacing
+# accents also by their conventional name.
 
 # ============================================================
 #  LABELS
@@ -21,6 +25,11 @@
 @_ = _top (box.center capHeight)
 @_bottomcenter = _top (outline.center@bottom capHeight)
 @_bot = _bottom (box.center 0)
+# lowercase top: at the cap/x midpoint
+@xtop = top (box.center capHeight*1/2+xHeight*1/2), bottom (box.center 0)
+@round = top (outline.center@xHeight capHeight*1/2+xHeight*1/2), bottom (outline.center 0)
+@_x = _top (box.center capHeight*1/2+xHeight*1/2)
+@_xbc = _top (outline.center@bottom capHeight*1/2+xHeight*1/2)
 @ogonek = ogonek (outline.right 0)
 @_ogonek = _ogonek (outline.right 0)
 @desc = desc (outline.right 0)
@@ -36,9 +45,11 @@
 # ============================================================
 #  BASE GLYPHS — Latin
 # ============================================================
-U+0041..U+005A = @                  # A–Z : top + bottom
-U+0061..U+007A = @                  # a–z
-# exceptions (extra anchors on top of the default @)
+U+0041..U+005A = @                  # A–Z : cap-height top + bottom
+U+0061..U+007A = @xtop              # a–z : midpoint top + bottom
+# round lowercase: top centred on the x-height crossing, bottom on the baseline
+a = @round ; c = @round ; e = @round ; o = @round ; s = @round
+# exceptions (extra anchors)
 A += @ogonek
 E += @ogonek
 I += @ogonek
@@ -59,17 +70,21 @@ x += @desc, @bar
 t += barlow (width.center xHeight*2/3)
 L = top (box.left capHeight), caron (box.right capHeight), @bot
 # Latin outside A–Z
-Schwa = @ ; schwa = @
-Oslash = @ ; oslash = @
-AE = @ ; ae = @
-U+0131 = @acenter                   # dotlessi
-U+0237 = @acenter, @_desc           # dotlessj
+Schwa = @ ; schwa = @xtop
+Oslash = @ ; oslash = @xtop
+AE = @ ; ae = @xtop
+U+0131 = @xtop                      # dotlessi
+U+0237 = @xtop, @_desc              # dotlessj
 
 # ============================================================
 #  BASE GLYPHS — Cyrillic
 # ============================================================
-U+0410..U+044F = @                  # А–я
-U+0401 = @ ; U+0451 = @             # Ё ё (outside the range)
+U+0410..U+042F = @                  # А–Я : cap-height
+U+0430..U+044F = @xtop              # а–я : midpoint
+U+0401 = @                          # Ё
+U+0451 = @round                     # ё (round lowercase)
+# round lowercase Cyrillic
+U+043E = @round ; U+0441 = @round ; U+0435 = @round ; U+044D = @round ; U+0437 = @round   # о с е э з
 # uppercase exceptions
 U+0413 += @desc, @bar, @hookdesc, @bar.alt, @_desc   # Г
 U+0416 += @desc                                      # Ж
@@ -99,43 +114,39 @@ hyphen = _barlow (width.center $hyphen.middle), _bar (width.center $endash.middl
 endash = _bar (width.center $endash.middle)
 
 # ============================================================
-#  DIACRITICS — by name AND Unicode (spacing ; combining)
+#  DIACRITICS — lowercase marks at the midpoint, caps at capHeight
 # ============================================================
-# top marks, centred on the mark's lower ink (pointed / slanted)
-acute = @_bottomcenter ; acutecomb = @_bottomcenter ; Acute = @_bottomcenter
-grave = @_bottomcenter ; Grave = @_bottomcenter
-hungarumlaut = @_bottomcenter ; Hungarumlaut = @_bottomcenter
-U+00B4 = @_bottomcenter ; U+0301 = @_bottomcenter    # acute
-U+0060 = @_bottomcenter ; U+0300 = @_bottomcenter    # grave
-U+02DD = @_bottomcenter ; U+030B = @_bottomcenter    # hungarumlaut
-
-# top marks, centred on the box
-breve = @_ ; caron = @_ ; circumflex = @_ ; dieresis = @_
-dotaccent = @_ ; macron = @_ ; ring = @_ ; tilde = @_
-cyrbreve = @_ ; cyrBreve = @_ ; afii57929 = @_ ; accent = @_
-Caronl = @_ ; caronl = @_
+# lowercase, lower-ink centred (pointed / slanted): acute, grave, hungarumlaut
+acute = @_xbc ; grave = @_xbc ; hungarumlaut = @_xbc
+U+00B4 = @_xbc ; U+0301 = @_xbc      # acute (spacing ; combining)
+U+0060 = @_xbc ; U+0300 = @_xbc      # grave
+U+02DD = @_xbc ; U+030B = @_xbc      # hungarumlaut
+# lowercase, box centred
+breve = @_x ; caron = @_x ; circumflex = @_x ; dieresis = @_x
+dotaccent = @_x ; macron = @_x ; ring = @_x ; tilde = @_x ; cyrbreve = @_x
+U+00A8 = @_x ; U+0308 = @_x          # dieresis
+U+00AF = @_x ; U+0304 = @_x          # macron
+U+02C6 = @_x ; U+0302 = @_x          # circumflex
+U+02C7 = @_x ; U+030C = @_x          # caron
+U+02D8 = @_x ; U+0306 = @_x          # breve
+U+02D9 = @_x ; U+0307 = @_x          # dotaccent
+U+02DA = @_x ; U+030A = @_x          # ring
+U+02DC = @_x ; U+0303 = @_x          # tilde
+# capital-height marks
+Acute = @_bottomcenter ; Grave = @_bottomcenter ; Hungarumlaut = @_bottomcenter
 Breve = @_ ; Caron = @_ ; Circumflex = @_ ; Dieresis = @_
-Macron = @_ ; Ring = @_ ; Tilde = @_ ; Dotaccent = @_ ; Accent = @_
-U+00A8 = @_ ; U+0308 = @_                             # dieresis
-U+00AF = @_ ; U+0304 = @_                             # macron
-U+02C6 = @_ ; U+0302 = @_                             # circumflex
-U+02C7 = @_ ; U+030C = @_                             # caron
-U+02D8 = @_ ; U+0306 = @_                             # breve
-U+02D9 = @_ ; U+0307 = @_                             # dotaccent
-U+02DA = @_ ; U+030A = @_                             # ring
-U+02DC = @_ ; U+0303 = @_                             # tilde
-
-# bottom marks
+Macron = @_ ; Ring = @_ ; Tilde = @_ ; Dotaccent = @_
+cyrBreve = @_ ; afii57929 = @_ ; accent = @_ ; Accent = @_
+Caronl = @_ ; caronl = @_
+Apostrophe = @_, _topleft (outline.right capHeight)
+# bottom marks (attach at the baseline — shared by upper and lower case)
 cedilla = @_bot ; Cedilla = @_bot
 commaaccent = @_bot ; Commaaccent = @_bot
 dotsubnosp = @_bot ; Tail = @_bot ; tail = @_bot
 ogonek = @_ogonek ; Ogonek = @_ogonek
-U+00B8 = @_bot ; U+0327 = @_bot                       # cedilla
-U+F6C3 = @_bot ; U+0326 = @_bot                       # commaaccent / commabelow
-U+02DB = @_ogonek ; U+0328 = @_ogonek                 # ogonek
-
-# special
-Apostrophe = @_, _topleft (outline.right capHeight)
+U+00B8 = @_bot ; U+0327 = @_bot      # cedilla
+U+F6C3 = @_bot ; U+0326 = @_bot      # commaaccent / commabelow
+U+02DB = @_ogonek ; U+0328 = @_ogonek  # ogonek
 
 # ============================================================
 #  CUSTOM COMPONENT MARKS (foundry-specific names)
