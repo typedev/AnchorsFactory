@@ -7,30 +7,30 @@
 # ============================================================
 #  LABELS
 # ============================================================
-@ = top (outline.center@top $H), bottom (width.center 0)
-@x = top (outline.center@top $x), bottom (width.center 0)
-@acenter = top (outline.center@top $H), bottom (width.center 0)
-@_ = _top (outline.center@bottom $H)
-@_x = _top (outline.center@bottom $x)
-@_bottomcenter = _top (outline.center@bottom $H)
-@_bxc = _top (outline.center@bottom $x)
-@topL = topleft (box.left $H)
-@extratop = top (outline.center@top $H)
-@_extrabot = top (outline.center@bottom $H)
-@topR = top (box.right $H)
-@top = top (box.center $H)
+@ = top (outline.center@top capHeight), bottom (width.center 0)
+@x = top (outline.center@top xHeight), bottom (width.center 0)
+@acenter = top (outline.center@top capHeight), bottom (width.center 0)
+@_ = _top (outline.center@bottom capHeight)
+@_x = _top (outline.center@bottom xHeight)
+@_bottomcenter = _top (outline.center@bottom capHeight)
+@_bxc = _top (outline.center@bottom xHeight)
+@topL = topleft (box.left capHeight)
+@extratop = top (outline.center@top capHeight)
+@_extrabot = top (outline.center@bottom capHeight)
+@topR = top (box.right capHeight)
+@top = top (box.center capHeight)
 @bot = bottom (box.center 0)
 @_bot = _bottom (box.center 0)
 @ogonek = ogonek (outline.right 0)
 @_ogonek = _ogonek (outline.right 0)
 @desc = desc (outline.right 0)
 @_desc = _desc (outline.right 0)
-@bar = bar (width.center $H*1/2)
+@bar = bar (width.center capHeight*1/2)
 @bar.alt = bar.alt (box.left 400)
-@barlow = barlow (box.center $x*1/2)
+@barlow = barlow (box.center xHeight*1/2)
 @hook = hook (outline.right 0)
 @hookdesc = hookdesc (width.center 0)
-@back = back (box.left $H)
+@back = back (box.left capHeight)
 @descrever = descrever (outline.left 0)
 
 # ============================================================
@@ -49,7 +49,7 @@ N += @desc
 T += @desc, @bar
 X += @desc, @bar
 Y += @bar
-L = top (box.left $H), caron (box.right $H), @bot
+L = top (box.left capHeight), caron (box.right capHeight), @bot
 # lowercase ascenders take the cap-height top instead of @x
 b = @ ; d = @ ; k = @ ; l = @
 h = @, @desc
@@ -60,9 +60,9 @@ i += @ogonek
 u += @ogonek, @desc
 n += @topL, @desc
 x += @desc, @bar
-t += barlow (width.center $x*2/3)
-U+0131 = top (outline.center@top $x)                    # dotlessi
-U+0237 = top (outline.center@top $x), @_desc            # dotlessj
+t += barlow (width.center xHeight*2/3)
+U+0131 = top (outline.center@top xHeight)                    # dotlessi
+U+0237 = top (outline.center@top xHeight), @_desc            # dotlessj
 
 # ============================================================
 #  BASE GLYPHS — Cyrillic
@@ -123,15 +123,15 @@ U+02D8 = @_x ; U+0306 = @_x          # breve
 U+02D9 = @_x ; U+0307 = @_x          # dotaccent
 U+02DA = @_x ; U+030A = @_x          # ring
 # tilde sits centred on the box (not lower-ink)
-tilde = _top (box.center $x) ; U+02DC = _top (box.center $x) ; U+0303 = _top (box.center $x)
-Tilde = _top (box.center $H)
+tilde = _top (box.center xHeight) ; U+02DC = _top (box.center xHeight) ; U+0303 = _top (box.center xHeight)
+Tilde = _top (box.center capHeight)
 # capital-height box-centred counterparts
 Breve = @_ ; Caron = @_ ; Circumflex = @_ ; Dieresis = @_
 Macron = @_ ; Ring = @_ ; Dotaccent = @_
 # other / foundry-specific marks
 cyrBreve = @_ ; afii57929 = @_ ; accent = @_ ; Accent = @_
 Caronl = @_ ; caronl = @_
-Apostrophe = @_, _topleft (outline.right $H)
+Apostrophe = @_, _topleft (outline.right capHeight)
 # bottom marks
 cedilla = @_bot ; Cedilla = @_bot
 commaaccent = @_bot ; Commaaccent = @_bot
