@@ -18,7 +18,7 @@ import logging
 
 from .model import (
     Frame, HAlign, VEdge, Run, Frac,
-    X, XAbs, Y, YAbs, FontMetric, AnchorSpec,
+    X, XAbs, Y, YAbs, FontMetric, YSum, AnchorSpec,
 )
 
 log = logging.getLogger(__name__)
@@ -148,6 +148,8 @@ def resolve_y(font, yspec) -> float:
     if isinstance(yspec, FontMetric):
         value = _font_metric(font, yspec.name)
         return value * yspec.frac.num / yspec.frac.den if yspec.frac else value
+    if isinstance(yspec, YSum):
+        return sum(resolve_y(font, t) for t in yspec.terms)
     if yspec.glyph not in font:
         log.warning("reference glyph %r not found; using 0", yspec.glyph)
         return 0.0
@@ -185,11 +187,14 @@ def resolve_x(font, glyph, xspec, y: float) -> float:
         return base + shift
 
     # OUTLINE — sample where the ink actually is.
-    sample = y
-    if xspec.at is VEdge.TOP:
+    if xspec.at is None:
+        sample = y
+    elif xspec.at is VEdge.TOP:
         sample = yMax
     elif xspec.at is VEdge.BOTTOM:
         sample = yMin
+    else:                                  # a fixed height (metric / number / glyph)
+        sample = resolve_y(font, xspec.at)
     # A scanline exactly on a horizontal extreme is tangent/collinear with the
     # outline there, which yields degenerate crossings. Sample just inside the
     # ink instead (the principled form of the legacy ±1 nudge).

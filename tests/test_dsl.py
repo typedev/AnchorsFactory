@@ -6,7 +6,7 @@ from anchorsfactory.dsl import parse_dsl, DSLError
 from anchorsfactory.apply import accumulate
 from anchorsfactory.model import (
     Frame, HAlign, VEdge, Run, Frac,
-    X, XAbs, Y, YAbs, FontMetric, AnchorSpec, LabelRef,
+    X, XAbs, Y, YAbs, FontMetric, YSum, AnchorSpec, LabelRef,
     GlyphName, Unicode, UnicodeRange, Glob, Category, Op,
 )
 
@@ -32,6 +32,23 @@ def test_anchor_paren_form():
 ])
 def test_x_tokens(tok, x):
     assert _one(parse_dsl([f"@x = a ({tok} 0)"])).x == x
+
+
+@pytest.mark.parametrize("tok, x", [
+    ("outline.center@xHeight", X(Frame.OUTLINE, HAlign.CENTER, at=FontMetric("xHeight"))),
+    ("outline.center@baseline", X(Frame.OUTLINE, HAlign.CENTER, at=FontMetric("baseline"))),
+    ("outline.center@120", X(Frame.OUTLINE, HAlign.CENTER, at=YAbs(120))),
+])
+def test_x_sample_at_height(tok, x):
+    spec = _one(parse_dsl([f"@x = a ({tok} 0)"]))
+    assert spec.x == x
+    assert str(spec.x) == tok          # round-trips
+
+
+def test_y_sum():
+    spec = _one(parse_dsl(["@x = a (box.center capHeight*1/2+xHeight*1/2)"]))
+    assert spec.y == YSum((FontMetric("capHeight", Frac(1, 2)), FontMetric("xHeight", Frac(1, 2))))
+    assert str(spec.y) == "capHeight*1/2+xHeight*1/2"
 
 
 @pytest.mark.parametrize("tok, y", [

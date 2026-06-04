@@ -50,11 +50,14 @@ the grammar).
 | `outline.first.center` / `outline.last.center` | centre of the first / last ink span (stem) |
 | `outline.N.center` | centre of the N-th span, 1-based (for `m`, `ш`, `Ш`, …) |
 | `outline.center@top` / `outline.center@bottom` | centre of ink at the glyph's own top / bottom edge |
+| `outline.center@xHeight` / `@<metric>` / `@<number>` | sample the contour at a fixed height (a font metric or number), **decoupled from the anchor's Y** |
 | `<number>` | absolute X in font units |
 
 `outline.*` measures where the ink actually is at height Y. Crossings pair into
 spans (stems); `.first` / `.last` / `.N` pick one, otherwise the whole envelope
-is used.
+is used. `@…` overrides *where* the contour is sampled — e.g. centre a round
+letter's top anchor on its x-height crossing (`outline.center@xHeight`) while
+its Y sits higher.
 
 ### Y — vertical position
 
@@ -66,10 +69,12 @@ is used.
 | `$G*d1/d2` | fraction of G's height, from the baseline (e.g. `$H*5/6`) |
 | `ascender` `descender` `capHeight` `xHeight` `unitsPerEm` `baseline` | a font-wide vertical metric from `font.info` (`baseline` = 0) |
 | `capHeight*2/3` | a fraction of a metric |
+| `capHeight*1/2+xHeight*1/2` | a **sum** of terms (no spaces); here the midpoint between x-height and cap-height |
 | `<number>` | absolute Y in font units |
 
 Font metrics are bare keywords (no `$`), so they never collide with glyph
-references; they don't depend on any particular glyph being present.
+references; they don't depend on any particular glyph being present. Terms can
+be summed with `+` (written without spaces) to combine metrics/glyphs/numbers.
 
 ## Labels
 

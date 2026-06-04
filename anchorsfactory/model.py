@@ -99,14 +99,17 @@ class X:
     frame: Frame
     align: HAlign
     run: Optional[Union[Run, int]] = None   # OUTLINE only; None = whole envelope
-    at: Optional[VEdge] = None              # OUTLINE only; sample at glyph extreme
+    # OUTLINE only — where to sample the contour for X: None = at the anchor's
+    # own Y; VEdge.TOP/BOTTOM = the glyph's own extreme; or a height strategy
+    # (FontMetric/YAbs/Y/YSum) to sample at a fixed height, decoupled from Y.
+    at: object = None
 
     def __post_init__(self):
         if self.frame is not Frame.OUTLINE:
             if self.run is not None:
                 raise ValueError(f"`run` only applies to OUTLINE, not {self.frame.value}")
             if self.at is not None:
-                raise ValueError(f"`@{self.at.value}` only applies to OUTLINE, not {self.frame.value}")
+                raise ValueError(f"`@…` only applies to OUTLINE, not {self.frame.value}")
         if isinstance(self.run, int) and not isinstance(self.run, bool) and self.run < 1:
             raise ValueError("integer `run` is 1-based and must be >= 1")
         if self.at is VEdge.MIDDLE:
@@ -119,7 +122,7 @@ class X:
         parts.append(self.align.value)
         s = ".".join(parts)
         if self.at is not None:
-            s += f"@{self.at.value}"
+            s += "@" + (self.at.value if isinstance(self.at, VEdge) else str(self.at))
         return s
 
 
@@ -179,8 +182,18 @@ class FontMetric:
         return f"{self.name}*{self.frac}" if self.frac else self.name
 
 
+@dataclass(frozen=True)
+class YSum:
+    """A height that is the sum of several Y terms (e.g. ``capHeight*1/2 +
+    xHeight*1/2`` for the midpoint between x-height and cap-height)."""
+    terms: tuple
+
+    def __str__(self):
+        return "+".join(str(t) for t in self.terms)
+
+
 XStrategy = Union[X, XAbs]
-YStrategy = Union[Y, YAbs, FontMetric]
+YStrategy = Union[Y, YAbs, FontMetric, YSum]
 
 
 # --------------------------------------------------------------------------- #

@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from anchorsfactory.geometry import resolve_x, resolve_y, _crossings, _spans
-from anchorsfactory.model import Frame, HAlign, VEdge, Run, Frac, X, Y, FontMetric
+from anchorsfactory.model import Frame, HAlign, VEdge, Run, Frac, X, Y, FontMetric, YSum
 
 fontParts_world = pytest.importorskip("fontParts.world")
 
@@ -114,3 +114,19 @@ def test_font_metric_heights(font):
     assert resolve_y(font, FontMetric("descender")) == pytest.approx(font.info.descender)
     assert resolve_y(font, FontMetric("capHeight", Frac(2, 3))) == pytest.approx(font.info.capHeight * 2 / 3)
     assert resolve_y(font, FontMetric("baseline")) == 0.0
+
+
+def test_y_sum_is_additive(font):
+    mid = YSum((FontMetric("capHeight", Frac(1, 2)), FontMetric("xHeight", Frac(1, 2))))
+    assert resolve_y(font, mid) == pytest.approx((font.info.capHeight + font.info.xHeight) / 2)
+
+
+def test_outline_sample_height_is_decoupled_from_y(font):
+    """outline.center@xHeight samples at xHeight regardless of the anchor's Y."""
+    g = _has(font, "o")
+    xs = _crossings(g, font.info.xHeight)
+    expected = (min(xs) + max(xs)) / 2
+    spec = X(Frame.OUTLINE, HAlign.CENTER, at=FontMetric("xHeight"))
+    # same result whether the anchor Y is 0 or high up
+    assert resolve_x(font, g, spec, 0) == pytest.approx(expected)
+    assert resolve_x(font, g, spec, 999) == pytest.approx(expected)

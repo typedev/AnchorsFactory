@@ -16,7 +16,7 @@ import re
 
 from .model import (
     Frame, HAlign, VEdge, Run, Frac, FONT_METRICS,
-    X, XAbs, Y, YAbs, FontMetric, AnchorSpec, LabelRef,
+    X, XAbs, Y, YAbs, FontMetric, YSum, AnchorSpec, LabelRef,
     GlyphName, Unicode, UnicodeRange, Glob, Category, Op, Document,
 )
 
@@ -66,11 +66,20 @@ def _parse_x(tok: str):
         raise DSLError(f"malformed X token {tok!r}")
     if align_tok not in _HALIGN:
         raise DSLError(f"unknown X align {align_tok!r} in {tok!r}")
-    at = _EDGE[edge] if edge else None
+    at = None
+    if edge:
+        # @top/@bottom = the glyph's own extreme; otherwise a fixed sample height
+        at = _EDGE[edge] if edge in _EDGE else _parse_y(edge)
     return X(frame, _HALIGN[align_tok], run=run, at=at)
 
 
 def _parse_y(tok: str):
+    if "+" in tok:                          # a sum of terms: a+b+c
+        return YSum(tuple(_parse_y_term(t) for t in tok.split("+") if t))
+    return _parse_y_term(tok)
+
+
+def _parse_y_term(tok: str):
     if not tok.startswith("$"):
         base, star, frac = tok.partition("*")
         if base in FONT_METRICS:                 # font metric, optionally *d1/d2
