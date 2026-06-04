@@ -9,13 +9,35 @@ description = "Rule-driven anchor placement for UFO fonts"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
+authors = [{ name = "Alexander Lubovenko", email = "lubovenko@me.com" }]
+keywords = [
+    "ufo", "font", "fonts", "anchors", "diacritics", "marks",
+    "typography", "type-design", "fonttools", "fontparts", "opentype",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Text Processing :: Fonts",
+]
 dependencies = [
     "fontParts",
     "fontTools",
 ]
 
+[project.urls]
+Homepage = "https://github.com/typedev/AnchorsFactory"
+Repository = "https://github.com/typedev/AnchorsFactory"
+Issues = "https://github.com/typedev/AnchorsFactory/issues"
+
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "build"]
 
 [project.scripts]
 anchorsfactory = "anchorsfactory.cli:main"

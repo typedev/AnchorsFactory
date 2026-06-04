@@ -7,3 +7,6 @@ __pycache__
 *.ufo
 /ufo-test
 /dev
+/dist
+/build
+*.egg-info
