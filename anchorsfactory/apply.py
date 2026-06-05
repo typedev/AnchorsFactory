@@ -151,13 +151,20 @@ def compute_document(font, doc: Document, *, replace=True, round_coords=True,
     accumulator can carry several specs sharing a name. Glyphs with no matching
     rules, and suffix targets absent from *font*, are omitted.
 
-    ``on_error`` governs a spec whose geometry fails to resolve:
+    ``on_error`` governs a spec whose geometry does not resolve cleanly:
 
-    - ``"raise"`` (default) — propagate the exception (batch behaviour).
-    - ``"collect"`` — skip that spec and record a :class:`ComputeDiagnostic` in
-      ``result.diagnostics``, so an interactive preview shows what it could
-      compute and reports what it could not. A glyph is included only if at
-      least one of its anchors resolved.
+    - ``"raise"`` (default) — propagate hard failures (batch behaviour);
+      ``result.diagnostics`` stays empty.
+    - ``"collect"`` — never raises; instead records :class:`ComputeDiagnostic`\\ s
+      in ``result.diagnostics`` so an interactive preview can show what it
+      computed and flag the rest. Two severities:
+
+      * ``"error"`` — geometry raised (malformed contour / dangling component);
+        the anchor is *skipped*. A glyph is included only if ≥1 anchor resolved.
+      * ``"warning"`` — geometry produced a value via a *fallback* (no outline
+        crossing, missing metric/reference glyph); the anchor is *placed* but
+        flagged as suspect. Driven by the ``warnings`` channel of
+        :func:`~anchorsfactory.geometry.resolve`.
     """
     if on_error not in ("raise", "collect"):
         raise ValueError(f"on_error must be 'raise' or 'collect', got {on_error!r}")
@@ -173,8 +180,9 @@ def compute_document(font, doc: Document, *, replace=True, round_coords=True,
             target = font[gname]
             anchors: list[tuple[str, float, float]] = []
             for spec in specs:
+                sink = [] if on_error == "collect" else None
                 try:
-                    x, y = resolve(font, target, spec)
+                    x, y = resolve(font, target, spec, warnings=sink)
                 except Exception as exc:
                     if on_error == "raise":
                         raise
@@ -182,6 +190,12 @@ def compute_document(font, doc: Document, *, replace=True, round_coords=True,
                         ComputeDiagnostic(gname, spec.name, str(exc), severity="error")
                     )
                     continue
+                # Anchor resolved (possibly via a fallback) — place it, and flag
+                # any soft degradations as warnings (it is placed, but suspect).
+                for reason in sink or ():
+                    placed.diagnostics.append(
+                        ComputeDiagnostic(gname, spec.name, reason, severity="warning")
+                    )
                 x += doc.shift_x
                 if round_coords:
                     x, y = round(x), round(y)

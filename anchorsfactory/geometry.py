@@ -131,31 +131,44 @@ def _italic_shift(font, y: float) -> float:
     return y * math.tan(math.radians(-angle))
 
 
-def _font_metric(font, name: str) -> float:
+def _degrade(warnings, msg: str) -> None:
+    """Record a *soft* geometry degradation: a value was produced via a fallback
+    rather than a clean computation. Always logged; also appended to the optional
+    *warnings* sink (a list) so ``compute_document(on_error='collect')`` can
+    surface it as a ``severity='warning'`` diagnostic. ``warnings=None`` (the
+    batch default) just logs, exactly as before.
+    """
+    log.warning(msg)
+    if warnings is not None:
+        warnings.append(msg)
+
+
+def _font_metric(font, name: str, *, warnings=None) -> float:
     if name == "baseline":
         return 0.0
     value = getattr(font.info, name, None)
     if value is None:
-        log.warning("font has no %s metric; using 0", name)
+        _degrade(warnings, f"font has no {name} metric; using 0")
         return 0.0
     return float(value)
 
 
-def resolve_y(font, yspec) -> float:
+def resolve_y(font, yspec, *, warnings=None) -> float:
     """Resolve a Y strategy to a height in font units."""
     if isinstance(yspec, YAbs):
         return float(yspec.y)
     if isinstance(yspec, FontMetric):
-        value = _font_metric(font, yspec.name)
+        value = _font_metric(font, yspec.name, warnings=warnings)
         return value * yspec.frac.num / yspec.frac.den if yspec.frac else value
     if isinstance(yspec, YSum):
-        return sum(resolve_y(font, t) for t in yspec.terms)
+        return sum(resolve_y(font, t, warnings=warnings) for t in yspec.terms)
     if yspec.glyph not in font:
-        log.warning("reference glyph %r not found; using 0", yspec.glyph)
+        _degrade(warnings, f"reference glyph {yspec.glyph!r} not found; using 0")
         return 0.0
     glyph = font[yspec.glyph]
     bounds = glyph.bounds
     if bounds is None:
+        _degrade(warnings, f"reference glyph {yspec.glyph!r} has no bounds; using 0")
         return 0.0
     _, yMin, _, yMax = bounds
     ref = yspec.ref
@@ -169,13 +182,17 @@ def resolve_y(font, yspec) -> float:
     return (yMin + yMax) / 2               # VEdge.MIDDLE
 
 
-def resolve_x(font, glyph, xspec, y: float) -> float:
+def resolve_x(font, glyph, xspec, y: float, *, warnings=None) -> float:
     """Resolve an X strategy to a position in font units, at height *y*."""
     if isinstance(xspec, XAbs):
         return float(xspec.x)
 
     shift = _italic_shift(font, y) if y != 0 else 0.0
-    bounds = glyph.bounds or (0.0, 0.0, 0.0, 0.0)
+    bounds = glyph.bounds
+    if bounds is None:
+        if xspec.frame is not Frame.ADVANCE:   # BOX/OUTLINE need a box; ADVANCE uses width
+            _degrade(warnings, f"glyph {glyph.name!r} has no bounds; using empty box")
+        bounds = (0.0, 0.0, 0.0, 0.0)
     xMin, yMin, xMax, yMax = bounds
 
     if xspec.frame is Frame.ADVANCE:
@@ -194,7 +211,7 @@ def resolve_x(font, glyph, xspec, y: float) -> float:
     elif xspec.at is VEdge.BOTTOM:
         sample = yMin
     else:                                  # a fixed height (metric / number / glyph)
-        sample = resolve_y(font, xspec.at)
+        sample = resolve_y(font, xspec.at, warnings=warnings)
     # A scanline exactly on a horizontal extreme is tangent/collinear with the
     # outline there, which yields degenerate crossings. Sample just inside the
     # ink instead (the principled form of the legacy ±1 nudge).
@@ -206,6 +223,8 @@ def resolve_x(font, glyph, xspec, y: float) -> float:
     xs = _crossings(glyph, sample)
     if not xs:
         # No ink at this height: fall back to the bounding box edge.
+        _degrade(warnings, f"glyph {glyph.name!r}: no outline crossing at y={sample:g}; "
+                           f"using bounding-box edge")
         return {HAlign.LEFT: xMin, HAlign.RIGHT: xMax}.get(xspec.align, (xMin + xMax) / 2)
 
     run = xspec.run
@@ -217,6 +236,8 @@ def resolve_x(font, glyph, xspec, y: float) -> float:
         try:
             lo, hi = spans[idx]
         except IndexError:
+            _degrade(warnings, f"glyph {glyph.name!r}: stem {xspec.run} absent at y={sample:g}; "
+                               f"using ink envelope")
             lo, hi = xs[0], xs[-1]        # requested stem absent → envelope
 
     if xspec.align is HAlign.LEFT:
@@ -226,8 +247,14 @@ def resolve_x(font, glyph, xspec, y: float) -> float:
     return (lo + hi) / 2                  # CENTER
 
 
-def resolve(font, glyph, spec: AnchorSpec) -> tuple[float, float]:
-    """Resolve a full anchor spec on *glyph* to an (x, y) position."""
-    y = resolve_y(font, spec.y)
-    x = resolve_x(font, glyph, spec.x, y)
+def resolve(font, glyph, spec: AnchorSpec, *, warnings=None) -> tuple[float, float]:
+    """Resolve a full anchor spec on *glyph* to an (x, y) position.
+
+    Pass a list as *warnings* to collect soft degradations (a value produced via
+    a fallback — no outline crossing, missing metric/reference glyph) as reason
+    strings; the coordinate is still returned. ``warnings=None`` (default) just
+    logs them, as before. Hard failures (malformed contours) still raise.
+    """
+    y = resolve_y(font, spec.y, warnings=warnings)
+    x = resolve_x(font, glyph, spec.x, y, warnings=warnings)
     return (x, y)

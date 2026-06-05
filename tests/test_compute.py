@@ -17,7 +17,7 @@ from anchorsfactory.apply import (
     apply_document, compute_document, ComputeResult, ComputeDiagnostic,
 )
 from anchorsfactory.model import (
-    AnchorSpec, XAbs, YAbs, X, Frame, HAlign,
+    AnchorSpec, XAbs, YAbs, X, Frame, HAlign, FontMetric,
     GlyphName, Glob, Op, Document,
 )
 
@@ -192,6 +192,33 @@ def test_compute_result_is_a_dict_with_empty_diagnostics_by_default():
 def test_on_error_rejects_unknown_policy():
     with pytest.raises(ValueError, match="on_error"):
         compute_document(_make_font(), _doc(), on_error="ignore")
+
+
+# --- soft degradations -> severity="warning" (variant B) ------------------- #
+def _warn_doc():
+    # capHeight is absent from the fake font.info -> resolve_y falls back to 0,
+    # a *soft* degradation: the anchor is placed but flagged.
+    return Document(rules=[
+        (GlyphName("a"), Op.REPLACE, [AnchorSpec("top", XAbs(100), FontMetric("capHeight"))]),
+    ])
+
+
+def test_soft_degradation_placed_and_warned_in_collect():
+    result = compute_document(_make_font(), _warn_doc(), on_error="collect")
+    # the anchor IS placed (fallback y=0), unlike a hard error...
+    assert result["a"] == [("top", 100, 0)]
+    # ...and flagged as a warning, not an error.
+    assert len(result.diagnostics) == 1
+    diag = result.diagnostics[0]
+    assert (diag.glyph, diag.anchor, diag.severity) == ("a", "top", "warning")
+    assert "capHeight" in diag.reason
+
+
+def test_soft_degradation_does_not_raise_and_is_quiet_in_raise_mode():
+    # A fallback never raises; raise-mode places it and keeps diagnostics empty.
+    result = compute_document(_make_font(), _warn_doc())          # on_error="raise"
+    assert result["a"] == [("top", 100, 0)]
+    assert result.diagnostics == []
 
 
 # --- real-font parity (skips without a fixture) ---------------------------- #
