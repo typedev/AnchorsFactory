@@ -84,6 +84,40 @@ apply_document(font, load_document("my-rules.af"))
 font.save()
 ```
 
+### Compute without mutating (preview)
+
+`compute_document` is the functional core: it returns the anchors a rule
+document *would* place, keyed by glyph, without touching the font. It owns the
+same orchestration as `apply_document` (suffix expansion, `shift_x`, rounding,
+same-name dedup), so a preview never drifts from what gets written.
+
+```python
+from anchorsfactory import compute_document, load_document, accumulate, resolve
+
+doc = load_document("default")
+placed = compute_document(font, doc)          # {glyph_name: [(anchor, x, y), ...]}
+
+# resolve() is the pure, single-anchor primitive behind it:
+specs = accumulate(doc, "A", font["A"].unicodes)   # the anchors due on glyph A
+x, y = resolve(font, font["A"], specs[0])
+```
+
+For an interactive editor, `on_error="collect"` never raises — it places what
+it can and reports the rest as structured diagnostics:
+
+```python
+result = compute_document(font, doc, on_error="collect")
+for d in result.diagnostics:
+    # d.severity == "error"   -> anchor skipped (geometry raised)
+    # d.severity == "warning" -> anchor placed via a fallback, but suspect
+    print(d.severity, d.glyph, d.anchor, d.reason)
+```
+
+`result` is a plain `dict` subclass (so it works anywhere a dict does) carrying
+a `.diagnostics` list of `ComputeDiagnostic(glyph, anchor, reason, severity,
+rule)`. The default `on_error="raise"` is unchanged and keeps `.diagnostics`
+empty.
+
 ## Development
 
 ```bash

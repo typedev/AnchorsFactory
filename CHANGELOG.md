@@ -6,6 +6,25 @@ Sections below the *Unreleased* heading are filled in automatically by
 
 ## [Unreleased]
 
+### Added
+
+- `compute_document(font, doc)` — a compute-only entry point that returns the
+  anchors a rule document would place (`{glyph: [(name, x, y), ...]}`) without
+  mutating the font, for previewing placement before applying. `apply_document`
+  is now a thin write step on top, so a preview can't drift from what gets
+  written. It owns suffix expansion, `shift_x`, rounding, and same-name dedup.
+- Error-collection mode: `compute_document(..., on_error="collect")` never
+  raises — it places what it can and returns structured `ComputeDiagnostic`s
+  on the result's `.diagnostics`. Hard geometry failures are `severity="error"`
+  (anchor skipped); soft degradations (no outline crossing, missing metric or
+  reference glyph) are `severity="warning"` with the anchor still placed.
+- `resolve` (the pure single-anchor primitive) and `compute_document`,
+  `ComputeResult`, `ComputeDiagnostic` are now exported from the top-level
+  package.
+- `resolve(..., warnings=<list>)` — an optional sink that collects soft
+  geometry degradations as reason strings; the coordinate is still returned.
+  Without it, behaviour (and logging) is unchanged.
+
 ## [0.2.0] - 2026-06-04
 
 First public release on PyPI.
