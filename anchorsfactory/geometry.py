@@ -215,10 +215,20 @@ def resolve_x(font, glyph, xspec, y: float, *, warnings=None) -> float:
     # A scanline exactly on a horizontal extreme is tangent/collinear with the
     # outline there, which yields degenerate crossings. Sample just inside the
     # ink instead (the principled form of the legacy ±1 nudge).
+    requested = sample
     if sample <= yMin + _EDGE_INSET:
         sample = yMin + _EDGE_INSET
     elif sample >= yMax - _EDGE_INSET:
         sample = yMax - _EDGE_INSET
+    # A small nudge off a real extreme is expected; a height that lies *well*
+    # outside the ink box (e.g. @ascender on an x-height glyph) was clamped to
+    # the edge, not sampled where asked — the anchor is still placed, but the
+    # request was not honoured, so flag it (otherwise the clamp masks it from
+    # the no-crossing fallback below and it is never surfaced).
+    if requested < yMin - _EDGE_INSET or requested > yMax + _EDGE_INSET:
+        _degrade(warnings, f"glyph {glyph.name!r}: requested sample height y={requested:g} is "
+                           f"outside the ink box [{yMin:g}, {yMax:g}]; clamped to the edge "
+                           f"at y={sample:g}")
 
     xs = _crossings(glyph, sample)
     if not xs:

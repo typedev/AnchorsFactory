@@ -130,3 +130,26 @@ def test_outline_sample_height_is_decoupled_from_y(font):
     # same result whether the anchor Y is 0 or high up
     assert resolve_x(font, g, spec, 0) == pytest.approx(expected)
     assert resolve_x(font, g, spec, 999) == pytest.approx(expected)
+
+
+# --- out-of-ink sample heights are clamped, but flagged (issue #5) ---------- #
+def test_outline_sample_above_ink_is_flagged_not_silent(font):
+    """@ascender on an x-height glyph is clamped to the top edge — and warned."""
+    g = _has(font, "x")
+    _, _, _, yMax = g.bounds
+    asc = font.info.ascender
+    if asc is None or asc <= yMax:
+        pytest.skip("font ascender is not above the x-height ink")
+    warns: list[str] = []
+    spec = X(Frame.OUTLINE, HAlign.RIGHT, at=FontMetric("ascender"))
+    resolve_x(font, g, spec, 0, warnings=warns)
+    assert any("outside the ink box" in w for w in warns)
+
+
+def test_outline_sample_at_extreme_is_silent(font):
+    """A nudge off the glyph's own @top extreme is expected — no warning."""
+    g = _has(font, "x")
+    warns: list[str] = []
+    spec = X(Frame.OUTLINE, HAlign.RIGHT, at=VEdge.TOP)
+    resolve_x(font, g, spec, 0, warnings=warns)
+    assert warns == []

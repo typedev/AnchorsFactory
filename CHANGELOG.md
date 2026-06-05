@@ -24,6 +24,10 @@ Sections below the *Unreleased* heading are filled in automatically by
 - `resolve(..., warnings=<list>)` — an optional sink that collects soft
   geometry degradations as reason strings; the coordinate is still returned.
   Without it, behaviour (and logging) is unchanged.
+- `outline.*@<height>` with a sample height outside the glyph's ink box (e.g.
+  `@ascender` on an x-height glyph) is still clamped to the nearest edge — but
+  now records a `severity="warning"` degradation instead of masking it, so the
+  request "sample where there is no outline" is surfaced rather than silent.
 
 ## [0.2.0] - 2026-06-04
 
