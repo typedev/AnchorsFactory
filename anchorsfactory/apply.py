@@ -101,37 +101,65 @@ def accumulate(doc: Document, name: str, unicodes) -> list:
     return acc
 
 
-def apply_document(font, doc: Document, *, clear=True, replace=True, round_coords=True):
-    """Place all anchors described by *doc* onto *font* (in place).
+def compute_document(font, doc: Document, *, replace=True, round_coords=True):
+    """Compute the anchors *doc* describes for *font*, without mutating it.
 
-    ``round_coords`` rounds placed anchors to whole units (the usual choice for
-    a UFO); the golden regression passes ``False`` to compare raw precision.
+    Returns ``{target_glyph_name: [(anchor_name, x, y), ...]}`` — exactly what
+    :func:`apply_document` (with matching ``replace``/``round_coords``) would
+    place, the supported way to preview placement before applying. This is the
+    functional core: it owns suffix expansion (geometry sampled on the suffixed
+    target), ``shift_x``, rounding, and the within-document same-name dedup;
+    ``apply_document`` is the thin write step on top.
+
+    ``replace`` applies the same-name dedup within a glyph's computed list (last
+    occurrence wins, keeping that occurrence's position) — the ``=``/``+=``
+    accumulator can carry several specs sharing a name. Glyphs with no matching
+    rules, and suffix targets absent from *font*, are omitted.
     """
+    placed: dict[str, list[tuple[str, float, float]]] = {}
     for glyph in font:
         specs = accumulate(doc, glyph.name, list(glyph.unicodes))
         if not specs:
             continue
         for sfx in doc.suffixes:
             gname = glyph.name + sfx
-            if gname in font:
-                _place(font, font[gname], specs, doc.shift_x, clear, replace, round_coords)
+            if gname not in font:
+                continue
+            target = font[gname]
+            anchors: list[tuple[str, float, float]] = []
+            for spec in specs:
+                x, y = resolve(font, target, spec)
+                x += doc.shift_x
+                if round_coords:
+                    x, y = round(x), round(y)
+                if replace:
+                    anchors = [a for a in anchors if a[0] != spec.name]
+                anchors.append((spec.name, x, y))
+            placed[gname] = anchors
+    return placed
+
+
+def apply_document(font, doc: Document, *, clear=True, replace=True, round_coords=True):
+    """Place all anchors described by *doc* onto *font* (in place).
+
+    ``round_coords`` rounds placed anchors to whole units (the usual choice for
+    a UFO); the golden regression passes ``False`` to compare raw precision.
+    The computation is delegated to :func:`compute_document`; ``clear``/
+    ``replace`` here govern the write against the font's *pre-existing* anchors.
+    """
+    placed = compute_document(font, doc, replace=replace, round_coords=round_coords)
+    for gname, anchors in placed.items():
+        glyph = font[gname]
+        if clear:
+            for anchor in list(glyph.anchors):
+                glyph.removeAnchor(anchor)
+        for name, x, y in anchors:
+            if not clear and replace:
+                _remove_named(glyph, name)
+            glyph.appendAnchor(name, (x, y))
 
 
 def _remove_named(glyph, name):
     for anchor in list(glyph.anchors):
         if anchor.name == name:
             glyph.removeAnchor(anchor)
-
-
-def _place(font, glyph, specs, shift_x, clear, replace, round_coords):
-    if clear:
-        for anchor in list(glyph.anchors):
-            glyph.removeAnchor(anchor)
-    for spec in specs:
-        x, y = resolve(font, glyph, spec)
-        if replace:
-            _remove_named(glyph, spec.name)
-        x += shift_x
-        if round_coords:
-            x, y = round(x), round(y)
-        glyph.appendAnchor(spec.name, (x, y))
