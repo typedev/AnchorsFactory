@@ -13,7 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from anchorsfactory.apply import apply_document, compute_document
+from anchorsfactory.apply import (
+    apply_document, compute_document, ComputeResult, ComputeDiagnostic,
+)
 from anchorsfactory.model import (
     AnchorSpec, XAbs, YAbs, X, Frame, HAlign,
     GlyphName, Glob, Op, Document,
@@ -39,6 +41,18 @@ class _Glyph:
 
     def removeAnchor(self, anchor):
         self.anchors.remove(anchor)
+
+
+class _BoomGlyph(_Glyph):
+    """A glyph whose geometry raises — to exercise on_error policy."""
+
+    @property
+    def bounds(self):
+        raise ValueError("boom: no contours")
+
+    @bounds.setter
+    def bounds(self, value):
+        pass
 
 
 class _Info:
@@ -127,6 +141,57 @@ def test_replace_false_keeps_duplicate_names():
 def test_unmatched_glyph_absent():
     computed = compute_document(_make_font(), _doc())
     assert "z" not in computed
+
+
+# --- on_error policy ------------------------------------------------------- #
+def _error_font():
+    return _Font([
+        _Glyph("a", width=600, unicodes=[0x61]),
+        _BoomGlyph("boom", width=400),
+    ])
+
+
+def _error_doc():
+    # `a` resolves (absolute coords); `boom` needs glyph.bounds → raises.
+    good = (GlyphName("a"), Op.REPLACE, [AnchorSpec("top", XAbs(100), YAbs(700))])
+    bad = (GlyphName("boom"), Op.REPLACE, [
+        AnchorSpec("mark", X(Frame.ADVANCE, HAlign.CENTER), YAbs(500)),
+    ])
+    return Document(rules=[good, bad])
+
+
+def test_on_error_raise_is_default():
+    with pytest.raises(ValueError, match="boom"):
+        compute_document(_error_font(), _error_doc())
+
+
+def test_on_error_collect_skips_and_reports():
+    result = compute_document(_error_font(), _error_doc(), on_error="collect")
+    # the good glyph is still placed...
+    assert result["a"] == [("top", 100, 700)]
+    # ...the failing glyph is omitted (no anchor resolved)...
+    assert "boom" not in result
+    # ...and reported as one structured diagnostic.
+    assert len(result.diagnostics) == 1
+    diag = result.diagnostics[0]
+    assert isinstance(diag, ComputeDiagnostic)
+    assert (diag.glyph, diag.anchor, diag.severity) == ("boom", "mark", "error")
+    assert "boom" in diag.reason
+    assert diag.rule is None          # provenance (#3) not wired yet
+
+
+def test_compute_result_is_a_dict_with_empty_diagnostics_by_default():
+    result = compute_document(_make_font(), _doc())
+    assert isinstance(result, ComputeResult)
+    assert isinstance(result, dict)
+    assert result.diagnostics == []
+    # equals a plain dict of the same contents (parity tests rely on this)
+    assert result == {k: v for k, v in result.items()}
+
+
+def test_on_error_rejects_unknown_policy():
+    with pytest.raises(ValueError, match="on_error"):
+        compute_document(_make_font(), _doc(), on_error="ignore")
 
 
 # --- real-font parity (skips without a fixture) ---------------------------- #

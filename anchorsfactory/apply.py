@@ -14,6 +14,7 @@ from __future__ import annotations
 import fnmatch
 import logging
 import unicodedata
+from dataclasses import dataclass
 
 from .geometry import resolve
 from .model import (
@@ -22,6 +23,38 @@ from .model import (
 )
 
 log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ComputeDiagnostic:
+    """One spec that :func:`compute_document` (``on_error='collect'``) could not place.
+
+    ``severity`` is ``"error"`` (the anchor was skipped) — a ``"warning"`` level
+    (placed via a geometry fallback) is reserved for the strict-resolve work
+    discussed in issue #4. ``rule`` will point at the originating rule's source
+    once provenance (issue #3) lands; it stays ``None`` until then.
+    """
+    glyph: str                       # target (suffixed) glyph name
+    anchor: str                      # spec.name
+    reason: str                      # str(exc)
+    severity: str = "error"
+    rule: object | None = None       # RuleSource once #3 lands
+
+
+class ComputeResult(dict):
+    """``{target_glyph: [(name, x, y), ...]}`` plus a ``diagnostics`` list.
+
+    A plain ``dict`` subclass: it compares equal to the equivalent dict and works
+    anywhere a dict does, so :func:`apply_document` and existing callers are
+    unaffected. ``diagnostics`` is empty unless :func:`compute_document` ran with
+    ``on_error='collect'``.
+    """
+
+    def __init__(self, *args, diagnostics=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.diagnostics: list[ComputeDiagnostic] = (
+            diagnostics if diagnostics is not None else []
+        )
 
 
 def _resolve_items(items, labels, _seen=()):
@@ -101,22 +134,34 @@ def accumulate(doc: Document, name: str, unicodes) -> list:
     return acc
 
 
-def compute_document(font, doc: Document, *, replace=True, round_coords=True):
+def compute_document(font, doc: Document, *, replace=True, round_coords=True,
+                     on_error="raise") -> ComputeResult:
     """Compute the anchors *doc* describes for *font*, without mutating it.
 
-    Returns ``{target_glyph_name: [(anchor_name, x, y), ...]}`` — exactly what
-    :func:`apply_document` (with matching ``replace``/``round_coords``) would
-    place, the supported way to preview placement before applying. This is the
-    functional core: it owns suffix expansion (geometry sampled on the suffixed
-    target), ``shift_x``, rounding, and the within-document same-name dedup;
-    ``apply_document`` is the thin write step on top.
+    Returns a :class:`ComputeResult` — a ``dict`` of
+    ``{target_glyph_name: [(anchor_name, x, y), ...]}`` (exactly what
+    :func:`apply_document` with matching ``replace``/``round_coords`` would
+    place) plus a ``diagnostics`` list. This is the supported way to preview
+    placement before applying, and the functional core: it owns suffix expansion
+    (geometry sampled on the suffixed target), ``shift_x``, rounding, and the
+    within-document same-name dedup; ``apply_document`` is the thin write step.
 
     ``replace`` applies the same-name dedup within a glyph's computed list (last
     occurrence wins, keeping that occurrence's position) — the ``=``/``+=``
     accumulator can carry several specs sharing a name. Glyphs with no matching
     rules, and suffix targets absent from *font*, are omitted.
+
+    ``on_error`` governs a spec whose geometry fails to resolve:
+
+    - ``"raise"`` (default) — propagate the exception (batch behaviour).
+    - ``"collect"`` — skip that spec and record a :class:`ComputeDiagnostic` in
+      ``result.diagnostics``, so an interactive preview shows what it could
+      compute and reports what it could not. A glyph is included only if at
+      least one of its anchors resolved.
     """
-    placed: dict[str, list[tuple[str, float, float]]] = {}
+    if on_error not in ("raise", "collect"):
+        raise ValueError(f"on_error must be 'raise' or 'collect', got {on_error!r}")
+    placed = ComputeResult()
     for glyph in font:
         specs = accumulate(doc, glyph.name, list(glyph.unicodes))
         if not specs:
@@ -128,14 +173,23 @@ def compute_document(font, doc: Document, *, replace=True, round_coords=True):
             target = font[gname]
             anchors: list[tuple[str, float, float]] = []
             for spec in specs:
-                x, y = resolve(font, target, spec)
+                try:
+                    x, y = resolve(font, target, spec)
+                except Exception as exc:
+                    if on_error == "raise":
+                        raise
+                    placed.diagnostics.append(
+                        ComputeDiagnostic(gname, spec.name, str(exc), severity="error")
+                    )
+                    continue
                 x += doc.shift_x
                 if round_coords:
                     x, y = round(x), round(y)
                 if replace:
                     anchors = [a for a in anchors if a[0] != spec.name]
                 anchors.append((spec.name, x, y))
-            placed[gname] = anchors
+            if anchors:
+                placed[gname] = anchors
     return placed
 
 

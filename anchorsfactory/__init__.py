@@ -7,7 +7,10 @@ try:
 except PackageNotFoundError:  # running from a source tree without an install
     __version__ = "0.0.0+unknown"
 
-from .apply import apply_document, compute_document, accumulate, validate_document
+from .apply import (
+    apply_document, compute_document, accumulate, validate_document,
+    ComputeResult, ComputeDiagnostic,
+)
 from .geometry import resolve
 from .parser import parse_document, parse_file, ParseError
 from .dsl import parse_dsl, parse_dsl_file, DSLError
@@ -19,6 +22,8 @@ __all__ = [
     "__version__",
     "apply_document",
     "compute_document",
+    "ComputeResult",
+    "ComputeDiagnostic",
     "resolve",
     "accumulate",
     "validate_document",
