@@ -229,7 +229,11 @@ def parse_dsl(lines) -> Document:
         else:
             op = _OPS[op_tok]
             items = parse_remove(rhs, n) if op is Op.REMOVE else parse_items(rhs, n)
-            rules.append((_parse_selector(lhs), op, items))
+            selectors = _split_items(lhs)        # `C, O, S` → one rule per selector
+            if not selectors:
+                raise DSLError(f"line {n}: empty left-hand side")
+            for sel_tok in selectors:
+                rules.append((_parse_selector(sel_tok), op, items))
 
     return Document(labels=labels, rules=rules, shift_x=shift_x,
                     suffixes=suffixes, extends=extends)

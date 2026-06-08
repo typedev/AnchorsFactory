@@ -79,6 +79,35 @@ def test_selectors(tok, sel):
     assert doc.rules[0][0] == sel
 
 
+# --- comma-separated selector list (one rule per selector) ----------------- #
+def test_selector_list_expands_to_one_rule_each():
+    doc = parse_dsl(["C, O, S += top (box.center $H), bottom (box.center 0)"])
+    sels = [r[0] for r in doc.rules]
+    assert sels == [GlyphName("C"), GlyphName("O"), GlyphName("S")]
+    # every listed glyph gets the same op and items
+    for _, op, items in doc.rules:
+        assert op is Op.ADD
+        assert [s.name for s in items] == ["top", "bottom"]
+    # and each resolves to those anchors
+    for g in ("C", "O", "S"):
+        assert [s.name for s in accumulate(doc, g, [])] == ["top", "bottom"]
+
+
+def test_selector_list_mixes_selector_kinds():
+    doc = parse_dsl(["@a = x (box.center 0)", "A, U+0421, *.sc = @a"])
+    assert [r[0] for r in doc.rules] == [GlyphName("A"), Unicode(0x0421), Glob("*.sc")]
+
+
+def test_selector_list_ignores_blank_and_trailing_commas():
+    doc = parse_dsl(["@a = x (box.center 0)", "C , , O, = @a"])
+    assert [r[0] for r in doc.rules] == [GlyphName("C"), GlyphName("O")]
+
+
+def test_empty_left_hand_side_errors():
+    with pytest.raises(DSLError):
+        parse_dsl([" , = x (box.center 0)"])
+
+
 def test_labels_mix_and_directives():
     doc = parse_dsl([
         "@bot = bottom (box.center 0)",

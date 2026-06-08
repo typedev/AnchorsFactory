@@ -110,9 +110,20 @@ The left-hand side of a rule selects glyphs:
 | `U+0410..U+044F` | every glyph in the (inclusive) code-point range |
 | `*.sc` | glyph names by glob (`*`, `?`) |
 | `{Lu}` | glyphs whose Unicode general category is `Lu` |
+| `C, O, S` | a comma-separated list — applies to each listed selector |
 
 A range/glob/category lets one line stand in for the dozens of identical
 `U+XXXX = @` lines a real font otherwise needs.
+
+A **comma-separated list** on the left applies the same right-hand side to
+every selector in it, exactly as if you had written one line per selector:
+
+```
+C, O, S += top (box.center @top), bottom (box.center @bottom)
+```
+
+The list may mix selector kinds (`A, U+0421, *.sc = @round`); each entry is
+parsed independently with the table above.
 
 ## Operators and the accumulation model
 

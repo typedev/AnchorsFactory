@@ -8,6 +8,11 @@ Sections below the *Unreleased* heading are filled in automatically by
 
 ### Added
 
+- Comma-separated selector lists on a rule's left-hand side —
+  `C, O, S += top (...), bottom (...)` applies the same right-hand side to each
+  listed selector (one rule per entry). Entries may mix selector kinds
+  (`A, U+0421, *.sc = @round`). An empty entry (blank or trailing comma) is
+  ignored; a wholly empty left-hand side is now a parse error.
 - `compute_document(..., names=<iterable>)` / `apply_document(..., names=...)`
   — restrict computation (and the write) to a subset of **target (suffixed)**
   glyph names; `None` (default) keeps the whole-font behaviour, an empty
