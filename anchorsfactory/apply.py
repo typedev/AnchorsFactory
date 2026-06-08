@@ -135,7 +135,7 @@ def accumulate(doc: Document, name: str, unicodes) -> list:
 
 
 def compute_document(font, doc: Document, *, replace=True, round_coords=True,
-                     on_error="raise") -> ComputeResult:
+                     on_error="raise", names=None) -> ComputeResult:
     """Compute the anchors *doc* describes for *font*, without mutating it.
 
     Returns a :class:`ComputeResult` — a ``dict`` of
@@ -165,9 +165,16 @@ def compute_document(font, doc: Document, *, replace=True, round_coords=True,
         crossing, missing metric/reference glyph); the anchor is *placed* but
         flagged as suspect. Driven by the ``warnings`` channel of
         :func:`~anchorsfactory.geometry.resolve`.
+
+    ``names`` restricts computation to a subset of **target (suffixed)** glyph
+    names — the keys of the returned :class:`ComputeResult` (``glyph.name + sfx``,
+    not the base glyph). ``None`` (default) computes every matched glyph; an empty
+    iterable computes nothing. Besides scoping the result, the filter skips
+    :func:`resolve` for non-selected glyphs, so it is also a perf win.
     """
     if on_error not in ("raise", "collect"):
         raise ValueError(f"on_error must be 'raise' or 'collect', got {on_error!r}")
+    keep = None if names is None else set(names)
     placed = ComputeResult()
     for glyph in font:
         specs = accumulate(doc, glyph.name, list(glyph.unicodes))
@@ -176,6 +183,8 @@ def compute_document(font, doc: Document, *, replace=True, round_coords=True,
         for sfx in doc.suffixes:
             gname = glyph.name + sfx
             if gname not in font:
+                continue
+            if keep is not None and gname not in keep:
                 continue
             target = font[gname]
             anchors: list[tuple[str, float, float]] = []
@@ -207,15 +216,22 @@ def compute_document(font, doc: Document, *, replace=True, round_coords=True,
     return placed
 
 
-def apply_document(font, doc: Document, *, clear=True, replace=True, round_coords=True):
+def apply_document(font, doc: Document, *, clear=True, replace=True,
+                   round_coords=True, names=None):
     """Place all anchors described by *doc* onto *font* (in place).
 
     ``round_coords`` rounds placed anchors to whole units (the usual choice for
     a UFO); the golden regression passes ``False`` to compare raw precision.
     The computation is delegated to :func:`compute_document`; ``clear``/
     ``replace`` here govern the write against the font's *pre-existing* anchors.
+
+    ``names`` is forwarded to :func:`compute_document` to restrict the write to a
+    subset of target (suffixed) glyphs. With ``clear=True`` only glyphs in the
+    filtered result are cleared and rewritten — **non-selected glyphs are left
+    untouched** (the "apply only to selected" behaviour an editor wants).
     """
-    placed = compute_document(font, doc, replace=replace, round_coords=round_coords)
+    placed = compute_document(font, doc, replace=replace,
+                              round_coords=round_coords, names=names)
     for gname, anchors in placed.items():
         glyph = font[gname]
         if clear:

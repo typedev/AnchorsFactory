@@ -143,6 +143,33 @@ def test_unmatched_glyph_absent():
     assert "z" not in computed
 
 
+# --- names= filter --------------------------------------------------------- #
+def test_names_filter_restricts_to_targets():
+    doc = _doc()
+    computed = compute_document(_make_font(), doc, names=["a"])
+    assert set(computed) == {"a"}
+    target = _make_font()
+    apply_document(target, doc, clear=True, names=["a"])
+    assert _written(target) == computed          # parity under the filter
+
+
+def test_names_filter_addresses_suffix_target():
+    computed = compute_document(_make_font(), _doc(), names=["a.sc"])
+    assert set(computed) == {"a.sc"}             # suffix target, not its base
+
+
+def test_names_filter_empty_applies_nothing():
+    assert compute_document(_make_font(), _doc(), names=[]) == {}
+    target = _make_font()
+    apply_document(target, _doc(), clear=True, names=[])
+    assert _written(target) == {}
+
+
+def test_names_filter_none_is_unfiltered():
+    assert (compute_document(_make_font(), _doc(), names=None)
+            == compute_document(_make_font(), _doc()))
+
+
 # --- on_error policy ------------------------------------------------------- #
 def _error_font():
     return _Font([

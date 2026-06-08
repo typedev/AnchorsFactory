@@ -8,6 +8,12 @@ Sections below the *Unreleased* heading are filled in automatically by
 
 ### Added
 
+- `compute_document(..., names=<iterable>)` / `apply_document(..., names=...)`
+  — restrict computation (and the write) to a subset of **target (suffixed)**
+  glyph names; `None` (default) keeps the whole-font behaviour, an empty
+  iterable computes nothing. With `clear=True`, non-selected glyphs are left
+  untouched — the "apply only to the selected glyphs" path an interactive
+  editor needs. Also skips `resolve` for non-selected glyphs (a perf win).
 - `compute_document(font, doc)` — a compute-only entry point that returns the
   anchors a rule document would place (`{glyph: [(name, x, y), ...]}`) without
   mutating the font, for previewing placement before applying. `apply_document`
