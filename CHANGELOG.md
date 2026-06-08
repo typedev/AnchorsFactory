@@ -8,6 +8,15 @@ Sections below the *Unreleased* heading are filled in automatically by
 
 ### Added
 
+- `!suffixes` now takes the same operators as rules — `=` sets the list,
+  `+=` adds, `-=` removes — and they **compose through `!extends`** (a child can
+  narrow or reset an inherited list, not just extend it; `= none` resets to base
+  glyphs only). Previously `!extends` could only union suffix lists.
+- `!suffixes = all` — discover suffixes from the font: every `base.<suffix>`
+  glyph is treated as a variant of `base`, so rules apply to all suffixed glyphs
+  without listing each suffix. `!suffixes = all except .numr, .dnom` excludes
+  suffixes that need different anchors; in `all` mode `-=`/`+=` adjust that
+  exclusion set.
 - Comma-separated selector lists on a rule's left-hand side —
   `C, O, S += top (...), bottom (...)` applies the same right-hand side to each
   listed selector (one rule per entry). Entries may mix selector kinds

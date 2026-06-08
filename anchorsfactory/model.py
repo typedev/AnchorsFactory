@@ -232,6 +232,84 @@ class Op(Enum):
 
 
 @dataclass(frozen=True)
+class SuffixSpec:
+    """Resolved ``!suffixes`` configuration — the variants a rule is replayed on.
+
+    Two modes:
+
+    - explicit (``all=False``): a fixed list of suffixes in ``items``, which
+      always contains ``""`` (the unsuffixed base glyph) and never duplicates;
+    - ``all`` (``all=True``): every ``<base>.<suffix>`` glyph present in the
+      font, minus ``deny`` (e.g. ``.numr``/``.dnom``); ``""`` is always kept.
+
+    Built by :func:`resolve_suffixes` from a document's ordered ``suffix_ops``;
+    :meth:`expand` turns it into the concrete suffix list for one base glyph.
+    """
+    all: bool = False
+    items: tuple[str, ...] = ("",)     # explicit suffixes incl. "" (all=False)
+    deny: tuple[str, ...] = ()         # excluded suffixes (all=True only)
+
+    def expand(self, base: str, font_names=None) -> list[str]:
+        """The suffixes to apply to *base*. Explicit mode returns ``items``
+        verbatim (the caller still checks each target exists); ``all`` mode
+        discovers ``base.<suffix>`` variants from *font_names* (required),
+        dropping any in ``deny``. ``""`` always leads the list."""
+        if not self.all:
+            return list(self.items)
+        prefix = base + "."
+        deny = set(self.deny)
+        found = sorted(
+            nm[len(base):] for nm in (font_names or ())
+            if nm.startswith(prefix) and nm[len(base):] not in deny
+        )
+        return [""] + found
+
+
+def _dedup_suffixes(items) -> tuple[str, ...]:
+    """Drop ``""``/blanks and duplicates, preserving first-seen order."""
+    out: list[str] = []
+    for s in items:
+        if s and s not in out:
+            out.append(s)
+    return tuple(out)
+
+
+def resolve_suffixes(ops) -> SuffixSpec:
+    """Replay ordered ``suffix_ops`` (each ``(Op, kind, payload)``) from the
+    empty base into a :class:`SuffixSpec`. ``=`` resets, ``+=``/``-=`` build on
+    what came before — so concatenating a base document's ops with a child's
+    (how ``!extends`` merges) composes correctly across layers.
+
+    ``kind`` is ``"all"`` (payload = deny suffixes) or ``"list"`` (payload =
+    suffixes to set/add/remove). In ``all`` mode ``-=`` extends ``deny`` and
+    ``+=`` re-includes (shrinks ``deny``); in explicit mode they edit ``items``.
+    """
+    spec = SuffixSpec()
+    for op, kind, payload in ops:
+        payload = tuple(payload)
+        if op is Op.REPLACE:
+            if kind == "all":
+                spec = SuffixSpec(all=True, items=("",), deny=_dedup_suffixes(payload))
+            else:
+                spec = SuffixSpec(items=("",) + _dedup_suffixes(payload))
+        elif op is Op.ADD:
+            if spec.all:
+                drop = set(payload)
+                spec = SuffixSpec(all=True, items=("",),
+                                  deny=tuple(d for d in spec.deny if d not in drop))
+            else:
+                spec = SuffixSpec(items=("",) + _dedup_suffixes(spec.items[1:] + payload))
+        elif op is Op.REMOVE:
+            if spec.all:
+                spec = SuffixSpec(all=True, items=("",),
+                                  deny=_dedup_suffixes(spec.deny + payload))
+            else:
+                drop = set(payload)
+                spec = SuffixSpec(items=tuple(s for s in spec.items if s == "" or s not in drop))
+    return spec
+
+
+@dataclass(frozen=True)
 class GlyphName:
     """Selector: target a glyph by its name."""
     name: str
@@ -294,5 +372,7 @@ class Document:
     labels: dict[str, list] = field(default_factory=dict)
     rules: list[tuple[Selector, Op, list]] = field(default_factory=list)
     shift_x: int = 0                          # document-wide X offset (!shiftx)
-    suffixes: list[str] = field(default_factory=lambda: [""])  # variants (!suffixes)
+    # ordered !suffixes directives, each (Op, kind, payload); resolve_suffixes()
+    # replays them into a SuffixSpec. Empty = just the unsuffixed base glyph.
+    suffix_ops: list = field(default_factory=list)
     extends: list[str] = field(default_factory=list)  # base rules to inherit (!extends)

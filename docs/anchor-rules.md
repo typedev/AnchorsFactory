@@ -179,6 +179,33 @@ in order, then this file's own rules apply last; cycles are rejected. This is
 the inheritance model: ship a big standalone file, or `!extends default` plus a
 small set of `+=` / `-=` / `=` adjustments.
 
+### `!suffixes` — apply every rule to glyph variants
+
+Every rule is replayed on `base + suffix` for each configured suffix (geometry
+re-sampled on each variant's own outline), in addition to the bare base. The
+unsuffixed base (`""`) is always included. `!suffixes` takes the **same
+operators as rules** and they compose through `!extends` (base directives first,
+then this file's):
+
+```
+!suffixes  = .sc, .alt    # set the list (replaces any inherited list)
+!suffixes += .smcp        # add a suffix to the inherited list
+!suffixes -= .alt         # drop a suffix from the inherited list
+!suffixes  = none         # reset to base glyphs only (no variants)
+```
+
+Instead of listing suffixes, **`all`** discovers them from the font — every
+glyph named `base.<suffix>` is treated as a variant of `base`:
+
+```
+!suffixes = all                      # all `base.*` variants in the font
+!suffixes = all except .numr, .dnom  # …minus suffixes that need different anchors
+```
+
+In `all` mode the operators adjust the exclusion set: `-= .numr` excludes a
+suffix, `+= .numr` puts it back. (`all` / `none` are whole-list states, so they
+require `=`, not `+=`/`-=`.)
+
 ```
 !extends default
 U+0413 += hook (outline.right 0)   # Г: defaults plus a hook

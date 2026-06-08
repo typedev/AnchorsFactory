@@ -8,6 +8,7 @@ from anchorsfactory.model import (
     Frame, HAlign, VEdge, Run, Frac,
     X, XAbs, Y, YAbs, FontMetric, YSum, AnchorSpec, LabelRef,
     GlyphName, Unicode, UnicodeRange, Glob, Category, Op,
+    resolve_suffixes, SuffixSpec,
 )
 
 
@@ -108,6 +109,50 @@ def test_empty_left_hand_side_errors():
         parse_dsl([" , = x (box.center 0)"])
 
 
+# --- !suffixes operators / all / deny / none ------------------------------- #
+def _sfx(*lines):
+    return resolve_suffixes(parse_dsl(list(lines)).suffix_ops)
+
+
+def test_suffixes_replace_then_add_then_remove():
+    assert _sfx("!suffixes = .sc, .alt").items == ("", ".sc", ".alt")
+    # += builds on the prior list; bare names get a leading dot
+    assert _sfx("!suffixes = .sc", "!suffixes += alt").items == ("", ".sc", ".alt")
+    # -= drops a suffix; "" is never removable
+    assert _sfx("!suffixes = .sc, .alt", "!suffixes -= .sc").items == ("", ".alt")
+
+
+def test_suffixes_replace_resets_prior():
+    # a later `=` discards whatever came before (within one document)
+    assert _sfx("!suffixes += .sc", "!suffixes = .alt").items == ("", ".alt")
+
+
+def test_suffixes_all_and_deny():
+    s = _sfx("!suffixes = all")
+    assert s == SuffixSpec(all=True, items=("",), deny=())
+    s = _sfx("!suffixes = all except .numr, dnom")
+    assert s.all and s.deny == (".numr", ".dnom")
+    # in all-mode, -= extends deny and += re-includes (shrinks deny)
+    assert _sfx("!suffixes = all", "!suffixes -= .numr").deny == (".numr",)
+    assert _sfx("!suffixes = all except .numr, .dnom",
+                "!suffixes += .numr").deny == (".dnom",)
+
+
+def test_suffixes_none_resets_to_base_only():
+    assert _sfx("!suffixes = .sc", "!suffixes = none").items == ("",)
+
+
+@pytest.mark.parametrize("line", [
+    "!suffixes += all",                  # all needs '='
+    "!suffixes = all foo .x",            # malformed all-clause
+    "!suffixes -= none",                 # none needs '='
+    "!suffixes =",                       # empty list
+])
+def test_suffixes_errors(line):
+    with pytest.raises(DSLError):
+        parse_dsl([line])
+
+
 def test_labels_mix_and_directives():
     doc = parse_dsl([
         "@bot = bottom (box.center 0)",
@@ -115,7 +160,7 @@ def test_labels_mix_and_directives():
         "!shiftx = -15",
         "L = @bot, top (box.left $H)",
     ])
-    assert doc.suffixes == ["", ".alt", ".sc"]
+    assert resolve_suffixes(doc.suffix_ops).items == ("", ".alt", ".sc")
     assert doc.shift_x == -15
     sel, op, items = doc.rules[0]
     assert sel == GlyphName("L") and op is Op.REPLACE

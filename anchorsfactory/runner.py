@@ -31,7 +31,9 @@ def _merge(base: Document, child: Document) -> Document:
         labels={**base.labels, **child.labels},
         rules=base.rules + child.rules,
         shift_x=child.shift_x or base.shift_x,
-        suffixes=list(dict.fromkeys(base.suffixes + child.suffixes)),
+        # replay base directives then the child's: `=` in the child resets, while
+        # `+=`/`-=` build on the inherited set (resolve_suffixes does the replay).
+        suffix_ops=base.suffix_ops + child.suffix_ops,
     )
 
 

@@ -8,6 +8,7 @@ from anchorsfactory import presets
 from anchorsfactory.runner import load_document, _merge
 from anchorsfactory.apply import accumulate
 from anchorsfactory.dsl import parse_dsl
+from anchorsfactory.model import resolve_suffixes
 
 
 # --- presets are bundled and readable as package data ---------------------- #
@@ -61,3 +62,25 @@ def test_merge_child_label_wins():
     merged = _merge(base, child)
     # late binding: the inherited A rule now resolves @ to the child's definition
     assert [s.name for s in accumulate(merged, "A", [0x0041])] == ["bottom"]
+
+
+# --- !suffixes compose across the merge ------------------------------------ #
+def test_merge_suffixes_add_and_remove_compose():
+    base = parse_dsl(["!suffixes = .sc, .alt"])
+    child = parse_dsl(["!suffixes += .smcp", "!suffixes -= .alt"])
+    merged = _merge(base, child)
+    # child builds on the inherited list: drops .alt, adds .smcp
+    assert resolve_suffixes(merged.suffix_ops).items == ("", ".sc", ".smcp")
+
+
+def test_merge_child_replace_overrides_base():
+    base = parse_dsl(["!suffixes = .sc, .alt"])
+    child = parse_dsl(["!suffixes = none"])              # child resets the list
+    assert resolve_suffixes(_merge(base, child).suffix_ops).items == ("",)
+
+
+def test_merge_child_all_overrides_base_list():
+    base = parse_dsl(["!suffixes = .sc"])
+    child = parse_dsl(["!suffixes = all except .numr"])
+    spec = resolve_suffixes(_merge(base, child).suffix_ops)
+    assert spec.all and spec.deny == (".numr",)

@@ -148,11 +148,45 @@ def _split_items(rhs: str) -> list[str]:
     return [p.strip() for p in rhs.split(",") if p.strip()]
 
 
+def _norm_sfx(tok: str) -> str:
+    tok = tok.strip()
+    return tok if tok.startswith(".") else "." + tok
+
+
+def _parse_suffix_op(op_tok: str, value: str, n: int):
+    """Parse one `!suffixes` directive into a `(Op, kind, payload)` tuple.
+
+    `= all [except .a, .b]` / `= none` reset to dynamic / empty (replace only);
+    `= / += / -= .a, .b` set / add / remove explicit suffixes.
+    """
+    op = _OPS[op_tok]
+    v = value.strip()
+    low = v.lower()
+    if low == "all" or low.startswith("all "):
+        if op is not Op.REPLACE:
+            raise DSLError(f"line {n}: '!suffixes {op_tok} all' is invalid — 'all' needs '='")
+        rest = v[3:].strip()
+        deny = ()
+        if rest:
+            if not rest.lower().startswith("except"):
+                raise DSLError(f"line {n}: expected 'all except <suffixes>', got {v!r}")
+            deny = tuple(_norm_sfx(s) for s in rest[6:].split(",") if s.strip())
+        return (Op.REPLACE, "all", deny)
+    if low == "none":
+        if op is not Op.REPLACE:
+            raise DSLError(f"line {n}: '!suffixes {op_tok} none' is invalid — 'none' needs '='")
+        return (Op.REPLACE, "list", ())
+    items = tuple(_norm_sfx(s) for s in v.split(",") if s.strip())
+    if not items:
+        raise DSLError(f"line {n}: !suffixes {op_tok} needs at least one suffix")
+    return (op, "list", items)
+
+
 def parse_dsl(lines) -> Document:
     labels: dict[str, list[AnchorSpec]] = {}
     rules: list = []
     shift_x = 0
-    suffixes = [""]
+    suffix_ops: list = []
     extends: list[str] = []
 
     raw_lines = []
@@ -193,22 +227,23 @@ def parse_dsl(lines) -> Document:
     for n, stmt in raw_lines:
         if stmt.startswith("!"):
             body = stmt[1:].strip()
-            if "=" in body:
-                name, _, value = body.partition("=")
-                name, value = name.strip(), value.strip()
+            m = _RULE_RE.match(body)
+            if m:                                  # "!name OP value" (=, +=, -=)
+                name, op_tok, value = m.group(1).strip(), m.group(2), m.group(3).strip()
             else:                                  # e.g. "!extends default"
                 head, _, rest = body.partition(" ")
-                name, value = head.strip(), rest.strip()
+                name, op_tok, value = head.strip(), "=", rest.strip()
             if name == "suffixes":
-                suffixes.extend((s.strip() if s.strip().startswith(".") else "." + s.strip())
-                                for s in value.split(",") if s.strip())
+                suffix_ops.append(_parse_suffix_op(op_tok, value, n))
             elif name == "shiftx":
+                if op_tok != "=":
+                    raise DSLError(f"line {n}: !shiftx only supports '='")
                 try:
                     shift_x = int(value)
                 except ValueError:
                     raise DSLError(f"line {n}: !shiftx needs an integer, got {value!r}")
             elif name == "extends":
-                if not value:
+                if op_tok != "=" or not value:
                     raise DSLError(f"line {n}: !extends needs a base name or path")
                 extends.append(value)
             else:
@@ -236,7 +271,7 @@ def parse_dsl(lines) -> Document:
                 rules.append((_parse_selector(sel_tok), op, items))
 
     return Document(labels=labels, rules=rules, shift_x=shift_x,
-                    suffixes=suffixes, extends=extends)
+                    suffix_ops=suffix_ops, extends=extends)
 
 
 def parse_dsl_file(path: str) -> Document:

@@ -6,6 +6,7 @@ from anchorsfactory.parser import parse_document, ParseError
 from anchorsfactory.model import (
     Frame, HAlign, VEdge, Frac,
     X, XAbs, Y, YAbs, AnchorSpec, LabelRef, GlyphName, Unicode,
+    resolve_suffixes,
 )
 
 
@@ -77,7 +78,7 @@ def test_directives_and_comments():
         "A=top:center:$H   # trailing comment",
         "",
     ])
-    assert doc.suffixes == ["", ".alt", ".sc"]
+    assert resolve_suffixes(doc.suffix_ops).items == ("", ".alt", ".sc")
     assert doc.shift_x == -15
     assert doc.rules[0][0] == GlyphName("A")
 

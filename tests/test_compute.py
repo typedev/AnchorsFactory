@@ -104,7 +104,8 @@ def _doc():
     b_rule = (Glob("b*"), Op.REPLACE, [
         AnchorSpec("center", X(Frame.ADVANCE, HAlign.CENTER), YAbs(250)),
     ])
-    return Document(rules=[a_rule, a_add, b_rule], shift_x=10, suffixes=["", ".sc"])
+    return Document(rules=[a_rule, a_add, b_rule], shift_x=10,
+                    suffix_ops=[(Op.REPLACE, "list", (".sc",))])
 
 
 def test_compute_matches_apply_parity():
@@ -168,6 +169,32 @@ def test_names_filter_empty_applies_nothing():
 def test_names_filter_none_is_unfiltered():
     assert (compute_document(_make_font(), _doc(), names=None)
             == compute_document(_make_font(), _doc()))
+
+
+# --- !suffixes = all (font-driven suffix discovery) ------------------------ #
+def _all_font():
+    return _Font([
+        _Glyph("a", width=600, unicodes=[0x61]),
+        _Glyph("a.sc", width=400),
+        _Glyph("a.numr", width=300),
+        _Glyph("b", width=500),          # no rule, no a-prefix → never appears
+    ])
+
+
+def _all_doc(suffix_ops):
+    rule = (GlyphName("a"), Op.REPLACE, [AnchorSpec("top", XAbs(100), YAbs(700))])
+    return Document(rules=[rule], suffix_ops=suffix_ops)
+
+
+def test_suffixes_all_discovers_variants_from_font():
+    doc = _all_doc([(Op.REPLACE, "all", ())])
+    # base `a` plus every `a.<suffix>` in the font; unrelated `b` stays out
+    assert set(compute_document(_all_font(), doc)) == {"a", "a.sc", "a.numr"}
+
+
+def test_suffixes_all_except_drops_denied():
+    doc = _all_doc([(Op.REPLACE, "all", (".numr",))])
+    assert set(compute_document(_all_font(), doc)) == {"a", "a.sc"}
 
 
 # --- on_error policy ------------------------------------------------------- #

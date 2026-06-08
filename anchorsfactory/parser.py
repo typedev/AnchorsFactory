@@ -118,7 +118,7 @@ def parse_document(lines) -> Document:
     labels: dict[str, list[AnchorSpec]] = {}
     rules: list = []
     shift_x = 0
-    suffixes = [""]
+    sfx_list: list[str] = []
 
     # Phase 1: collect labels/directives and raw (selector, item-tokens) rows.
     raw_rows: list[tuple[object, list[str], int]] = []
@@ -132,7 +132,7 @@ def parse_document(lines) -> Document:
 
         if head.startswith("@"):
             if head == "@SFXLIST":
-                suffixes.extend("." + s for s in content.split(",") if s)
+                sfx_list.extend("." + s for s in content.split(",") if s)
                 continue
             if head == "@SHIFTX":
                 try:
@@ -157,7 +157,8 @@ def parse_document(lines) -> Document:
     for selector, items, n in raw_rows:
         rules.append((selector, Op.REPLACE, _to_items(items, n, labels)))
 
-    return Document(labels=labels, rules=rules, shift_x=shift_x, suffixes=suffixes)
+    suffix_ops = [(Op.REPLACE, "list", tuple(sfx_list))] if sfx_list else []
+    return Document(labels=labels, rules=rules, shift_x=shift_x, suffix_ops=suffix_ops)
 
 
 def parse_file(path: str) -> Document:

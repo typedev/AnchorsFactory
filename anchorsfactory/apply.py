@@ -18,7 +18,7 @@ from dataclasses import dataclass
 
 from .geometry import resolve
 from .model import (
-    Document, Op, LabelRef,
+    Document, Op, LabelRef, resolve_suffixes,
     GlyphName, Unicode, UnicodeRange, Glob, Category,
 )
 
@@ -175,12 +175,14 @@ def compute_document(font, doc: Document, *, replace=True, round_coords=True,
     if on_error not in ("raise", "collect"):
         raise ValueError(f"on_error must be 'raise' or 'collect', got {on_error!r}")
     keep = None if names is None else set(names)
+    sfx_spec = resolve_suffixes(doc.suffix_ops)
+    font_names = {g.name for g in font} if sfx_spec.all else None
     placed = ComputeResult()
     for glyph in font:
         specs = accumulate(doc, glyph.name, list(glyph.unicodes))
         if not specs:
             continue
-        for sfx in doc.suffixes:
+        for sfx in sfx_spec.expand(glyph.name, font_names):
             gname = glyph.name + sfx
             if gname not in font:
                 continue

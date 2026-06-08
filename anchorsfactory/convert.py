@@ -13,6 +13,7 @@ hand-edit it to use labels / ranges afterwards.
 from __future__ import annotations
 
 from .dsl import parse_dsl
+from .model import resolve_suffixes
 from .parser import parse_file
 
 
@@ -24,9 +25,16 @@ def render_document(doc) -> str:
     lines: list[str] = []
     if doc.shift_x:
         lines.append(f"!shiftx = {doc.shift_x}")
-    suffixes = [s for s in doc.suffixes if s]
-    if suffixes:
-        lines.append("!suffixes = " + ", ".join(suffixes))
+    spec = resolve_suffixes(doc.suffix_ops)
+    if spec.all:
+        line = "!suffixes = all"
+        if spec.deny:
+            line += " except " + ", ".join(spec.deny)
+        lines.append(line)
+    else:
+        suffixes = [s for s in spec.items if s]
+        if suffixes:
+            lines.append("!suffixes = " + ", ".join(suffixes))
     if lines:
         lines.append("")
 
@@ -62,7 +70,7 @@ def verify_conversion(legacy_path: str) -> list[str]:
         problems.append("labels differ after round-trip")
     if roundtrip.shift_x != legacy.shift_x:
         problems.append("shift_x differs after round-trip")
-    if roundtrip.suffixes != legacy.suffixes:
+    if resolve_suffixes(roundtrip.suffix_ops) != resolve_suffixes(legacy.suffix_ops):
         problems.append("suffixes differ after round-trip")
     return problems
 
