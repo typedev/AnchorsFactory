@@ -15,7 +15,9 @@ What it does, in order:
      publishes the version already in pyproject.toml; every release after
      that bumps the minor (0.1.0 -> 0.2.0 -> 0.3.0 ...).
   3. Writes the version into pyproject.toml and prepends a CHANGELOG section
-     built from the commit subjects since the previous release.
+     built from the commit subjects since the previous release. With
+     --no-changelog the CHANGELOG is left untouched (it has been curated by
+     hand) and its `## [version]` section is used as the release notes.
   4. Builds the sdist+wheel and runs `twine check`.
   5. Uploads to PyPI (or TestPyPI with --test). This is the point of no return.
   6. *Only after* a successful upload: commits, tags `vX.Y.Z`, and pushes both
@@ -127,6 +129,20 @@ def write_changelog(version: str, date: str, body: str) -> None:
     CHANGELOG.write_text(text)
 
 
+def curated_section(version: str) -> str:
+    """Extract the already-written ``## [version]`` section body from CHANGELOG,
+    for use as GitHub release notes when --no-changelog is set."""
+    text = CHANGELOG.read_text() if CHANGELOG.exists() else ""
+    m = re.search(
+        rf"(?ms)^##\s*\[{re.escape(version)}\].*?$\n(.*?)(?=^##\s|\Z)", text
+    )
+    body = m.group(1).strip() if m else ""
+    if not body:
+        die(f"--no-changelog: no '## [{version}]' section found in CHANGELOG.md "
+            "(curate it first).")
+    return body
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Bump, build, publish, tag, push.")
     ap.add_argument("--test", action="store_true", help="upload to TestPyPI")
@@ -136,6 +152,11 @@ def main() -> None:
         help="publish the current version without bumping",
     )
     ap.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
+    ap.add_argument(
+        "--no-changelog",
+        action="store_true",
+        help="do not touch CHANGELOG.md (use when the release section is already curated by hand)",
+    )
     args = ap.parse_args()
 
     print("AnchorsFactory release\n----------------------")
@@ -161,11 +182,15 @@ def main() -> None:
             die("Aborted by user.")
 
     date = datetime.date.today().isoformat()
-    body = changelog_body(prev_tag)
+    # The GitHub release notes come from `body`. When --no-changelog is set the
+    # CHANGELOG is already curated by hand, so use its [Unreleased]→version
+    # section as the notes; otherwise generate from commit subjects.
+    body = curated_section(new) if args.no_changelog else changelog_body(prev_tag)
 
     # --- working-tree changes (reversible until we commit) ---
     write_version(new)
-    write_changelog(new, date, body)
+    if not args.no_changelog:
+        write_changelog(new, date, body)
 
     try:
         print("\nBuilding artifacts ...")
