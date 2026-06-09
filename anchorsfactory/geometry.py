@@ -27,10 +27,6 @@ log = logging.getLogger(__name__)
 # duplicate roots you get when a scanline passes through a shared on-curve point.
 _MERGE_EPS = 1.0
 
-# How far inside the ink to sample when a scanline lands on a horizontal
-# extreme (baseline / top), where the outline is tangent to the line.
-_EDGE_INSET = 1.0
-
 
 def _segments(glyph):
     """Yield outline segments (components decomposed) as point tuples.
@@ -203,7 +199,11 @@ def resolve_x(font, glyph, xspec, y: float, *, warnings=None) -> float:
         base = {HAlign.LEFT: xMin, HAlign.CENTER: (xMin + xMax) / 2, HAlign.RIGHT: xMax}[xspec.align]
         return base + shift
 
-    # OUTLINE — sample where the ink actually is.
+    # OUTLINE — sample where the ink actually is, at exactly the requested
+    # height. The anchor asked for a height; resolve it there verbatim, with no
+    # inset/nudge: `outline.right@0` is the rightmost crossing at y=0, and a
+    # height that coincides with the glyph's own extreme (e.g. an open hook
+    # whose top is y=0) is honoured — its clean crossings are not discarded.
     if xspec.at is None:
         sample = y
     elif xspec.at is VEdge.TOP:
@@ -212,29 +212,19 @@ def resolve_x(font, glyph, xspec, y: float, *, warnings=None) -> float:
         sample = yMin
     else:                                  # a fixed height (metric / number / glyph)
         sample = resolve_y(font, xspec.at, warnings=warnings)
-    # A scanline exactly on a horizontal extreme is tangent/collinear with the
-    # outline there, which yields degenerate crossings. Sample just inside the
-    # ink instead (the principled form of the legacy ±1 nudge).
-    requested = sample
-    if sample <= yMin + _EDGE_INSET:
-        sample = yMin + _EDGE_INSET
-    elif sample >= yMax - _EDGE_INSET:
-        sample = yMax - _EDGE_INSET
-    # A small nudge off a real extreme is expected; a height that lies *well*
-    # outside the ink box (e.g. @ascender on an x-height glyph) was clamped to
-    # the edge, not sampled where asked — the anchor is still placed, but the
-    # request was not honoured, so flag it (otherwise the clamp masks it from
-    # the no-crossing fallback below and it is never surfaced).
-    if requested < yMin - _EDGE_INSET or requested > yMax + _EDGE_INSET:
-        _degrade(warnings, f"glyph {glyph.name!r}: requested sample height y={requested:g} is "
-                           f"outside the ink box [{yMin:g}, {yMax:g}]; clamped to the edge "
-                           f"at y={sample:g}")
 
     xs = _crossings(glyph, sample)
     if not xs:
-        # No ink at this height: fall back to the bounding box edge.
-        _degrade(warnings, f"glyph {glyph.name!r}: no outline crossing at y={sample:g}; "
-                           f"using bounding-box edge")
+        # No ink crosses at this height — fall back to the bounding-box edge,
+        # and say why: a height outside the ink box (e.g. @ascender on an
+        # x-height glyph) versus one inside it that still finds no crossing
+        # (a degenerate/collinear edge). The anchor is still placed, but flagged.
+        if sample < yMin or sample > yMax:
+            _degrade(warnings, f"glyph {glyph.name!r}: requested sample height y={sample:g} is "
+                               f"outside the ink box [{yMin:g}, {yMax:g}]; using bounding-box edge")
+        else:
+            _degrade(warnings, f"glyph {glyph.name!r}: no outline crossing at y={sample:g}; "
+                               f"using bounding-box edge")
         return {HAlign.LEFT: xMin, HAlign.RIGHT: xMax}.get(xspec.align, (xMin + xMax) / 2)
 
     run = xspec.run

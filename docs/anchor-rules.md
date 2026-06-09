@@ -59,6 +59,13 @@ is used. `@…` overrides *where* the contour is sampled — e.g. centre a round
 letter's top anchor on its x-height crossing (`outline.center@xHeight`) while
 its Y sits higher.
 
+The contour is sampled at **exactly** the requested height — no inset or nudge.
+`outline.right@0` is the rightmost crossing at `y=0`, even when `0` coincides
+with the glyph's own top/bottom extreme (e.g. an open hook). At a smooth peak
+the scanline grazes the outline, so `@top`/`@bottom` returns that tangent point;
+if a height finds no crossing at all (outside the ink box, or a flat collinear
+edge) the bounding-box edge is used and a warning is recorded.
+
 ### Y — vertical position
 
 | token | meaning |

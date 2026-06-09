@@ -44,10 +44,28 @@ Sections below the *Unreleased* heading are filled in automatically by
 - `resolve(..., warnings=<list>)` — an optional sink that collects soft
   geometry degradations as reason strings; the coordinate is still returned.
   Without it, behaviour (and logging) is unchanged.
-- `outline.*@<height>` with a sample height outside the glyph's ink box (e.g.
-  `@ascender` on an x-height glyph) is still clamped to the nearest edge — but
-  now records a `severity="warning"` degradation instead of masking it, so the
-  request "sample where there is no outline" is surfaced rather than silent.
+- `outline.*@<height>` with a sample height that finds no crossing (outside the
+  glyph's ink box, e.g. `@ascender` on an x-height glyph, or a flat collinear
+  edge) falls back to the bounding-box edge **and** records a `severity="warning"`
+  degradation, so the request is surfaced rather than silently masked.
+
+### Changed
+
+- `outline.*@<height>` now samples the contour at **exactly** the requested
+  height — the ±1u edge inset is gone. A height that coincides with the glyph's
+  own extreme (e.g. `outline.right@0` where `0` is the top of an open hook) is
+  honoured: its clean crossings are no longer discarded. **Behaviour change:**
+  at a smooth round top, `@top`/`@bottom` with `left`/`right` now returns the
+  tangent point at the extreme rather than the slightly wider envelope a unit
+  inside (e.g. a round `O`'s right edge shifts in by ~1–2% of its width). Golden
+  baselines for outline anchors near extremes need regenerating.
+
+### Fixed
+
+- `outline.<align>@<y>` no longer overshoots by ~slope×1u at horizontal extremes
+  (#8). The old code insets every scanline landing on an extreme, which on a
+  sloped open edge moved the anchor 1–2u sideways and propagated into composite
+  placement; the exact-height crossing is now used when it is clean.
 
 ## [0.2.0] - 2026-06-04
 

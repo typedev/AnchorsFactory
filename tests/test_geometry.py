@@ -147,9 +147,24 @@ def test_outline_sample_above_ink_is_flagged_not_silent(font):
 
 
 def test_outline_sample_at_extreme_is_silent(font):
-    """A nudge off the glyph's own @top extreme is expected — no warning."""
+    """Sampling the glyph's own @top extreme, where it crosses, is no warning."""
     g = _has(font, "x")
     warns: list[str] = []
     spec = X(Frame.OUTLINE, HAlign.RIGHT, at=VEdge.TOP)
     resolve_x(font, g, spec, 0, warnings=warns)
     assert warns == []
+
+
+def test_outline_at_extreme_is_literal_not_inset(font):
+    """`@top` samples at exactly yMax — no ±1 inset. The result is the rightmost
+    crossing at the extreme itself, not the (wider) one a unit inside (#8)."""
+    g = _has(font, "O")
+    _, _, _, yMax = g.bounds
+    top = _crossings(g, yMax)
+    if not top:
+        pytest.skip("O has no crossing exactly at yMax in this font")
+    got = resolve_x(font, g, X(Frame.OUTLINE, HAlign.RIGHT, at=VEdge.TOP), 0)
+    assert got == pytest.approx(max(top))            # literal: the yMax crossing
+    inside = _crossings(g, yMax - 1)                  # the height the inset used
+    if inside and max(inside) != pytest.approx(max(top)):
+        assert got != pytest.approx(max(inside))     # …and not the inset value
