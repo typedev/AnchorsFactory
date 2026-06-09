@@ -14,3 +14,5 @@ __pycache__
 .pytest_cache/
 .claude/
 /output
+# secrets — publish tokens for `make release` live here, never commit them
+.env

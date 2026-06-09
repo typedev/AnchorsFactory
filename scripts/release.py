@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-shot release: bump the minor version, build, publish, tag, push.
+"""One-shot release: bump the version, build, publish, tag, push.
 
 Run it when you've decided the current state of `master` is worth publishing:
 
@@ -14,28 +14,35 @@ What it does, in order:
   2. Decides the new version. The very first release (no `v*` tags yet)
      publishes the version already in pyproject.toml; every release after
      that bumps the minor (0.1.0 -> 0.2.0 -> 0.3.0 ...).
-  3. Writes the version into pyproject.toml and prepends a CHANGELOG section
-     built from the commit subjects since the previous release. With
-     --no-changelog the CHANGELOG is left untouched (it has been curated by
-     hand) and its `## [version]` section is used as the release notes.
-  4. Builds the sdist+wheel and runs `twine check`.
-  5. Uploads to PyPI (or TestPyPI with --test). This is the point of no return.
-  6. *Only after* a successful upload: commits, tags `vX.Y.Z`, and pushes both
+  3. Resolves the publish token (see Authentication) — before touching anything.
+  4. Writes the version into pyproject.toml and promotes the curated
+     `## [Unreleased]` CHANGELOG section to `## [version] - date`, leaving a
+     fresh empty `## [Unreleased]`. That section is also the release notes.
+     (Refuses if `## [Unreleased]` is empty — write your notes there as you go.)
+  5. Builds the sdist+wheel and runs `twine check`.
+  6. Uploads to PyPI (or TestPyPI with --test). This is the point of no return.
+  7. *Only after* a successful upload: commits, tags `vX.Y.Z`, and pushes both
      the commit and the tag. If anything before the upload fails, the working
      tree is restored and git history is left untouched.
-  7. For a real (non --test) release, creates a GitHub Release for the tag with
+  8. For a real (non --test) release, creates a GitHub Release for the tag with
      the changelog section as notes and the artifacts attached (best-effort —
      needs an authenticated `gh`; a failure here leaves PyPI/tag intact).
 
-Authentication: set a token in the environment before running, e.g.
-    export UV_PUBLISH_TOKEN=pypi-...
-(use a TestPyPI token together with --test).
+Authentication: the token is read from the environment, then from a (gitignored)
+`.env` in the repo root, and finally prompted interactively if neither has it.
+Variables: `PYPI_TOKEN` for a real release, `TEST_PYPI_TOKEN` with --test (a bare
+`UV_PUBLISH_TOKEN` is accepted as a fallback for either). Example `.env`:
+
+    PYPI_TOKEN=pypi-...
+    TEST_PYPI_TOKEN=pypi-...
 """
 
 from __future__ import annotations
 
 import argparse
 import datetime
+import getpass
+import os
 import re
 import shutil
 import subprocess
@@ -46,6 +53,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = ROOT / "pyproject.toml"
 CHANGELOG = ROOT / "CHANGELOG.md"
+ENV_FILE = ROOT / ".env"
 
 
 def run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
@@ -96,50 +104,63 @@ def latest_tag() -> str | None:
     return tags.splitlines()[0] if tags else None
 
 
-def write_version(version: str) -> None:
-    text = PYPROJECT.read_text()
-    new, n = re.subn(
-        r'(?m)^version\s*=\s*".*"', f'version = "{version}"', text, count=1
-    )
-    if n != 1:
-        die("Could not find a single version line in pyproject.toml")
-    PYPROJECT.write_text(new)
+# --- tokens ---------------------------------------------------------------- #
+def load_env_file() -> dict[str, str]:
+    """Parse simple KEY=VALUE lines from a gitignored .env (no dependency)."""
+    env: dict[str, str] = {}
+    if ENV_FILE.exists():
+        for line in ENV_FILE.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            env[key.strip()] = val.strip().strip('"').strip("'")
+    return env
 
 
-def changelog_body(prev_tag: str | None) -> str:
-    if prev_tag is None:
-        return "- Initial public release."
-    rng = f"{prev_tag}..HEAD"
-    subjects = capture(
-        ["git", "log", rng, "--no-merges", "--reverse", "--pretty=%s"]
-    )
-    lines = [f"- {s}" for s in subjects.splitlines() if s.strip()]
-    return "\n".join(lines) if lines else "- No changes recorded."
+def resolve_token(test: bool) -> str:
+    """Find the publish token: real env, then .env, then an interactive prompt.
+
+    Looks at the target-specific variable first (TEST_PYPI_TOKEN / PYPI_TOKEN),
+    then a bare UV_PUBLISH_TOKEN, in both the environment and `.env`.
+    """
+    primary = "TEST_PYPI_TOKEN" if test else "PYPI_TOKEN"
+    names = (primary, "UV_PUBLISH_TOKEN")
+    file_env = load_env_file()
+    for source in (os.environ, file_env):
+        for name in names:
+            if source.get(name):
+                return source[name]
+    where = "TestPyPI" if test else "PyPI"
+    try:
+        token = getpass.getpass(f"  {where} token ({primary} not in env or .env): ")
+    except (EOFError, KeyboardInterrupt):
+        die("No token provided — aborted.")
+    if not token.strip():
+        die("No token provided — aborted.")
+    return token.strip()
 
 
-def write_changelog(version: str, date: str, body: str) -> None:
-    text = CHANGELOG.read_text() if CHANGELOG.exists() else "# Changelog\n\n## [Unreleased]\n"
-    section = f"## [{version}] - {date}\n\n{body}\n"
-    marker = "## [Unreleased]"
-    if marker in text:
-        head, tail = text.split(marker, 1)
-        text = f"{head}{marker}\n\n{section}\n{tail.lstrip(chr(10))}"
-    else:
-        text = f"{text.rstrip()}\n\n{section}"
-    CHANGELOG.write_text(text)
-
-
-def curated_section(version: str) -> str:
-    """Extract the already-written ``## [version]`` section body from CHANGELOG,
-    for use as GitHub release notes when --no-changelog is set."""
+# --- changelog ------------------------------------------------------------- #
+def promote_unreleased(version: str, date: str) -> str:
+    """Move the curated ``## [Unreleased]`` section to ``## [version] - date``,
+    leaving a fresh empty ``## [Unreleased]``. Returns the section body (used as
+    the release notes). Refuses if ``[Unreleased]`` is empty.
+    """
     text = CHANGELOG.read_text() if CHANGELOG.exists() else ""
-    m = re.search(
-        rf"(?ms)^##\s*\[{re.escape(version)}\].*?$\n(.*?)(?=^##\s|\Z)", text
-    )
-    body = m.group(1).strip() if m else ""
+    m = re.search(r"(?ms)^##\s*\[Unreleased\][^\n]*\n(.*?)(?=^##\s|\Z)", text)
+    if not m:
+        die("No '## [Unreleased]' section in CHANGELOG.md.")
+    body = m.group(1).strip()
     if not body:
-        die(f"--no-changelog: no '## [{version}]' section found in CHANGELOG.md "
-            "(curate it first).")
+        die("Nothing under '## [Unreleased]' in CHANGELOG.md — write the release "
+            "notes there before releasing.")
+    new = (
+        f"{text[:m.start()]}## [Unreleased]\n\n"
+        f"## [{version}] - {date}\n\n{body}\n\n"
+        f"{text[m.end():].lstrip(chr(10))}"
+    )
+    CHANGELOG.write_text(new)
     return body
 
 
@@ -152,11 +173,6 @@ def main() -> None:
         help="publish the current version without bumping",
     )
     ap.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
-    ap.add_argument(
-        "--no-changelog",
-        action="store_true",
-        help="do not touch CHANGELOG.md (use when the release section is already curated by hand)",
-    )
     args = ap.parse_args()
 
     print("AnchorsFactory release\n----------------------")
@@ -174,23 +190,28 @@ def main() -> None:
     print(f"\n  current version : {cur}")
     print(f"  release version : {new}")
     print(f"  target          : {target}")
-    print(f"  changelog since : {prev_tag or '(first release — all history)'}")
 
     if not args.yes:
         ans = input(f"\nPublish {new} to {target}? [y/N] ").strip().lower()
         if ans not in {"y", "yes"}:
             die("Aborted by user.")
 
+    # Resolve the token up front (may prompt) — before mutating anything, so a
+    # missing token aborts cleanly with the tree untouched.
+    token = resolve_token(args.test)
+    publish_env = {**os.environ, "UV_PUBLISH_TOKEN": token}
+
     date = datetime.date.today().isoformat()
-    # The GitHub release notes come from `body`. When --no-changelog is set the
-    # CHANGELOG is already curated by hand, so use its [Unreleased]→version
-    # section as the notes; otherwise generate from commit subjects.
-    body = curated_section(new) if args.no_changelog else changelog_body(prev_tag)
 
     # --- working-tree changes (reversible until we commit) ---
-    write_version(new)
-    if not args.no_changelog:
-        write_changelog(new, date, body)
+    write_version = PYPROJECT.read_text()
+    new_pyproject, n = re.subn(
+        r'(?m)^version\s*=\s*".*"', f'version = "{new}"', write_version, count=1
+    )
+    if n != 1:
+        die("Could not find a single version line in pyproject.toml")
+    PYPROJECT.write_text(new_pyproject)
+    body = promote_unreleased(new, date)
 
     try:
         print("\nBuilding artifacts ...")
@@ -219,13 +240,10 @@ def main() -> None:
         if args.test:
             cmd += ["--publish-url", "https://test.pypi.org/legacy/"]
         cmd += dist_files
-        run(cmd)
+        run(cmd, env=publish_env)
     except subprocess.CalledProcessError:
         run(["git", "checkout", "--", str(PYPROJECT), str(CHANGELOG)])
-        die(
-            "Upload failed — working tree restored, nothing committed.\n"
-            "  (Did you export UV_PUBLISH_TOKEN?)"
-        )
+        die("Upload failed — working tree restored, nothing committed.")
 
     # --- upload succeeded: now it's safe to record it in git ---
     tag = f"v{new}"

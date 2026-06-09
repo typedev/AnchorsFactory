@@ -16,8 +16,8 @@ help:
 	@echo "check        build, then validate the artifacts (twine check)"
 	@echo "publish-test upload to TestPyPI"
 	@echo "publish      upload to PyPI"
-	@echo "release      bump minor, changelog, build, upload to PyPI, tag + push"
-	@echo "release-test same as release, but upload to TestPyPI"
+	@echo "release      bump minor, promote CHANGELOG [Unreleased], build, upload to PyPI, tag + push"
+	@echo "release-test same as release, but upload to TestPyPI (token from .env or prompt)"
 	@echo "clean        remove build artifacts and caches"
 
 venv:
