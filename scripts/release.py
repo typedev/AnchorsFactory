@@ -21,12 +21,14 @@ What it does, in order:
      (Refuses if `## [Unreleased]` is empty — write your notes there as you go.)
   5. Builds the sdist+wheel and runs `twine check`.
   6. Uploads to PyPI (or TestPyPI with --test). This is the point of no return.
-  7. *Only after* a successful upload: commits, tags `vX.Y.Z`, and pushes both
-     the commit and the tag. If anything before the upload fails, the working
-     tree is restored and git history is left untouched.
-  8. For a real (non --test) release, creates a GitHub Release for the tag with
-     the changelog section as notes and the artifacts attached (best-effort —
-     needs an authenticated `gh`; a failure here leaves PyPI/tag intact).
+  7. With --test this is a dry run: after the TestPyPI upload the working tree
+     is restored (version/CHANGELOG edits undone) and nothing is committed —
+     so a later `make release` bumps cleanly to the same version.
+  8. For a real (non --test) release: commits, tags `vX.Y.Z`, pushes the commit
+     and the tag, and creates a GitHub Release with the changelog section as
+     notes and the artifacts attached (best-effort — needs an authenticated
+     `gh`; a failure there leaves PyPI/tag intact). If anything before the
+     upload fails, the tree is restored and git history is left untouched.
 
 Authentication: the token is read from the environment, then from a (gitignored)
 `.env` in the repo root, and finally prompted interactively if neither has it.
@@ -245,7 +247,15 @@ def main() -> None:
         run(["git", "checkout", "--", str(PYPROJECT), str(CHANGELOG)])
         die("Upload failed — working tree restored, nothing committed.")
 
-    # --- upload succeeded: now it's safe to record it in git ---
+    if args.test:
+        # TestPyPI is a dry run: undo the version/CHANGELOG edits so the real
+        # `make release` later bumps cleanly. Nothing is committed/tagged/pushed.
+        run(["git", "checkout", "--", str(PYPROJECT), str(CHANGELOG)])
+        print(f"\n✓ Uploaded {new} to TestPyPI. Working tree restored — "
+              "run `make release` for the real PyPI release.")
+        return
+
+    # --- real upload succeeded: now it's safe to record it in git ---
     tag = f"v{new}"
     print(f"\nRecording release {tag} in git ...")
     run(["git", "add", str(PYPROJECT), str(CHANGELOG)])
@@ -257,22 +267,21 @@ def main() -> None:
     # A real release also gets a GitHub Release, with the changelog section as
     # notes and the built artifacts attached. Best-effort: a missing/unauth'd
     # `gh` must not undo a successful PyPI publish, so just warn.
-    if not args.test:
-        print(f"\nCreating GitHub release {tag} ...")
-        try:
-            run(
-                ["gh", "release", "create", tag, "--title", tag,
-                 "--notes", body, *dist_files]
-            )
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            print(
-                f"  ! Could not create the GitHub release for {tag} "
-                "(is `gh` installed and authenticated?).\n"
-                "    The PyPI publish and the git tag are unaffected; create it\n"
-                f"    later with:  gh release create {tag} --notes \"...\""
-            )
+    print(f"\nCreating GitHub release {tag} ...")
+    try:
+        run(
+            ["gh", "release", "create", tag, "--title", tag,
+             "--notes", body, *dist_files]
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print(
+            f"  ! Could not create the GitHub release for {tag} "
+            "(is `gh` installed and authenticated?).\n"
+            "    The PyPI publish and the git tag are unaffected; create it\n"
+            f"    later with:  gh release create {tag} --notes \"...\""
+        )
 
-    print(f"\n✓ Published {new} to {target} and pushed {tag}.")
+    print(f"\n✓ Published {new} to PyPI and pushed {tag}.")
 
 
 if __name__ == "__main__":
