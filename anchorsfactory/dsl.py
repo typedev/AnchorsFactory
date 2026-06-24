@@ -15,8 +15,8 @@ from __future__ import annotations
 import re
 
 from .model import (
-    Frame, HAlign, VEdge, Run, Frac, FONT_METRICS,
-    X, XAbs, Y, YAbs, FontMetric, YSum, AnchorSpec, LabelRef, VarRef,
+    Frame, Axis, HAlign, VEdge, Run, Frac, FONT_METRICS,
+    Pos, Centroid, Abs, Y, FontMetric, Sum, Neg, AnchorSpec, LabelRef, VarRef,
     GlyphName, Unicode, UnicodeRange, Glob, Category, Op, Document,
 )
 
@@ -37,21 +37,69 @@ _OPS = {"=": Op.REPLACE, "+=": Op.ADD, "-=": Op.REMOVE}
 
 
 # --------------------------------------------------------------------------- #
-#  X / Y tokens
+#  Position tokens — one `frame.[run.]align[@at]` grammar for both axes
 # --------------------------------------------------------------------------- #
-def _parse_x(tok: str):
-    if tok.startswith("&"):                 # a &variable standing in for the whole X
-        return VarRef(tok)
+def _is_frame_token(tok: str) -> bool:
+    """Whether *tok* opens a frame position (``box.…`` / ``box*n/m`` / ``outline.…@…``)."""
+    head = tok.split("@", 1)[0].split("*", 1)[0].split(".", 1)[0]
+    return head in _FRAME
+
+
+def _make_pos(*args, **kwargs):
+    """Construct a :class:`Pos`, surfacing IR validation as a :class:`DSLError`."""
     try:
-        return XAbs(int(tok))
-    except ValueError:
-        pass
-    base, _, edge = tok.partition("@")
+        return Pos(*args, **kwargs)
+    except ValueError as e:
+        raise DSLError(str(e))
+
+
+def _parse_align(tok: str, axis: Axis, whole: str):
+    table = _HALIGN if axis is Axis.X else _EDGE
+    if tok not in table:
+        kind = "X" if axis is Axis.X else "Y"
+        raise DSLError(f"unknown {kind} align {tok!r} in {whole!r}")
+    return table[tok]
+
+
+def _parse_at(tok: str, axis: Axis):
+    """The ``@`` sample line — a bare own-edge sentinel, else a position on the
+    *other* axis (X.at is a height; Y.at is a column)."""
+    if axis is Axis.X:                       # a height
+        if tok in ("top", "bottom"):
+            return _EDGE[tok]                # the glyph's own extreme
+        return _parse_slot(tok, Axis.Y)
+    if tok in ("left", "right"):             # axis Y → a column; own side
+        return _HALIGN[tok]
+    return _parse_slot(tok, Axis.X)
+
+
+def _parse_pos(tok: str, axis: Axis):
+    """``frame.[run.]align[@at]`` | ``frame*n/m`` | ``outline.centroid`` →
+    :class:`Pos` / :class:`Centroid` for *axis*."""
+    base, sep, at_tok = tok.partition("@")
+    if "*" in base:                           # a fractional position: frame*n/m
+        framepart, _, fractok = base.partition("*")
+        if framepart not in _FRAME:
+            raise DSLError(f"unknown frame in {tok!r}")
+        if sep:
+            raise DSLError(f"a fractional position takes no '@', got {tok!r}")
+        if "/" not in fractok:
+            raise DSLError(f"fraction must be n/m in {tok!r}")
+        a, b = fractok.split("/", 1)
+        try:
+            frac = Frac(int(a), int(b))
+        except ValueError as e:
+            raise DSLError(f"bad fraction {fractok!r} in {tok!r}: {e}")
+        return _make_pos(_FRAME[framepart], frac, axis=axis)
     parts = base.split(".")
-    if parts[0] not in _FRAME:
-        raise DSLError(f"unknown X frame in {tok!r}")
-    frame = _FRAME[parts[0]]
+    frame = _FRAME[parts[0]]                  # caller guarantees parts[0] is a frame
     rest = parts[1:]
+    if rest == ["centroid"]:                  # the one global, axis-free position
+        if frame is not Frame.OUTLINE:
+            raise DSLError(f"centroid only applies to outline, got {tok!r}")
+        if sep:
+            raise DSLError(f"outline.centroid takes no '@', got {tok!r}")
+        return Centroid()
     run = None
     if len(rest) == 2:
         run_tok, align_tok = rest
@@ -65,20 +113,71 @@ def _parse_x(tok: str):
     elif len(rest) == 1:
         align_tok = rest[0]
     else:
-        raise DSLError(f"malformed X token {tok!r}")
-    if align_tok not in _HALIGN:
-        raise DSLError(f"unknown X align {align_tok!r} in {tok!r}")
-    at = None
-    if edge:
-        # @top/@bottom = the glyph's own extreme; otherwise a fixed sample height
-        at = _EDGE[edge] if edge in _EDGE else _parse_y(edge)
-    return X(frame, _HALIGN[align_tok], run=run, at=at)
+        raise DSLError(f"malformed position token {tok!r}")
+    at = _parse_at(at_tok, axis) if sep else None
+    return _make_pos(frame, _parse_align(align_tok, axis, tok), run=run, at=at, axis=axis)
+
+
+def _split_signed(expr: str):
+    """Split a sum into ``(sign, term)`` pairs on top-level ``+``/``-``.
+
+    On Y a ``-`` adjacent to a ``$glyph`` reference is read as a *subtraction*
+    (the glyph name ends at the operator); a glyph literally named with ``-``
+    can't be referenced inline — the missing-glyph fallback flags it at apply."""
+    out, sign, buf = [], 1, ""
+    for ch in expr:
+        if ch in "+-":
+            if buf == "":                    # a sign prefix, e.g. a leading '-'
+                if ch == "-":
+                    sign = -sign
+                continue
+            out.append((sign, buf))
+            buf, sign = "", (-1 if ch == "-" else 1)
+        else:
+            buf += ch
+    if buf:
+        out.append((sign, buf))
+    return out
+
+
+def _parse_sum(tok: str, axis: Axis):
+    terms = []
+    for sign, term in _split_signed(tok):
+        node = _parse_slot(term, axis)
+        terms.append(Neg(node) if sign < 0 else node)
+    return Sum(tuple(terms)) if len(terms) > 1 else terms[0]
+
+
+def _has_sum_op(tok: str) -> bool:
+    """A top-level ``+``/``-`` operator (not inside an ``@`` tail, not a leading
+    sign or a negative literal)."""
+    return "@" not in tok and ("+" in tok or "-" in tok[1:])
+
+
+def _parse_slot(tok: str, axis: Axis):
+    """Parse one axis slot of an anchor (or a variable value). Shared grammar:
+    ``&var`` | number | sum | ``frame.position`` | (Y only) metric / ``$glyph``."""
+    if _has_sum_op(tok):                      # base position + bias / summed heights
+        return _parse_sum(tok, axis)
+    if tok.startswith("&"):                  # a &variable standing in for the slot
+        return VarRef(tok)
+    try:                                     # bare number — polymorphic absolute
+        return Abs(int(tok))
+    except ValueError:
+        pass
+    if _is_frame_token(tok):                 # frame.position (both axes) incl centroid
+        return _parse_pos(tok, axis)
+    if axis is Axis.Y:                       # Y-only: metric / $glyph
+        return _parse_y_term(tok)
+    raise DSLError(f"unknown X position {tok!r}")
+
+
+def _parse_x(tok: str):
+    return _parse_slot(tok, Axis.X)
 
 
 def _parse_y(tok: str):
-    if "+" in tok:                          # a sum of terms: a+b+c
-        return YSum(tuple(_parse_y_term(t) for t in tok.split("+") if t))
-    return _parse_y_term(tok)
+    return _parse_slot(tok, Axis.Y)
 
 
 def _parse_y_term(tok: str):
@@ -97,7 +196,7 @@ def _parse_y_term(tok: str):
             except ValueError as e:
                 raise DSLError(f"bad fraction in {tok!r}: {e}")
         try:
-            return YAbs(int(tok))
+            return Abs(int(tok))
         except ValueError:
             raise DSLError(f"invalid Y position {tok!r}")
     body = tok[1:]
@@ -121,25 +220,23 @@ def _parse_var_def(tok: str):
     """Parse the value of a `&name = …` definition into an axis strategy.
 
     Axis-agnostic: the same grammar as an anchor's X or Y slot, but which axis a
-    variable *is* falls out of what it parses to (an `X`/frame token → X; a
-    metric / `$glyph` / sum → Y; a bare number stays polymorphic; a lone
-    `&other` aliases another variable). The slot it is later used in decides
-    compatibility — checked at apply time, not here.
+    variable *is* falls out of what it parses to (a frame token / centroid → X;
+    a metric / `$glyph` → Y; a bare number or centroid stays polymorphic; a sum
+    is typed by its terms; a lone `&other` aliases another variable). The slot it
+    is later used in decides compatibility — checked at apply time, not here.
     """
     if " " in tok:
         raise DSLError(f"variable value must be a single X or Y expression, got {tok!r}")
-    if "+" in tok:                          # a sum is always a Y expression
-        return _parse_y(tok)
     if tok.startswith("&"):                 # alias to another variable
         return VarRef(tok)
     try:
-        return XAbs(int(tok))               # bare number — usable on either axis
+        return Abs(int(tok))               # bare number — usable on either axis
     except ValueError:
         pass
     try:
-        return _parse_x(tok)                # frame.align[@…] → X
+        return _parse_x(tok)               # frame / centroid / X-sum → X
     except DSLError:
-        return _parse_y(tok)                # else metric / $glyph → Y (may raise)
+        return _parse_y(tok)               # else metric / $glyph / Y-sum → Y (may raise)
 
 
 def _parse_anchor(tok: str) -> AnchorSpec:

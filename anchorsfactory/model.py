@@ -45,10 +45,21 @@ from typing import Optional, Union
 
 
 class Frame(Enum):
-    """Reference system the X coordinate is measured against."""
-    ADVANCE = "width"    # the advance width: 0 .. glyph.width
-    BOX = "box"          # the bounding box: xMin .. xMax
-    OUTLINE = "outline"  # the actual contour, sampled at a height
+    """Reference system the coordinate is measured against."""
+    ADVANCE = "width"    # the advance width: 0 .. glyph.width (X only)
+    BOX = "box"          # the bounding box: xMin..xMax (X) / yMin..yMax (Y)
+    OUTLINE = "outline"  # the actual contour, sampled on a perpendicular scanline
+
+
+class Axis(Enum):
+    """Which axis a :class:`Pos` is measured along.
+
+    The same ``frame.position`` vocabulary works on both: on X an ``OUTLINE``
+    position samples a *horizontal* scanline (left/right/center crossings); on Y
+    a *vertical* one (bottom/middle/top crossings). ``ADVANCE`` is X-only.
+    """
+    X = "x"
+    Y = "y"
 
 
 class HAlign(Enum):
@@ -91,48 +102,110 @@ class Frac:
 
 
 # --------------------------------------------------------------------------- #
-#  Horizontal (X) strategies
+#  Frame-relative positions (both axes)
 # --------------------------------------------------------------------------- #
 @dataclass(frozen=True)
-class X:
-    """A computed horizontal position: ``frame.[run.]align[@at]``."""
+class Pos:
+    """A computed position along one axis: ``frame.[run.]align[@at]``.
+
+    The same node serves both axes (set ``axis``). The ``align`` slot holds a
+    :class:`HAlign` (left/center/right) on X, a :class:`VEdge`
+    (bottom/middle/top) on Y, or a :class:`Frac` — a proportional position along
+    the frame (``box.1/3``, ``width.2/3``), valid for BOX/ADVANCE only.
+
+    For ``OUTLINE`` the contour is sampled on a scanline perpendicular to the
+    axis (horizontal on X, vertical on Y). ``at`` overrides where that scanline
+    sits and is therefore a position on the *other* axis:
+
+    - on X: ``VEdge.TOP``/``BOTTOM`` (the glyph's own extreme) or a Y strategy
+      (FontMetric/YAbs/Y/YSum) — a fixed height, decoupled from the anchor's Y;
+    - on Y: ``HAlign.LEFT``/``RIGHT`` (the glyph's own side) or an X strategy
+      (Pos/XAbs) — a fixed column, decoupled from the anchor's X.
+
+    ``at=None`` samples at the anchor's other coordinate (see the resolver).
+    """
     frame: Frame
-    align: HAlign
+    align: Union[HAlign, VEdge, Frac]
     run: Optional[Union[Run, int]] = None   # OUTLINE only; None = whole envelope
-    # OUTLINE only — where to sample the contour for X: None = at the anchor's
-    # own Y; VEdge.TOP/BOTTOM = the glyph's own extreme; or a height strategy
-    # (FontMetric/YAbs/Y/YSum) to sample at a fixed height, decoupled from Y.
     at: object = None
+    axis: Axis = Axis.X                      # last field: legacy X(...) calls keep working
 
     def __post_init__(self):
+        if self.frame is Frame.ADVANCE and self.axis is Axis.Y:
+            raise ValueError("ADVANCE has no vertical analogue; use a font metric")
+        # align kind must match the axis (a Frac is allowed on either)
+        if not isinstance(self.align, Frac):
+            want = HAlign if self.axis is Axis.X else VEdge
+            if not isinstance(self.align, want):
+                raise ValueError(
+                    f"{self.axis.value}-axis align must be {want.__name__} or Frac, "
+                    f"not {type(self.align).__name__}")
         if self.frame is not Frame.OUTLINE:
             if self.run is not None:
                 raise ValueError(f"`run` only applies to OUTLINE, not {self.frame.value}")
             if self.at is not None:
                 raise ValueError(f"`@…` only applies to OUTLINE, not {self.frame.value}")
+        if isinstance(self.align, Frac) and self.frame is Frame.OUTLINE:
+            raise ValueError("a fractional position applies to BOX/ADVANCE, not OUTLINE")
         if isinstance(self.run, int) and not isinstance(self.run, bool) and self.run < 1:
             raise ValueError("integer `run` is 1-based and must be >= 1")
-        if self.at is VEdge.MIDDLE:
-            raise ValueError("`@middle` is meaningless; sample edge must be top or bottom")
+        if self.at is not None:
+            if self.axis is Axis.X:
+                if self.at is VEdge.MIDDLE:
+                    raise ValueError("`@middle` is meaningless; sample height must be top or bottom")
+                if isinstance(self.at, HAlign):
+                    raise ValueError("on X, `@…` is a height (top/bottom or a Y value), not an X edge")
+            else:
+                if self.at is HAlign.CENTER:
+                    raise ValueError("`@center` is meaningless; sample column must be left or right")
+                if isinstance(self.at, VEdge):
+                    raise ValueError("on Y, `@…` is a column (left/right or an X value), not a Y edge")
 
     def __str__(self):
+        if isinstance(self.align, Frac):        # frame*n/m (no run/@ — validated)
+            return f"{self.frame.value}*{self.align}"
         parts = [self.frame.value]
         if self.run is not None:
             parts.append(self.run.value if isinstance(self.run, Run) else str(self.run))
         parts.append(self.align.value)
         s = ".".join(parts)
         if self.at is not None:
-            s += "@" + (self.at.value if isinstance(self.at, VEdge) else str(self.at))
+            s += "@" + (self.at.value if isinstance(self.at, (VEdge, HAlign)) else str(self.at))
         return s
 
 
+# Back-compat alias: this node was once X-only and is widely imported as ``X``.
+X = Pos
+
+
 @dataclass(frozen=True)
-class XAbs:
-    """An absolute horizontal position in font units."""
-    x: float
+class Centroid:
+    """``outline.centroid`` — the area centre of mass of the glyph's outline.
+
+    A single 2-D point: on X it yields the centroid's x, on Y its y. Unlike the
+    scanline-sampled ``outline.left/right/center``, it is a *global* property of
+    the contour, so it is independent on both axes (no axis cycle) and takes no
+    ``run``/``@``. Polymorphic like a bare number — usable in either slot.
+    """
 
     def __str__(self):
-        return str(self.x)
+        return "outline.centroid"
+
+
+@dataclass(frozen=True)
+class Abs:
+    """An absolute position in font units. Axis-neutral: the same node serves
+    either slot (a bare number is polymorphic), so no coercion is needed when a
+    numeric variable crosses axes."""
+    value: float
+
+    def __str__(self):
+        return str(self.value)
+
+
+# Back-compat aliases: these were once two separate per-axis classes.
+XAbs = Abs
+YAbs = Abs
 
 
 # --------------------------------------------------------------------------- #
@@ -149,15 +222,6 @@ class Y:
             return f"${self.glyph}*{self.ref}"
         suffix = "" if self.ref is VEdge.TOP else f".{self.ref.value}"
         return f"${self.glyph}{suffix}"
-
-
-@dataclass(frozen=True)
-class YAbs:
-    """An absolute height in font units."""
-    y: float
-
-    def __str__(self):
-        return str(self.y)
 
 
 # Font-wide vertical metrics from font.info (plus the convenience `baseline`).
@@ -183,13 +247,36 @@ class FontMetric:
 
 
 @dataclass(frozen=True)
-class YSum:
-    """A height that is the sum of several Y terms (e.g. ``capHeight*1/2 +
-    xHeight*1/2`` for the midpoint between x-height and cap-height)."""
+class Sum:
+    """A position that is the sum of several terms, resolved on the slot's axis.
+
+    On Y a sum of heights (``capHeight*1/2+xHeight*1/2`` — the midpoint between
+    x-height and cap-height); on X a base position plus a constant/variable bias
+    (``outline.centroid-25`` — the optical centre nudged toward a slanted mark's
+    foot). A negative numeric term renders with ``-`` (so it round-trips)."""
     terms: tuple
 
     def __str__(self):
-        return "+".join(str(t) for t in self.terms)
+        out = str(self.terms[0])
+        for t in self.terms[1:]:
+            s = str(t)
+            out += s if s.startswith("-") else "+" + s
+        return out
+
+
+# Back-compat alias: sums were once a Y-only construct.
+YSum = Sum
+
+
+@dataclass(frozen=True)
+class Neg:
+    """A negated term inside a :class:`Sum` (the subtracted operand). Resolves to
+    minus the term's value; renders with a leading ``-`` so the sum round-trips
+    (``ascender-descender`` → ``Sum((FontMetric('ascender'), Neg(FontMetric('descender'))))``)."""
+    term: object
+
+    def __str__(self):
+        return f"-{self.term}"
 
 
 @dataclass(frozen=True)
@@ -210,8 +297,8 @@ class VarRef:
         return self.name
 
 
-XStrategy = Union[X, XAbs, VarRef]
-YStrategy = Union[Y, YAbs, FontMetric, YSum, VarRef]
+XStrategy = Union[Pos, Centroid, Abs, Sum, VarRef]
+YStrategy = Union[Pos, Centroid, Y, Abs, FontMetric, Sum, VarRef]
 
 
 # --------------------------------------------------------------------------- #

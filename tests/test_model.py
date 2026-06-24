@@ -3,8 +3,8 @@
 import pytest
 
 from anchorsfactory.model import (
-    Frame, HAlign, VEdge, Run, Frac,
-    X, XAbs, Y, YAbs, AnchorSpec,
+    Frame, HAlign, VEdge, Run, Frac, Axis,
+    X, Pos, Centroid, Abs, XAbs, YAbs, Y, FontMetric, Sum, YSum, AnchorSpec,
 )
 
 
@@ -71,3 +71,83 @@ def test_frac_denominator_nonzero():
 def test_specs_are_hashable():
     # frozen dataclasses → usable as dict keys / set members
     {X(Frame.BOX, HAlign.LEFT), Y("H"), AnchorSpec("top", XAbs(0), YAbs(0))}
+
+
+# --- unified Pos: Y-axis positions, fractions, centroid -------------------- #
+def test_x_is_pos_alias():
+    assert X is Pos
+
+
+@pytest.mark.parametrize("spec, token", [
+    (Pos(Frame.BOX, VEdge.TOP, axis=Axis.Y), "box.top"),
+    (Pos(Frame.BOX, VEdge.BOTTOM, axis=Axis.Y), "box.bottom"),
+    (Pos(Frame.BOX, VEdge.MIDDLE, axis=Axis.Y), "box.middle"),
+    (Pos(Frame.OUTLINE, VEdge.MIDDLE, axis=Axis.Y), "outline.middle"),
+    (Pos(Frame.OUTLINE, VEdge.MIDDLE, run=Run.FIRST, axis=Axis.Y), "outline.first.middle"),
+    (Pos(Frame.OUTLINE, VEdge.MIDDLE, run=1, axis=Axis.Y), "outline.1.middle"),
+    # @-decoupling on Y is a column (left/right or an X value)
+    (Pos(Frame.OUTLINE, VEdge.MIDDLE, at=HAlign.RIGHT, axis=Axis.Y), "outline.middle@right"),
+    (Pos(Frame.OUTLINE, VEdge.MIDDLE, at=XAbs(40), axis=Axis.Y), "outline.middle@40"),
+])
+def test_y_pos_rendering(spec, token):
+    assert str(spec) == token
+
+
+@pytest.mark.parametrize("spec, token", [
+    (Pos(Frame.ADVANCE, Frac(1, 3)), "width*1/3"),
+    (Pos(Frame.BOX, Frac(2, 3)), "box*2/3"),
+    (Pos(Frame.BOX, Frac(1, 4), axis=Axis.Y), "box*1/4"),
+])
+def test_fractional_rendering(spec, token):
+    assert str(spec) == token
+
+
+def test_centroid_rendering():
+    assert str(Centroid()) == "outline.centroid"
+    # polymorphic: legal in either slot
+    assert str(AnchorSpec("c", Centroid(), Centroid())) == "c (outline.centroid outline.centroid)"
+
+
+def test_abs_is_unified_and_polymorphic():
+    assert XAbs is Abs and YAbs is Abs        # one class, two legacy names
+    assert XAbs(40) == YAbs(40)               # no longer axis-typed
+    assert str(Abs(-25)) == "-25"
+
+
+def test_sum_rendering():
+    assert YSum is Sum
+    assert str(Sum((FontMetric("capHeight", Frac(1, 2)),
+                    FontMetric("xHeight", Frac(1, 2))))) == "capHeight*1/2+xHeight*1/2"
+    # a negative numeric term renders with '-', not '+-'
+    assert str(Sum((Centroid(), Abs(-25)))) == "outline.centroid-25"
+    assert str(Sum((Pos(Frame.BOX, HAlign.CENTER), Abs(20)))) == "box.center+20"
+
+
+# --- unified Pos: validation ----------------------------------------------- #
+def test_advance_has_no_vertical():
+    with pytest.raises(ValueError):
+        Pos(Frame.ADVANCE, VEdge.TOP, axis=Axis.Y)
+
+
+def test_align_kind_must_match_axis():
+    with pytest.raises(ValueError):
+        Pos(Frame.BOX, HAlign.CENTER, axis=Axis.Y)   # HAlign on Y
+    with pytest.raises(ValueError):
+        Pos(Frame.BOX, VEdge.TOP, axis=Axis.X)       # VEdge on X
+
+
+def test_fraction_not_on_outline():
+    with pytest.raises(ValueError):
+        Pos(Frame.OUTLINE, Frac(1, 2))
+
+
+def test_y_at_must_be_a_column():
+    with pytest.raises(ValueError):
+        Pos(Frame.OUTLINE, VEdge.MIDDLE, at=HAlign.CENTER, axis=Axis.Y)  # @center meaningless
+    with pytest.raises(ValueError):
+        Pos(Frame.OUTLINE, VEdge.MIDDLE, at=VEdge.TOP, axis=Axis.Y)      # Y edge, not a column
+
+
+def test_x_at_must_be_a_height():
+    with pytest.raises(ValueError):
+        Pos(Frame.OUTLINE, HAlign.CENTER, at=HAlign.LEFT)               # X edge, not a height

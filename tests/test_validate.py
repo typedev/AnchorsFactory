@@ -29,6 +29,25 @@ def test_validate_reports_undefined_label_in_label_body():
     assert any("@missing" in p for p in validate_document(doc))
 
 
+# --- axis cycle: both axes outline-sampled with no @-fix ------------------- #
+def test_validate_reports_axis_cycle():
+    doc = parse_dsl(["A = a (outline.right outline.middle)"])
+    problems = validate_document(doc)
+    assert problems and "both axes" in problems[0]
+
+
+def test_validate_axis_cycle_cleared_by_at():
+    # fixing one axis's scanline with @ resolves the dependency
+    assert validate_document(parse_dsl(["A = a (outline.right@xHeight outline.middle)"])) == []
+    assert validate_document(parse_dsl(["A = a (outline.right outline.middle@left)"])) == []
+
+
+def test_validate_axis_cycle_through_variable():
+    # the cycle is detected after &-substitution, too
+    doc = parse_dsl(["&r = outline.right", "A = a (&r outline.middle)"])
+    assert any("both axes" in p for p in validate_document(doc))
+
+
 # --- graceful fallback for a missing reference glyph ----------------------- #
 _UFOS = sorted(Path("ufo-test").glob("*.ufo"))
 

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from .model import (
     Frame, HAlign, VEdge, Frac,
-    X, XAbs, Y, YAbs, AnchorSpec, LabelRef,
+    X, Abs, Y, AnchorSpec, LabelRef,
     GlyphName, Unicode, Op, Document,
 )
 
@@ -45,7 +45,7 @@ def _parse_align(tok: str):
     if tok in _ALIGN:
         return _ALIGN[tok]
     try:
-        return XAbs(int(tok))
+        return Abs(int(tok))
     except ValueError:
         raise ParseError(f"unknown horizontal align {tok!r}")
 
@@ -53,7 +53,7 @@ def _parse_align(tok: str):
 def _parse_vert(tok: str):
     if not tok.startswith("$"):
         try:
-            return YAbs(int(tok))
+            return Abs(int(tok))
         except ValueError:
             raise ParseError(f"invalid vertical position {tok!r}")
     body = tok[1:]

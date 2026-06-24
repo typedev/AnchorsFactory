@@ -11,8 +11,13 @@ from pathlib import Path
 
 import pytest
 
-from anchorsfactory.geometry import resolve_x, resolve_y, _crossings, _spans
-from anchorsfactory.model import Frame, HAlign, VEdge, Run, Frac, X, Y, FontMetric, YSum
+from anchorsfactory.geometry import (
+    resolve, resolve_x, resolve_y, _crossings, _spans, _centroid, AxisCycleError,
+)
+from anchorsfactory.model import (
+    Frame, Axis, HAlign, VEdge, Run, Frac,
+    X, Pos, Centroid, Abs, Y, FontMetric, Sum, YSum, AnchorSpec,
+)
 
 fontParts_world = pytest.importorskip("fontParts.world")
 
@@ -119,6 +124,106 @@ def test_font_metric_heights(font):
 def test_y_sum_is_additive(font):
     mid = YSum((FontMetric("capHeight", Frac(1, 2)), FontMetric("xHeight", Frac(1, 2))))
     assert resolve_y(font, mid) == pytest.approx((font.info.capHeight + font.info.xHeight) / 2)
+
+
+# --- unified axes: Y-side frame positions ---------------------------------- #
+def _xy(font, g, x, y):
+    return resolve(font, g, AnchorSpec("a", x, y))
+
+
+def test_box_position_on_both_axes(font):
+    """box.center / box.middle resolve to the bbox centre on each axis."""
+    g = _has(font, "H")
+    xMin, yMin, xMax, yMax = g.bounds
+    x, y = _xy(font, g, X(Frame.BOX, HAlign.CENTER),
+               Pos(Frame.BOX, VEdge.MIDDLE, axis=Axis.Y))
+    assert x == pytest.approx((xMin + xMax) / 2)
+    assert y == pytest.approx((yMin + yMax) / 2)
+    # box.top / box.bottom are the bbox extremes (subsumes the old $self need)
+    _, top = _xy(font, g, X(Frame.BOX, HAlign.LEFT), Pos(Frame.BOX, VEdge.TOP, axis=Axis.Y))
+    _, bot = _xy(font, g, X(Frame.BOX, HAlign.LEFT), Pos(Frame.BOX, VEdge.BOTTOM, axis=Axis.Y))
+    assert (bot, top) == pytest.approx((yMin, yMax))
+
+
+def test_outline_vertical_scanline(font):
+    """outline.middle on Y is the vertical-span centre at the anchor's column."""
+    g = _has(font, "H")
+    xMin, _, xMax, _ = g.bounds
+    col = (xMin + xMax) / 2
+    ys = _crossings(g, col, Axis.Y)
+    if not ys:
+        pytest.skip("center column does not cross H here")
+    # X is a fixed column (box.center), Y samples the vertical scanline there
+    _, y = _xy(font, g, X(Frame.BOX, HAlign.CENTER),
+               Pos(Frame.OUTLINE, VEdge.MIDDLE, axis=Axis.Y))
+    assert y == pytest.approx((ys[0] + ys[-1]) / 2)
+
+
+# --- unified axes: fractional positions ------------------------------------ #
+def test_fractional_box_x(font):
+    g = _has(font, "H")
+    xMin, _, xMax, _ = g.bounds
+    assert resolve_x(font, g, Pos(Frame.BOX, Frac(1, 2)), 0) == pytest.approx((xMin + xMax) / 2)
+    assert resolve_x(font, g, Pos(Frame.BOX, Frac(1, 4)), 0) == pytest.approx(xMin + (xMax - xMin) / 4)
+
+
+def test_fractional_advance_x(font):
+    g = _has(font, "H")
+    assert resolve_x(font, g, Pos(Frame.ADVANCE, Frac(1, 3)), 0) == pytest.approx(g.width / 3)
+
+
+# --- centroid -------------------------------------------------------------- #
+def test_centroid_is_inside_bounds(font):
+    g = _has(font, "a")
+    xMin, yMin, xMax, yMax = g.bounds
+    cx, cy = _centroid(g)
+    assert xMin <= cx <= xMax and yMin <= cy <= yMax
+    # the 2-D point is what an anchor with centroid on both axes resolves to
+    x, y = _xy(font, g, Centroid(), Centroid())
+    assert (x, y) == pytest.approx((cx, cy))
+
+
+# --- X arithmetic: base position + bias (acute/grave) ---------------------- #
+def test_x_sum_biases_the_centroid(font):
+    g = _has(font, "a")
+    cx, _ = _centroid(g)
+    cap = FontMetric("capHeight")
+    left = resolve(font, g, AnchorSpec("t", Sum((Centroid(), Abs(-25))), cap))
+    right = resolve(font, g, AnchorSpec("t", Sum((Centroid(), Abs(25))), cap))
+    assert left[0] == pytest.approx(cx - 25)
+    assert right[0] == pytest.approx(cx + 25)
+    assert right[0] - left[0] == pytest.approx(50)
+
+
+def test_x_sum_keeps_outline_dependency(font):
+    """A sum with an outline term still samples at the anchor's Y, then biases."""
+    g = _has(font, "H")
+    y = g.bounds[3] * 0.4
+    xs = _crossings(g, y)
+    plain = resolve_x(font, g, X(Frame.OUTLINE, HAlign.RIGHT), y)
+    biased = resolve_x(font, g, Sum((X(Frame.OUTLINE, HAlign.RIGHT), Abs(-10))), y)
+    assert plain == pytest.approx(max(xs))
+    assert biased == pytest.approx(plain - 10)
+
+
+# --- axis cycle ------------------------------------------------------------ #
+def test_both_outline_no_at_is_a_cycle(font):
+    g = _has(font, "H")
+    spec = AnchorSpec("a", X(Frame.OUTLINE, HAlign.RIGHT),
+                      Pos(Frame.OUTLINE, VEdge.MIDDLE, axis=Axis.Y))
+    with pytest.raises(AxisCycleError):
+        resolve(font, g, spec)
+
+
+def test_at_breaks_the_cycle(font):
+    """Fixing one axis's scanline with @ makes the pair resolvable."""
+    g = _has(font, "H")
+    _, yMax = g.bounds[1], g.bounds[3]
+    spec = AnchorSpec("a",
+                      X(Frame.OUTLINE, HAlign.RIGHT, at=FontMetric("capHeight", Frac(1, 2))),
+                      Pos(Frame.OUTLINE, VEdge.MIDDLE, axis=Axis.Y))
+    x, y = resolve(font, g, spec)         # X fixed at a height → Y samples in that column
+    assert x == pytest.approx(x) and y == pytest.approx(y)   # resolves without raising
 
 
 def test_outline_sample_height_is_decoupled_from_y(font):

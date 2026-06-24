@@ -16,10 +16,10 @@ import logging
 import unicodedata
 from dataclasses import dataclass, replace
 
-from .geometry import resolve
+from .geometry import resolve, _dependent
 from .model import (
     Document, Op, LabelRef, VarRef, resolve_suffixes,
-    X, XAbs, Y, YAbs, FontMetric, YSum, VEdge,
+    Axis, Pos, Centroid, Abs, Y, FontMetric, Sum, Neg, VEdge, HAlign,
     GlyphName, Unicode, UnicodeRange, Glob, Category,
 )
 
@@ -108,30 +108,42 @@ def _expand(node, variables, seen):
 def _resolve_x(node, variables, seen=()):
     """Substitute variables in an X strategy, validating it resolves to an X.
 
-    A variable holding a bare number is polymorphic (coerced to ``XAbs``); one
-    holding a Y expression used where X is required is an error.
+    A bare number (:class:`Abs`) and the area :class:`Centroid` are polymorphic;
+    a Y expression used where X is required is an error.
     """
     node, seen = _expand(node, variables, seen)
-    if isinstance(node, X):
+    if isinstance(node, (Abs, Centroid)):       # polymorphic — fine on either axis
+        return node
+    if isinstance(node, Neg):
+        return Neg(_resolve_x(node.term, variables, seen))
+    if isinstance(node, Sum):
+        return Sum(tuple(_resolve_x(t, variables, seen) for t in node.terms))
+    if isinstance(node, Pos):
+        if node.axis is not Axis.X:
+            raise ValueError(f"variable holds a Y expression ({node}) but X is required")
         if node.at is not None and not isinstance(node.at, VEdge):
             node = replace(node, at=_resolve_y(node.at, variables, seen))
         return node
-    if isinstance(node, XAbs):
-        return node
-    if isinstance(node, YAbs):                  # a number — fine on either axis
-        return XAbs(node.y)
     raise ValueError(f"variable holds a Y expression ({node}) but X is required")
 
 
 def _resolve_y(node, variables, seen=()):
     """Substitute variables in a Y strategy, validating it resolves to a Y."""
     node, seen = _expand(node, variables, seen)
-    if isinstance(node, YSum):
-        return YSum(tuple(_resolve_y(t, variables, seen) for t in node.terms))
-    if isinstance(node, (Y, FontMetric, YAbs)):
+    if isinstance(node, (Abs, Centroid)):       # polymorphic — fine on either axis
         return node
-    if isinstance(node, XAbs):                  # a number — fine on either axis
-        return YAbs(node.x)
+    if isinstance(node, Neg):
+        return Neg(_resolve_y(node.term, variables, seen))
+    if isinstance(node, Pos):
+        if node.axis is not Axis.Y:
+            raise ValueError(f"variable holds an X expression ({node}) but Y is required")
+        if node.at is not None and not isinstance(node.at, HAlign):
+            node = replace(node, at=_resolve_x(node.at, variables, seen))
+        return node
+    if isinstance(node, Sum):
+        return Sum(tuple(_resolve_y(t, variables, seen) for t in node.terms))
+    if isinstance(node, (Y, FontMetric)):
+        return node
     raise ValueError(f"variable holds an X expression ({node}) but Y is required")
 
 
@@ -153,10 +165,12 @@ def _check_var_node(node, variables, seen):
         if node.name not in variables:
             raise ValueError(f"undefined variable {node.name}")
         _check_var_node(variables[node.name], variables, seen + (node.name,))
-    elif isinstance(node, X):
-        if node.at is not None and not isinstance(node.at, VEdge):
+    elif isinstance(node, Pos):
+        if node.at is not None and not isinstance(node.at, (VEdge, HAlign)):
             _check_var_node(node.at, variables, seen)
-    elif isinstance(node, YSum):
+    elif isinstance(node, Neg):
+        _check_var_node(node.term, variables, seen)
+    elif isinstance(node, Sum):
         for term in node.terms:
             _check_var_node(term, variables, seen)
 
@@ -182,7 +196,8 @@ def validate_document(doc: Document) -> list[str]:
     instead of at apply time glyph by glyph: typo'd label names; undefined or
     cyclically-defined variables (incl. ones only reachable after !extends
     merging); and a variable used on the wrong axis (an X expression where Y is
-    required, or vice versa).
+    required, or vice versa); and an anchor whose X and Y both sample the
+    outline with no ``@`` fix (a circular axis dependency).
     """
     problems = []
     for lname, items in doc.labels.items():
@@ -208,7 +223,11 @@ def validate_document(doc: Document) -> list[str]:
                 continue
             try:
                 for spec in _resolve_items(items, doc.labels):
-                    _resolve_vars_in_spec(spec, doc.variables)
+                    rspec = _resolve_vars_in_spec(spec, doc.variables)
+                    if _dependent(rspec.x) and _dependent(rspec.y):
+                        problems.append(
+                            f"rule {sel}: anchor {rspec.name!r} samples both axes on the "
+                            f"outline with no @-fix ({rspec.x} {rspec.y}); add @ to one")
             except ValueError as e:
                 problems.append(f"rule {sel}: {e}")
     return problems

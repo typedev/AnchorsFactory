@@ -5,8 +5,8 @@ import pytest
 from anchorsfactory.dsl import parse_dsl, DSLError
 from anchorsfactory.apply import accumulate
 from anchorsfactory.model import (
-    Frame, HAlign, VEdge, Run, Frac,
-    X, XAbs, Y, YAbs, FontMetric, YSum, AnchorSpec, LabelRef,
+    Frame, Axis, HAlign, VEdge, Run, Frac,
+    X, Pos, Centroid, Abs, XAbs, Y, YAbs, FontMetric, Sum, YSum, Neg, AnchorSpec, LabelRef, VarRef,
     GlyphName, Unicode, UnicodeRange, Glob, Category, Op,
     resolve_suffixes, SuffixSpec,
 )
@@ -44,6 +44,77 @@ def test_x_sample_at_height(tok, x):
     spec = _one(parse_dsl([f"@x = a ({tok} 0)"]))
     assert spec.x == x
     assert str(spec.x) == tok          # round-trips
+
+
+# --- unified axes / fractions / centroid (new surface forms) --------------- #
+@pytest.mark.parametrize("xtok, ytok, x, y", [
+    # Y-side frame positions: box.top subsumes the old "$self" need
+    ("box.center", "box.top", X(Frame.BOX, HAlign.CENTER),
+     Pos(Frame.BOX, VEdge.TOP, axis=Axis.Y)),
+    ("box.center", "box.middle", X(Frame.BOX, HAlign.CENTER),
+     Pos(Frame.BOX, VEdge.MIDDLE, axis=Axis.Y)),
+    ("box.center", "outline.first.middle", X(Frame.BOX, HAlign.CENTER),
+     Pos(Frame.OUTLINE, VEdge.MIDDLE, run=Run.FIRST, axis=Axis.Y)),
+    # fractional positions on either axis (the '*' fraction, unified with cap*2/3)
+    ("width*1/3", "capHeight", Pos(Frame.ADVANCE, Frac(1, 3)), FontMetric("capHeight")),
+    ("box*2/3", "box*1/4", Pos(Frame.BOX, Frac(2, 3)),
+     Pos(Frame.BOX, Frac(1, 4), axis=Axis.Y)),
+    # centroid is polymorphic — legal in both slots
+    ("outline.centroid", "outline.centroid", Centroid(), Centroid()),
+    # @ on Y is a column: an own-side edge or a fixed X value
+    ("box.center", "outline.middle@right", X(Frame.BOX, HAlign.CENTER),
+     Pos(Frame.OUTLINE, VEdge.MIDDLE, at=HAlign.RIGHT, axis=Axis.Y)),
+    ("box.center", "outline.middle@40", X(Frame.BOX, HAlign.CENTER),
+     Pos(Frame.OUTLINE, VEdge.MIDDLE, at=XAbs(40), axis=Axis.Y)),
+])
+def test_unified_tokens(xtok, ytok, x, y):
+    spec = _one(parse_dsl([f"@x = a ({xtok} {ytok})"]))
+    assert spec.x == x and spec.y == y
+    # the IR doubles as the serializer → tokens round-trip
+    assert str(spec.x) == xtok and str(spec.y) == ytok
+
+
+@pytest.mark.parametrize("line", [
+    "@x = a (outline.centroid@top 0)",        # centroid takes no @
+    "@x = a (box.center capHeight@right)",     # @ only on outline
+    "@x = a (box.top 0)",                      # Y-edge align in the X slot
+    "@x = a (box.center box.center)",          # X-align in the Y slot
+])
+def test_unified_token_errors(line):
+    with pytest.raises(DSLError):
+        parse_dsl([line])
+
+
+# --- arithmetic (Sum): base position + bias, subtraction via Neg ------------ #
+@pytest.mark.parametrize("xtok, x", [
+    ("outline.centroid-25", Sum((Centroid(), Neg(Abs(25))))),   # acute: nudge left
+    ("outline.centroid+25", Sum((Centroid(), Abs(25)))),        # grave: nudge right
+    ("box.center+20", Sum((Pos(Frame.BOX, HAlign.CENTER), Abs(20)))),
+    ("outline.centroid+&shift", Sum((Centroid(), VarRef("&shift")))),
+    # any term may be subtracted (a position too): box width at this height
+    ("box.right-box.left", Sum((Pos(Frame.BOX, HAlign.RIGHT),
+                                Neg(Pos(Frame.BOX, HAlign.LEFT))))),
+])
+def test_x_sum_tokens(xtok, x):
+    spec = _one(parse_dsl([f"@x = a ({xtok} capHeight)"]))
+    assert spec.x == x
+    assert str(spec.x) == xtok          # subtracted term renders with '-', round-trips
+
+
+def test_y_subtraction_is_allowed():
+    # 2b: '-' now works on Y too (a metric minus a metric / a constant)
+    spec = _one(parse_dsl(["@x = a (box.center ascender-descender)"]))
+    assert spec.y == Sum((FontMetric("ascender"), Neg(FontMetric("descender"))))
+    assert str(spec.y) == "ascender-descender"
+    assert _one(parse_dsl(["@x = a (box.center capHeight-100)"])).y == \
+        Sum((FontMetric("capHeight"), Neg(Abs(100))))
+
+
+def test_y_sum_allows_frame_term():
+    # the same Sum works on Y (a frame height plus an offset)
+    spec = _one(parse_dsl(["@x = a (box.center box.top+50)"]))
+    assert spec.y == Sum((Pos(Frame.BOX, VEdge.TOP, axis=Axis.Y), Abs(50)))
+    assert str(spec.y) == "box.top+50"
 
 
 def test_y_sum():
