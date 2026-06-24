@@ -38,12 +38,14 @@ By default the source UFO is never overwritten — output goes to
 
 ## The rule language
 
-Rules are stacked: define reusable **labels**, then **mark** glyphs with them,
-mixing labels and one-off anchors. An anchor is a name and a parenthesised
-`X Y` placement.
+Rules are stacked: define reusable **labels** (`@`, a list of anchors) and
+**variables** (`&`, one axis's value), then **mark** glyphs with them, mixing
+them with one-off anchors. An anchor is a name and a parenthesised `X Y`
+placement.
 
 ```
-# a label
+# a variable (reuse one axis value) and a label (reuse a set of anchors)
+&mid = capHeight*1/2+xHeight*1/2
 @ = top (box.center capHeight), bottom (box.center 0)
 
 # apply it, by name / unicode / range
@@ -58,6 +60,8 @@ U+0413 += desc (outline.right 0)   # Г also gets a descender anchor
   reference glyph (`$H`, `$H.bottom`, `$H*5/6`).
 - Selectors: name, `U+XXXX`, range `U+A..U+B`, glob `*.sc`, category `{Lu}`.
 - `=` replace · `+=` add · `-=` remove; `!extends default` inherits a ruleset.
+- `&name` names a reusable X/Y value; `@name` a reusable set of anchors. Both
+  are late-bound, so an extending file can override either.
 
 Full reference: **[docs/anchor-rules.md](docs/anchor-rules.md)**.
 

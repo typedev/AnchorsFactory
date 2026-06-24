@@ -14,11 +14,12 @@ from __future__ import annotations
 import fnmatch
 import logging
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from .geometry import resolve
 from .model import (
-    Document, Op, LabelRef, resolve_suffixes,
+    Document, Op, LabelRef, VarRef, resolve_suffixes,
+    X, XAbs, Y, YAbs, FontMetric, YSum, VEdge,
     GlyphName, Unicode, UnicodeRange, Glob, Category,
 )
 
@@ -83,6 +84,83 @@ def _remove_targets(items, labels):
     return names
 
 
+# --------------------------------------------------------------------------- #
+#  Variable (&name) substitution — late, like labels, but per axis.
+# --------------------------------------------------------------------------- #
+def _expand(node, variables, seen):
+    """Follow a chain of leading VarRefs to the underlying strategy node.
+
+    Returns ``(node, seen)`` where *node* is no longer a VarRef and *seen* lists
+    the variables crossed (so a caller recursing into the node's own parts keeps
+    detecting cycles). Raises on an undefined variable or a reference cycle.
+    """
+    while isinstance(node, VarRef):
+        if node.name in seen:
+            chain = " → ".join(seen + (node.name,))
+            raise ValueError(f"cyclic variable reference: {chain}")
+        if node.name not in variables:
+            raise ValueError(f"undefined variable {node.name}")
+        seen = seen + (node.name,)
+        node = variables[node.name]
+    return node, seen
+
+
+def _resolve_x(node, variables, seen=()):
+    """Substitute variables in an X strategy, validating it resolves to an X.
+
+    A variable holding a bare number is polymorphic (coerced to ``XAbs``); one
+    holding a Y expression used where X is required is an error.
+    """
+    node, seen = _expand(node, variables, seen)
+    if isinstance(node, X):
+        if node.at is not None and not isinstance(node.at, VEdge):
+            node = replace(node, at=_resolve_y(node.at, variables, seen))
+        return node
+    if isinstance(node, XAbs):
+        return node
+    if isinstance(node, YAbs):                  # a number — fine on either axis
+        return XAbs(node.y)
+    raise ValueError(f"variable holds a Y expression ({node}) but X is required")
+
+
+def _resolve_y(node, variables, seen=()):
+    """Substitute variables in a Y strategy, validating it resolves to a Y."""
+    node, seen = _expand(node, variables, seen)
+    if isinstance(node, YSum):
+        return YSum(tuple(_resolve_y(t, variables, seen) for t in node.terms))
+    if isinstance(node, (Y, FontMetric, YAbs)):
+        return node
+    if isinstance(node, XAbs):                  # a number — fine on either axis
+        return YAbs(node.x)
+    raise ValueError(f"variable holds an X expression ({node}) but Y is required")
+
+
+def _resolve_vars_in_spec(spec, variables):
+    """Return *spec* with every VarRef in its X and Y substituted out."""
+    return replace(spec, x=_resolve_x(spec.x, variables), y=_resolve_y(spec.y, variables))
+
+
+def _check_var_node(node, variables, seen):
+    """Walk a strategy node following VarRefs, raising on undefined/cycle.
+
+    Axis-agnostic structural check (used for variable definitions, incl. unused
+    ones); axis compatibility is enforced separately by :func:`_resolve_vars_in_spec`.
+    """
+    if isinstance(node, VarRef):
+        if node.name in seen:
+            chain = " → ".join(seen + (node.name,))
+            raise ValueError(f"cyclic variable reference: {chain}")
+        if node.name not in variables:
+            raise ValueError(f"undefined variable {node.name}")
+        _check_var_node(variables[node.name], variables, seen + (node.name,))
+    elif isinstance(node, X):
+        if node.at is not None and not isinstance(node.at, VEdge):
+            _check_var_node(node.at, variables, seen)
+    elif isinstance(node, YSum):
+        for term in node.terms:
+            _check_var_node(term, variables, seen)
+
+
 def _matches(selector, name: str, unicodes) -> bool:
     if isinstance(selector, GlyphName):
         return name == selector.name
@@ -98,10 +176,13 @@ def _matches(selector, name: str, unicodes) -> bool:
 
 
 def validate_document(doc: Document) -> list[str]:
-    """Pre-flight check (font-independent): every @label reference resolves.
+    """Pre-flight check (font-independent): every @label and &variable resolves.
 
-    Returns a list of human-readable problems (empty = ok). Catches typo'd
-    label names up front instead of at apply time, glyph by glyph.
+    Returns a list of human-readable problems (empty = ok). Catches, up front
+    instead of at apply time glyph by glyph: typo'd label names; undefined or
+    cyclically-defined variables (incl. ones only reachable after !extends
+    merging); and a variable used on the wrong axis (an X expression where Y is
+    required, or vice versa).
     """
     problems = []
     for lname, items in doc.labels.items():
@@ -112,6 +193,24 @@ def validate_document(doc: Document) -> list[str]:
         for it in items:
             if isinstance(it, LabelRef) and it.name not in doc.labels:
                 problems.append(f"rule {sel}: undefined label {it.name}")
+    # Variable definitions: undefined refs / cycles, even if never used.
+    for vname, value in doc.variables.items():
+        try:
+            _check_var_node(value, doc.variables, (vname,))
+        except ValueError as e:
+            problems.append(f"variable {vname}: {e}")
+    # Variable usage in rules: axis compatibility (plus undefined/cycle in
+    # anchors that name a variable directly). Skipped if labels are already
+    # broken, since expanding them would just re-raise what we reported above.
+    if not problems:
+        for sel, op, items in doc.rules:
+            if op is Op.REMOVE:
+                continue
+            try:
+                for spec in _resolve_items(items, doc.labels):
+                    _resolve_vars_in_spec(spec, doc.variables)
+            except ValueError as e:
+                problems.append(f"rule {sel}: {e}")
     return problems
 
 
@@ -130,6 +229,8 @@ def accumulate(doc: Document, name: str, unicodes) -> list:
             acc = [s for s in acc if s.name not in drop]
         else:
             specs = _resolve_items(items, doc.labels)
+            if doc.variables:
+                specs = [_resolve_vars_in_spec(s, doc.variables) for s in specs]
             acc = specs if op is Op.REPLACE else acc + specs
     return acc
 

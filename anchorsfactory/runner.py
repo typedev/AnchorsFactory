@@ -26,9 +26,10 @@ ANCHORED_SUFFIX = "_anchored.ufo"
 
 
 def _merge(base: Document, child: Document) -> Document:
-    """Layer *child* on top of *base*: child labels win, rules concatenate."""
+    """Layer *child* on top of *base*: child labels/variables win, rules concatenate."""
     return Document(
         labels={**base.labels, **child.labels},
+        variables={**base.variables, **child.variables},
         rules=base.rules + child.rules,
         shift_x=child.shift_x or base.shift_x,
         # replay base directives then the child's: `=` in the child resets, while

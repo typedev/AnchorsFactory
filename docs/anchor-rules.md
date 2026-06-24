@@ -19,7 +19,8 @@ Sigils at a glance:
 
 | sigil | meaning |
 |-------|---------|
-| `@name` | label — define or reference |
+| `@name` | label — define or reference (a list of anchors) |
+| `&name` | variable — define or reference (one axis's value) |
 | `!name` | directive (pragma) |
 | `#` | comment |
 | `name ( X Y )` | an anchor placement |
@@ -105,6 +106,37 @@ A = @, @ogonek
 L = @bot, top (box.left capHeight), caron (box.right capHeight)
 t = @, barlow (width.center xHeight*2/3)
 ```
+
+## Variables
+
+A variable names a reusable **axis expression** — anything you could write in an
+anchor's X or Y slot — so a value used in many places is written once:
+
+```
+&mid  = capHeight*1/2+xHeight*1/2     # a Y expression
+&inkc = outline.center@xHeight        # an X expression
+
+@bar = bar (width.center &mid)
+O    = top (box.center &inkc), bottom (box.center &mid)
+```
+
+Where a label (`@`) stands for a *list of anchors*, a variable (`&`) stands for
+*one axis's value*. Define one with `&name = <expr>`; the value parses exactly
+like an X or Y slot.
+
+- **Typed by axis.** Which axis a variable *is* falls out of its expression
+  (`box.center` → X, `capHeight*…` → Y). Using an X variable where Y is expected
+  (or vice versa) is an error, reported up front. A **bare number is
+  polymorphic** — usable on either axis.
+- **Composable.** A variable may appear as a term of a `+`-sum
+  (`&mid+ascender*1/12`), as an `@` sample height (`outline.center@&mid`), and a
+  variable may reference another (`&b = &a`).
+- **Late-bound, like labels.** A `&name` resolves at apply time against the
+  final (possibly `!extends`-merged) table, so a later definition — including one
+  in a file that extends this — wins, and definitions may appear anywhere.
+- **Checked up front.** An undefined variable and a reference cycle
+  (`&a = &b`, `&b = &a`) are both rejected at load time, before any glyph is
+  touched, with the offending name / cycle chain named.
 
 ## Selectors — what a rule applies to
 

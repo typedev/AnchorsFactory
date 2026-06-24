@@ -192,8 +192,26 @@ class YSum:
         return "+".join(str(t) for t in self.terms)
 
 
-XStrategy = Union[X, XAbs]
-YStrategy = Union[Y, YAbs, FontMetric, YSum]
+@dataclass(frozen=True)
+class VarRef:
+    """A reference to a named axis expression (a ``&variable``).
+
+    Like :class:`LabelRef` it is resolved late — at apply time, against the
+    merged variable table, so a later file may override a variable an earlier
+    one used. But where a label stands for a *list of anchors*, a ``VarRef``
+    stands for *one axis's value*: it appears in an X or Y slot, as a term of a
+    :class:`YSum`, or as the ``@`` sample height of an :class:`X`. It is
+    substituted out (and axis-checked) before the geometry engine runs, so the
+    engine never sees one.
+    """
+    name: str            # includes the leading '&'
+
+    def __str__(self):
+        return self.name
+
+
+XStrategy = Union[X, XAbs, VarRef]
+YStrategy = Union[Y, YAbs, FontMetric, YSum, VarRef]
 
 
 # --------------------------------------------------------------------------- #
@@ -370,6 +388,10 @@ class Document:
     resolved late, at apply time, against the (possibly merged) label table.
     """
     labels: dict[str, list] = field(default_factory=dict)
+    # named axis expressions (`&name = X-or-Y expr`); values are XStrategy /
+    # YStrategy nodes that may themselves contain VarRefs. Resolved late, at
+    # apply time, against the (possibly merged) table — last definition wins.
+    variables: dict[str, object] = field(default_factory=dict)
     rules: list[tuple[Selector, Op, list]] = field(default_factory=list)
     shift_x: int = 0                          # document-wide X offset (!shiftx)
     # ordered !suffixes directives, each (Op, kind, payload); resolve_suffixes()

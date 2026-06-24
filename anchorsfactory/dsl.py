@@ -16,7 +16,7 @@ import re
 
 from .model import (
     Frame, HAlign, VEdge, Run, Frac, FONT_METRICS,
-    X, XAbs, Y, YAbs, FontMetric, YSum, AnchorSpec, LabelRef,
+    X, XAbs, Y, YAbs, FontMetric, YSum, AnchorSpec, LabelRef, VarRef,
     GlyphName, Unicode, UnicodeRange, Glob, Category, Op, Document,
 )
 
@@ -40,6 +40,8 @@ _OPS = {"=": Op.REPLACE, "+=": Op.ADD, "-=": Op.REMOVE}
 #  X / Y tokens
 # --------------------------------------------------------------------------- #
 def _parse_x(tok: str):
+    if tok.startswith("&"):                 # a &variable standing in for the whole X
+        return VarRef(tok)
     try:
         return XAbs(int(tok))
     except ValueError:
@@ -80,6 +82,8 @@ def _parse_y(tok: str):
 
 
 def _parse_y_term(tok: str):
+    if tok.startswith("&"):                 # a &variable as a (Y) term
+        return VarRef(tok)
     if not tok.startswith("$"):
         base, star, frac = tok.partition("*")
         if base in FONT_METRICS:                 # font metric, optionally *d1/d2
@@ -111,6 +115,31 @@ def _parse_y_term(tok: str):
         if suf in _EDGE:
             return Y(glyph, _EDGE[suf])
     return Y(body, VEdge.TOP)
+
+
+def _parse_var_def(tok: str):
+    """Parse the value of a `&name = …` definition into an axis strategy.
+
+    Axis-agnostic: the same grammar as an anchor's X or Y slot, but which axis a
+    variable *is* falls out of what it parses to (an `X`/frame token → X; a
+    metric / `$glyph` / sum → Y; a bare number stays polymorphic; a lone
+    `&other` aliases another variable). The slot it is later used in decides
+    compatibility — checked at apply time, not here.
+    """
+    if " " in tok:
+        raise DSLError(f"variable value must be a single X or Y expression, got {tok!r}")
+    if "+" in tok:                          # a sum is always a Y expression
+        return _parse_y(tok)
+    if tok.startswith("&"):                 # alias to another variable
+        return VarRef(tok)
+    try:
+        return XAbs(int(tok))               # bare number — usable on either axis
+    except ValueError:
+        pass
+    try:
+        return _parse_x(tok)                # frame.align[@…] → X
+    except DSLError:
+        return _parse_y(tok)                # else metric / $glyph → Y (may raise)
 
 
 def _parse_anchor(tok: str) -> AnchorSpec:
@@ -184,6 +213,7 @@ def _parse_suffix_op(op_tok: str, value: str, n: int):
 
 def parse_dsl(lines) -> Document:
     labels: dict[str, list[AnchorSpec]] = {}
+    variables: dict[str, object] = {}
     rules: list = []
     shift_x = 0
     suffix_ops: list = []
@@ -257,7 +287,16 @@ def parse_dsl(lines) -> Document:
         if not rhs:
             raise DSLError(f"line {n}: empty right-hand side")
 
-        if lhs.startswith("@"):
+        if lhs.startswith("&"):
+            if op_tok != "=":
+                raise DSLError(f"line {n}: variables only support '='")
+            if not _NAME_RE.match(lhs[1:]):
+                raise DSLError(f"line {n}: bad variable name {lhs!r}")
+            try:
+                variables[lhs] = _parse_var_def(rhs)   # last definition wins
+            except DSLError as e:
+                raise DSLError(f"line {n}: {e}")
+        elif lhs.startswith("@"):
             if op_tok != "=":
                 raise DSLError(f"line {n}: labels only support '='")
             labels[lhs] = parse_items(rhs, n)
@@ -270,8 +309,8 @@ def parse_dsl(lines) -> Document:
             for sel_tok in selectors:
                 rules.append((_parse_selector(sel_tok), op, items))
 
-    return Document(labels=labels, rules=rules, shift_x=shift_x,
-                    suffix_ops=suffix_ops, extends=extends)
+    return Document(labels=labels, variables=variables, rules=rules,
+                    shift_x=shift_x, suffix_ops=suffix_ops, extends=extends)
 
 
 def parse_dsl_file(path: str) -> Document:
