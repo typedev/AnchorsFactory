@@ -11,7 +11,7 @@ intersection) and writes them into the font. It is the *pre-marking* half of a
 pipeline whose second half (composite assembly by snapping mark anchors to base
 anchors) is done by GlyphConstruction.
 
-The rewrite is complete and released to PyPI (currently **v0.4.0**, on
+The rewrite is complete and released to PyPI (currently **v0.4.1**, on
 `master`); the package is `anchorsfactory/`. The original module script lives in
 `examples/legacy/` for reference only.
 

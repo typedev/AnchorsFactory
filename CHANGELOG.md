@@ -14,6 +14,20 @@ section to the new version (with today's date) and uses it as the release notes.
   late-bound like labels (an `!extends` child can override one), and typed by
   axis — an X-in-Y misuse, an undefined variable, or a reference cycle is
   reported up front, before any glyph is touched.
+- **Unified `frame.position` on both axes** — the X vocabulary now works on Y
+  too (`box.top`/`box.middle`/`box.bottom`, `outline.*` sampled on a vertical
+  scanline, `outline.N.center` for a bar of `E`/`Ё`), so an anchor can read its
+  own glyph's geometry without naming it — `box.top` replaces the old need to
+  write `$Glyph` for the current glyph. On Y an `outline` position's `@` is a
+  column (`@left`/`@right` or a fixed X), the mirror of X's sample height.
+- **`outline.centroid`** — the area centre of mass, a 2-D point (its x on X,
+  its y on Y) for centring marks over a lopsided base, and on both axes for
+  enclosing/overlay marks.
+- **Fractional positions** — `box*2/3`, `width*1/3`: the `*n/m` operator (the
+  same as `capHeight*2/3`) as a proportional position along a frame.
+- **Arithmetic on positions** — terms combine with `+`/`-` on either axis, for
+  summed heights (`ascender-descender`) and a bias off a base position
+  (`outline.centroid-25`, to nudge a slanted acute/grave off the optical centre).
 
 ### Changed
 
@@ -25,6 +39,11 @@ section to the new version (with today's date) and uses it as the release notes.
   example, documented the `$` sigil and one-letter `{L}` categories, and
   corrected the geometry description (samples at exactly the requested height,
   no inset).
+- The geometry engine resolves the two axes in dependency order: an `outline`
+  position with no `@` samples on the other axis's resolved coordinate; both at
+  once is rejected up front as an axis cycle (pin one with `@`). Internally
+  `XAbs`/`YAbs` were unified into one axis-neutral `Abs`. Placement output for
+  existing rules is byte-for-byte unchanged.
 
 ## [0.3.0] - 2026-06-09
 
