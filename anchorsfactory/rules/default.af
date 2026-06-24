@@ -13,30 +13,34 @@
 # accents also by their conventional name.
 
 # ============================================================
-#  LABELS
+#  VARIABLES — reusable measurements; change here, applies everywhere
 # ============================================================
-@ = top (box.center capHeight), bottom (box.center 0)
-@acenter = top (width.center capHeight), bottom (width.center 0)
-@top = top (box.center capHeight)
-@topL = topleft (box.left capHeight)
-@topR = top (box.right capHeight)
-@extratop = top (outline.center@top capHeight)
-@bot = bottom (box.center 0)
-@_ = _top (box.center capHeight)
-@_bottomcenter = _top (outline.center@bottom capHeight)
-@_bot = _bottom (box.center 0)
+&capxMid = capHeight*1/2+xHeight*1/2   # lowercase top / mark height (the cap–x midpoint)
+&barY    = capHeight*1/2               # uppercase crossbar height
+&barlowY = xHeight*1/2                 # lowercase crossbar height
+&baraltY = 400                         # fixed height of the alternate (left) bar
+
+# ============================================================
+#  LABELS — reusable named sets of anchors
+# ============================================================
+@baseUC = top (box.center capHeight), bottom (box.center 0)
+@topLeft = topleft (box.left capHeight)
+@bottom = bottom (box.center 0)
+@_capTop = _top (box.center capHeight)
+@_capTopInk = _top (outline.center@bottom capHeight)
+@_bottom = _bottom (box.center 0)
 # lowercase top: at the cap/x midpoint
-@xtop = top (box.center capHeight*1/2+xHeight*1/2), bottom (box.center 0)
-@round = top (outline.center@xHeight capHeight*1/2+xHeight*1/2), bottom (outline.center 0)
-@_x = _top (box.center capHeight*1/2+xHeight*1/2)
-@_xbc = _top (outline.center@bottom capHeight*1/2+xHeight*1/2)
+@baseLC = top (box.center &capxMid), bottom (box.center 0)
+@round = top (outline.center@xHeight &capxMid), bottom (outline.center 0)
+@_loTop = _top (box.center &capxMid)
+@_loTopInk = _top (outline.center@bottom &capxMid)
 @ogonek = ogonek (outline.right 0)
 @_ogonek = _ogonek (outline.right 0)
 @desc = desc (outline.right 0)
 @_desc = _desc (outline.right 0)
-@bar = bar (width.center capHeight*1/2)
-@bar.alt = bar.alt (box.left 400)
-@barlow = barlow (box.center xHeight*1/2)
+@bar = bar (width.center &barY)
+@bar.alt = bar.alt (box.left &baraltY)
+@barlow = barlow (box.center &barlowY)
 @hook = hook (outline.right 0)
 @hookdesc = hookdesc (width.center 0)
 @back = back (box.left capHeight)
@@ -45,8 +49,8 @@
 # ============================================================
 #  BASE GLYPHS — Latin
 # ============================================================
-U+0041..U+005A = @                  # A–Z : cap-height top + bottom
-U+0061..U+007A = @xtop              # a–z : midpoint top + bottom
+U+0041..U+005A = @baseUC                  # A–Z : cap-height top + bottom
+U+0061..U+007A = @baseLC              # a–z : midpoint top + bottom
 # round lowercase: top centred on the x-height crossing, bottom on the baseline
 a = @round ; c = @round ; e = @round ; o = @round ; s = @round
 # exceptions (extra anchors)
@@ -65,23 +69,23 @@ e += @ogonek
 i += @ogonek
 u += @ogonek, @desc
 h += @desc
-n += @topL, @desc
+n += @topLeft, @desc
 x += @desc, @bar
 t += barlow (width.center xHeight*2/3)
-L = top (box.left capHeight), caron (box.right capHeight), @bot
+L = top (box.left capHeight), caron (box.right capHeight), @bottom
 # Latin outside A–Z
-Schwa = @ ; schwa = @xtop
-Oslash = @ ; oslash = @xtop
-AE = @ ; ae = @xtop
-U+0131 = @xtop                      # dotlessi
-U+0237 = @xtop, @_desc              # dotlessj
+Schwa = @baseUC ; schwa = @baseLC
+Oslash = @baseUC ; oslash = @baseLC
+AE = @baseUC ; ae = @baseLC
+U+0131 = @baseLC                      # dotlessi
+U+0237 = @baseLC, @_desc              # dotlessj
 
 # ============================================================
 #  BASE GLYPHS — Cyrillic
 # ============================================================
-U+0410..U+042F = @                  # А–Я : cap-height
-U+0430..U+044F = @xtop              # а–я : midpoint
-U+0401 = @                          # Ё
+U+0410..U+042F = @baseUC                  # А–Я : cap-height
+U+0430..U+044F = @baseLC              # а–я : midpoint
+U+0401 = @baseUC                          # Ё
 U+0451 = @round                     # ё (round lowercase)
 # round lowercase Cyrillic
 U+043E = @round ; U+0441 = @round ; U+0435 = @round ; U+044D = @round ; U+0437 = @round   # о с е э з
@@ -117,35 +121,35 @@ endash = _bar (width.center $endash.middle)
 #  DIACRITICS — lowercase marks at the midpoint, caps at capHeight
 # ============================================================
 # lowercase, lower-ink centred (pointed / slanted): acute, grave, hungarumlaut
-acute = @_xbc ; grave = @_xbc ; hungarumlaut = @_xbc
-U+00B4 = @_xbc ; U+0301 = @_xbc      # acute (spacing ; combining)
-U+0060 = @_xbc ; U+0300 = @_xbc      # grave
-U+02DD = @_xbc ; U+030B = @_xbc      # hungarumlaut
+acute = @_loTopInk ; grave = @_loTopInk ; hungarumlaut = @_loTopInk
+U+00B4 = @_loTopInk ; U+0301 = @_loTopInk      # acute (spacing ; combining)
+U+0060 = @_loTopInk ; U+0300 = @_loTopInk      # grave
+U+02DD = @_loTopInk ; U+030B = @_loTopInk      # hungarumlaut
 # lowercase, box centred
-breve = @_x ; caron = @_x ; circumflex = @_x ; dieresis = @_x
-dotaccent = @_x ; macron = @_x ; ring = @_x ; tilde = @_x ; cyrbreve = @_x
-U+00A8 = @_x ; U+0308 = @_x          # dieresis
-U+00AF = @_x ; U+0304 = @_x          # macron
-U+02C6 = @_x ; U+0302 = @_x          # circumflex
-U+02C7 = @_x ; U+030C = @_x          # caron
-U+02D8 = @_x ; U+0306 = @_x          # breve
-U+02D9 = @_x ; U+0307 = @_x          # dotaccent
-U+02DA = @_x ; U+030A = @_x          # ring
-U+02DC = @_x ; U+0303 = @_x          # tilde
+breve = @_loTop ; caron = @_loTop ; circumflex = @_loTop ; dieresis = @_loTop
+dotaccent = @_loTop ; macron = @_loTop ; ring = @_loTop ; tilde = @_loTop ; cyrbreve = @_loTop
+U+00A8 = @_loTop ; U+0308 = @_loTop          # dieresis
+U+00AF = @_loTop ; U+0304 = @_loTop          # macron
+U+02C6 = @_loTop ; U+0302 = @_loTop          # circumflex
+U+02C7 = @_loTop ; U+030C = @_loTop          # caron
+U+02D8 = @_loTop ; U+0306 = @_loTop          # breve
+U+02D9 = @_loTop ; U+0307 = @_loTop          # dotaccent
+U+02DA = @_loTop ; U+030A = @_loTop          # ring
+U+02DC = @_loTop ; U+0303 = @_loTop          # tilde
 # capital-height marks
-Acute = @_bottomcenter ; Grave = @_bottomcenter ; Hungarumlaut = @_bottomcenter
-Breve = @_ ; Caron = @_ ; Circumflex = @_ ; Dieresis = @_
-Macron = @_ ; Ring = @_ ; Tilde = @_ ; Dotaccent = @_
-cyrBreve = @_ ; afii57929 = @_ ; accent = @_ ; Accent = @_
-Caronl = @_ ; caronl = @_
-Apostrophe = @_, _topleft (outline.right capHeight)
+Acute = @_capTopInk ; Grave = @_capTopInk ; Hungarumlaut = @_capTopInk
+Breve = @_capTop ; Caron = @_capTop ; Circumflex = @_capTop ; Dieresis = @_capTop
+Macron = @_capTop ; Ring = @_capTop ; Tilde = @_capTop ; Dotaccent = @_capTop
+cyrBreve = @_capTop ; afii57929 = @_capTop ; accent = @_capTop ; Accent = @_capTop
+Caronl = @_capTop ; caronl = @_capTop
+Apostrophe = @_capTop, _topleft (outline.right capHeight)
 # bottom marks (attach at the baseline — shared by upper and lower case)
-cedilla = @_bot ; Cedilla = @_bot
-commaaccent = @_bot ; Commaaccent = @_bot
-dotsubnosp = @_bot ; Tail = @_bot ; tail = @_bot
+cedilla = @_bottom ; Cedilla = @_bottom
+commaaccent = @_bottom ; Commaaccent = @_bottom
+dotsubnosp = @_bottom ; Tail = @_bottom ; tail = @_bottom
 ogonek = @_ogonek ; Ogonek = @_ogonek
-U+00B8 = @_bot ; U+0327 = @_bot      # cedilla
-U+F6C3 = @_bot ; U+0326 = @_bot      # commaaccent / commabelow
+U+00B8 = @_bottom ; U+0327 = @_bottom      # cedilla
+U+F6C3 = @_bottom ; U+0326 = @_bottom      # commaaccent / commabelow
 U+02DB = @_ogonek ; U+0328 = @_ogonek  # ogonek
 
 # ============================================================
