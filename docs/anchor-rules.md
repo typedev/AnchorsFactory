@@ -1,8 +1,9 @@
 # AnchorsFactory rule language
 
 A line-oriented, low-noise language for placing anchors in UFO fonts. It is
-**stacked**: you define reusable *labels* once, then *mark* glyphs with them —
-mixing labels and one-off anchors freely on a single line.
+**stacked**: you define reusable *labels* (named anchor sets) and *variables*
+(named X/Y values) once, then *mark* glyphs with them — mixing labels and
+one-off anchors freely on a single line.
 
 Every rule parses into the internal representation (`anchorsfactory.model`),
 which the geometry engine consumes. The surface syntax below is one front-end;
@@ -21,6 +22,7 @@ Sigils at a glance:
 |-------|---------|
 | `@name` | label — define or reference (a list of anchors) |
 | `&name` | variable — define or reference (one axis's value) |
+| `$Glyph` | reference a glyph's own geometry (in a Y position) |
 | `!name` | directive (pragma) |
 | `#` | comment |
 | `name ( X Y )` | an anchor placement |
@@ -51,8 +53,9 @@ the grammar).
 | `outline.first.center` / `outline.last.center` | centre of the first / last ink span (stem) |
 | `outline.N.center` | centre of the N-th span, 1-based (for `m`, `ш`, `Ш`, …) |
 | `outline.center@top` / `outline.center@bottom` | centre of ink at the glyph's own top / bottom edge |
-| `outline.center@xHeight` / `@<metric>` / `@<number>` | sample the contour at a fixed height (a font metric or number), **decoupled from the anchor's Y** |
-| `<number>` | absolute X in font units |
+| `outline.center@xHeight` / `@<metric>` / `@<number>` | sample the contour at a fixed height (a font metric, number, `$glyph`, or `&variable`), **decoupled from the anchor's Y** |
+| `<number>` | absolute X in font units (integer) |
+| `&name` | a variable standing in for the whole X — see [Variables](#variables) |
 
 `outline.*` measures where the ink actually is at height Y. Crossings pair into
 spans (stems); `.first` / `.last` / `.N` pick one, otherwise the whole envelope
@@ -78,7 +81,8 @@ edge) the bounding-box edge is used and a warning is recorded.
 | `ascender` `descender` `capHeight` `xHeight` `unitsPerEm` `baseline` | a font-wide vertical metric from `font.info` (`baseline` = 0) |
 | `capHeight*2/3` | a fraction of a metric |
 | `capHeight*1/2+xHeight*1/2` | a **sum** of terms (no spaces); here the midpoint between x-height and cap-height |
-| `<number>` | absolute Y in font units |
+| `<number>` | absolute Y in font units (integer) |
+| `&name` | a variable standing in for the whole Y — see [Variables](#variables) |
 
 Font metrics are bare keywords (no `$`), so they never collide with glyph
 references; they don't depend on any particular glyph being present. Terms can
@@ -148,7 +152,7 @@ The left-hand side of a rule selects glyphs:
 | `U+0413` | the glyph mapped from code point U+0413 |
 | `U+0410..U+044F` | every glyph in the (inclusive) code-point range |
 | `*.sc` | glyph names by glob (`*`, `?`) |
-| `{Lu}` | glyphs whose Unicode general category is `Lu` |
+| `{Lu}` | glyphs whose Unicode general category is `Lu` (a one-letter `{L}` matches every subcategory: `Lu`, `Ll`, …) |
 | `C, O, S` | a comma-separated list — applies to each listed selector |
 
 A range/glob/category lets one line stand in for the dozens of identical
@@ -158,7 +162,7 @@ A **comma-separated list** on the left applies the same right-hand side to
 every selector in it, exactly as if you had written one line per selector:
 
 ```
-C, O, S += top (box.center @top), bottom (box.center @bottom)
+C, O, S += top (outline.center@top capHeight), bottom (outline.center@bottom 0)
 ```
 
 The list may mix selector kinds (`A, U+0421, *.sc = @round`); each entry is
@@ -255,12 +259,15 @@ O       = top (box.center $H)       # O: replace entirely
 ## A complete example
 
 ```
+# --- variables ---
+&barY  = capHeight*1/2                # uppercase crossbar height
+
 # --- labels ---
 @      = top (box.center capHeight), bottom (box.center 0)
 @bot   = bottom (box.center 0)
 @_     = _top (outline.center@bottom capHeight)
 @desc  = desc (outline.right 0)
-@bar   = bar (width.center capHeight*1/2)
+@bar   = bar (width.center &barY)
 @hook  = hook (outline.right 0)
 @ogonek = ogonek (outline.right 0)
 

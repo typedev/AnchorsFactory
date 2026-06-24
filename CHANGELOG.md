@@ -6,6 +6,26 @@ section to the new version (with today's date) and uses it as the release notes.
 
 ## [Unreleased]
 
+### Added
+
+- **`&variables`** — name a reusable X or Y axis expression once and reference
+  it as `&name`, the per-axis sibling of a `@label`. Variables are composable
+  (as a `+`-sum term, as an `@` sample height, or aliasing another variable),
+  late-bound like labels (an `!extends` child can override one), and typed by
+  axis — an X-in-Y misuse, an undefined variable, or a reference cycle is
+  reported up front, before any glyph is touched.
+
+### Changed
+
+- Bundled `default` / `default-italics` presets refactored for readability:
+  repeated math extracted into `&variables`, cryptic labels renamed (`@` →
+  `@baseUC`, `@xtop` → `@baseLC`, mark labels keyed by attach height), and
+  never-referenced labels removed. Placement output is byte-for-byte unchanged.
+- Documentation synced with the implementation: fixed an invalid selector-list
+  example, documented the `$` sigil and one-letter `{L}` categories, and
+  corrected the geometry description (samples at exactly the requested height,
+  no inset).
+
 ## [0.3.0] - 2026-06-09
 
 ### Added
