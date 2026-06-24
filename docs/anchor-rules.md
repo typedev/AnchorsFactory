@@ -54,6 +54,8 @@ the grammar).
 | `outline.N.center` | centre of the N-th span, 1-based (for `m`, `ш`, `Ш`, …) |
 | `outline.center@top` / `outline.center@bottom` | centre of ink at the glyph's own top / bottom edge |
 | `outline.center@xHeight` / `@<metric>` / `@<number>` | sample the contour at a fixed height (a font metric, number, `$glyph`, or `&variable`), **decoupled from the anchor's Y** |
+| `width*1/3` / `box*2/3` | a **fractional** position along the frame, from the left edge (BOX/ADVANCE only; `center` = `*1/2`) — same `*n/m` as `capHeight*2/3` |
+| `outline.centroid` | the **area centre of mass** — the glyph's optical centre (the x of it here); see [Centroid](#centroid) |
 | `<number>` | absolute X in font units (integer) |
 | `&name` | a variable standing in for the whole X — see [Variables](#variables) |
 
@@ -81,12 +83,64 @@ edge) the bounding-box edge is used and a warning is recorded.
 | `ascender` `descender` `capHeight` `xHeight` `unitsPerEm` `baseline` | a font-wide vertical metric from `font.info` (`baseline` = 0) |
 | `capHeight*2/3` | a fraction of a metric |
 | `capHeight*1/2+xHeight*1/2` | a **sum** of terms (no spaces); here the midpoint between x-height and cap-height |
+| `box.bottom` / `box.middle` / `box.top` | this glyph's **own** bbox: `yMin` / centre / `yMax` |
+| `box*2/3` | a fractional position up the bbox |
+| `outline.bottom` / `outline.top` / `outline.center` | lowest / highest / centre crossing on a **vertical** scanline at the anchor's X |
+| `outline.N.center` | centre of the N-th vertical span at X (e.g. a bar of `E`, `Ё`) |
+| `outline.centroid` | the area centre of mass (the y of it); see [Centroid](#centroid) |
 | `<number>` | absolute Y in font units (integer) |
 | `&name` | a variable standing in for the whole Y — see [Variables](#variables) |
 
 Font metrics are bare keywords (no `$`), so they never collide with glyph
 references; they don't depend on any particular glyph being present. Terms can
 be summed with `+` (written without spaces) to combine metrics/glyphs/numbers.
+
+The same `frame.position` grammar serves **both axes**: on Y the alignment
+words are `bottom`/`middle`/`top` (rather than `left`/`center`/`right`). So
+`box.top` is *this glyph's* own bbox top — no need to name the glyph as `$Glyph`
+just to read its own height. An `outline` position on Y samples a *vertical*
+scanline at the anchor's X (mirroring the horizontal scanline X uses); its
+`@…` is therefore a **column** — an own-side edge (`@left`/`@right`) or a fixed
+X value (`outline.center@right`, `outline.middle@40`), decoupled from the
+anchor's X. `$Glyph` still reads a *different* glyph's geometry.
+
+> ⚠️ If **both** axes are an `outline` position with no `@` fix, each would need
+> the other's coordinate as its scanline — a cycle, rejected up front. Pin one
+> axis's sample line with `@` (e.g. `outline.right@40 outline.1.center`).
+
+### Centroid
+
+`outline.centroid` is the **area centre of mass** of the glyph's outline — its
+optical centre. Unlike the scanline-sampled `outline.left/center/right`, it is a
+single global 2-D point: used as X it yields the centroid's x, as Y its y. It
+takes no `run` or `@`, and is polymorphic (legal in either slot). It best
+suits *base* glyphs whose shape is lopsided — `a (top (outline.centroid
+capHeight))` centres the diacritic over the visual mass — and, on both axes
+(`center (outline.centroid outline.centroid)`), enclosing/overlay marks.
+
+### Summed positions (a base plus a bias)
+
+Terms combine with `+` and `-` on either axis (written without spaces). On Y
+this sums/subtracts heights — `capHeight*1/2+xHeight*1/2` is the midpoint between
+x-height and cap-height, `ascender-descender` the full em extent. On X it adds a
+**bias** to a base position:
+
+```
+&acuteShift = -25
+acute = _top (outline.centroid+&acuteShift capHeight)   # nudge toward the foot
+grave = _top (outline.centroid+25 capHeight)
+```
+
+Any term may be added or subtracted (a number, metric, `$glyph`, `&variable`, or
+another position — `box.right-box.left` is the box width). The centroid is the
+optical centre, so a slanted mark (acute/grave) wants a small horizontal bias off
+it — `+`/`-` is how you dial that in, scalably, in one rule.
+
+Two caveats: a `-` next to a `$glyph` is read as subtraction (`$H-50` = `$H`
+minus 50), so a glyph *named* with a hyphen can't be referenced inline in a sum —
+the missing-glyph fallback flags it when the font is applied. And a bias and an
+`@` sample on the *same* term don't combine inline — the `@` owns the rest of the
+token; put the sampled position in a `&variable` and add the bias to that.
 
 ## Labels
 

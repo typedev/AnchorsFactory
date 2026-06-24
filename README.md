@@ -54,12 +54,19 @@ U+0410..U+044F = @            # all Russian Cyrillic
 U+0413 += desc (outline.right 0)   # Г also gets a descender anchor
 ```
 
-- **X** is `frame.position`: `width.*` (advance), `box.*` (bounding box) or
-  `outline.*` (the contour at height Y, with `.first`/`.last` to pick a stem).
-- **Y** is a number, a font metric (`capHeight`, `xHeight`, `ascender`, …), or a
-  reference glyph (`$H`, `$H.bottom`, `$H*5/6`).
+- **`frame.position`** works on **both axes**: `width.*` (advance), `box.*`
+  (bounding box) or `outline.*` (the contour, sampled on a scanline at the other
+  coordinate, with `.first`/`.last` to pick a stem). On X the words are
+  `left/center/right`, on Y `bottom/middle/top`; `box*1/3` is a fractional
+  position (same `*n/m` as `capHeight*2/3`) and `outline.centroid` the area
+  centre of mass.
+- **Y** may also be a number, a font metric (`capHeight`, `xHeight`, …), or a
+  reference glyph (`$H`, `$H.bottom`, `$H*5/6`); `box.top` reads *this* glyph's
+  own height.
 - Selectors: name, `U+XXXX`, range `U+A..U+B`, glob `*.sc`, category `{Lu}`.
 - `=` replace · `+=` add · `-=` remove; `!extends default` inherits a ruleset.
+- Terms combine with `+`/`-` (on either axis) for a base position plus a bias —
+  `outline.centroid-25` nudges a slanted mark off the optical centre.
 - `&name` names a reusable X/Y value; `@name` a reusable set of anchors. Both
   are late-bound, so an extending file can override either.
 
