@@ -161,6 +161,17 @@ anchor follows the stem instead of sitting beside it. The shift is
 It's automatic — nothing to write in a rule — and on an upright font the angle is
 0, so every shift is 0.
 
+> ⚠️ **Avoid `box.*` / `width.*` for horizontal positioning on italics.** A UFO
+> stores the *already-slanted* outline, so its bounding box already leans — its
+> centre sits at the slant of the glyph's mid-height. Adding the `tan·Y` shear on
+> top counts the slant twice, so `box.center` drifts ≈ `tan·(mid-height)` to the
+> right of the true centre (e.g. ~80 units at a 13° angle). And a slanted glyph's
+> box has no single well-defined centre height (its left and right extremes sit at
+> different heights), so it can't be cleanly corrected. Use **`outline.center`**
+> (the true ink centre at the anchor's height), **`outline.center@<h>`**, or
+> **`outline.centroid`** instead — they sample the actual contour and need no
+> extra shift. On an upright font `box.*` is fine.
+
 ## Labels
 
 A label names a reusable list of anchors:
