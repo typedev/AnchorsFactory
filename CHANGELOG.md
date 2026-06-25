@@ -6,6 +6,8 @@ section to the new version (with today's date) and uses it as the release notes.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-06-24
+
 ### Added
 
 - **`&variables`** — name a reusable X or Y axis expression once and reference
