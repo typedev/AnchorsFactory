@@ -1,0 +1,83 @@
+"""Italic shear: an X measured at height S is projected along the italic angle
+to the anchor's own height Y (shift = tan(-angle)·(Y - S)).
+
+Self-contained — builds a tiny in-memory font with a known upright stem and a
+slant, so it needs no shipped fixture and the expected numbers are exact.
+"""
+
+import math
+
+import pytest
+
+fpw = pytest.importorskip("fontParts.world")
+
+from anchorsfactory.geometry import resolve_x
+from anchorsfactory.model import Frame, HAlign, Abs, Pos, Centroid, Sum, FontMetric
+
+ANGLE = -10.0                       # forward-leaning italic
+TAN = math.tan(math.radians(-ANGLE))   # ≈ 0.17633; shear per unit of height gap
+
+
+@pytest.fixture
+def italic():
+    """A font slanted -10° with one glyph: an upright rectangle x∈[80,120]
+    (centre 100), y∈[0,700] — centre constant at every height, so any shear in
+    the result is the engine's, not the outline's."""
+    f = fpw.RFont()
+    f.info.unitsPerEm = 1000
+    f.info.italicAngle = ANGLE
+    f.info.xHeight = 500
+    f.info.capHeight = 700
+    f.info.ascender = 750
+    f.info.descender = -200
+    g = f.newGlyph("stem")
+    g.width = 200
+    pen = g.getPen()
+    pen.moveTo((80, 0)); pen.lineTo((120, 0))
+    pen.lineTo((120, 700)); pen.lineTo((80, 700))
+    pen.closePath()
+    return f, g
+
+
+def test_plain_outline_is_not_sheared(italic):
+    # sampled at the anchor's own height (S == Y) → gap 0 → no shear
+    f, g = italic
+    assert resolve_x(f, g, Pos(Frame.OUTLINE, HAlign.CENTER), 600) == pytest.approx(100)
+
+
+def test_outline_at_sample_height_projects_up_the_slant(italic):
+    # the `l` case: X measured at xHeight, anchor higher → shear tan·(Y - xHeight)
+    f, g = italic
+    spec = Pos(Frame.OUTLINE, HAlign.CENTER, at=FontMetric("xHeight"))
+    assert resolve_x(f, g, spec, 600) == pytest.approx(100 + TAN * (600 - 500))
+    # the `H` invariant: when the sample height equals the anchor height, no shear
+    assert resolve_x(f, g, spec, 500) == pytest.approx(100)
+
+
+def test_box_reference_shears_from_baseline(italic):
+    # box/advance are upright references (S = 0) → the historical tan·Y shear
+    f, g = italic
+    assert resolve_x(f, g, Pos(Frame.BOX, HAlign.CENTER), 600) == pytest.approx(100 + TAN * 600)
+    assert resolve_x(f, g, Pos(Frame.BOX, HAlign.CENTER), 0) == pytest.approx(100)
+
+
+def test_centroid_projects_from_its_own_height(italic):
+    # rectangle centroid is (100, 350); as X it projects from cy to the anchor Y
+    f, g = italic
+    assert resolve_x(f, g, Centroid(), 600) == pytest.approx(100 + TAN * (600 - 350))
+
+
+def test_sum_shears_per_term(italic):
+    # the outline term shears by its gap; the constant bias does not
+    f, g = italic
+    spec = Sum((Pos(Frame.OUTLINE, HAlign.CENTER, at=FontMetric("xHeight")), Abs(30)))
+    assert resolve_x(f, g, spec, 600) == pytest.approx(100 + TAN * (600 - 500) + 30)
+
+
+def test_upright_font_has_no_shear(italic):
+    # the whole correction vanishes when the angle is 0
+    f, g = italic
+    f.info.italicAngle = 0
+    spec = Pos(Frame.OUTLINE, HAlign.CENTER, at=FontMetric("xHeight"))
+    assert resolve_x(f, g, spec, 600) == pytest.approx(100)
+    assert resolve_x(f, g, Pos(Frame.BOX, HAlign.CENTER), 600) == pytest.approx(100)

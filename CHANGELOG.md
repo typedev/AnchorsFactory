@@ -39,6 +39,13 @@ section to the new version (with today's date) and uses it as the release notes.
   example, documented the `$` sigil and one-letter `{L}` categories, and
   corrected the geometry description (samples at exactly the requested height,
   no inset).
+- **Italic shear is now height-aware.** Every X is projected along the italic
+  angle from the height it was *measured* at to the anchor's own height
+  (`tan(-angle)·(Y - S)`): `outline.center@xHeight` placed higher now slides onto
+  the stem at that height instead of landing left of it, while an anchor whose
+  sample height equals its Y (e.g. an `H` top at cap-height) is unchanged.
+  Previously `outline` positions got no shear and `box`/`width` sheared from the
+  baseline only. Upright fonts are unaffected (angle 0 → no shift).
 - The geometry engine resolves the two axes in dependency order: an `outline`
   position with no `@` samples on the other axis's resolved coordinate; both at
   once is rejected up front as an axis cycle (pin one with `@`). Internally

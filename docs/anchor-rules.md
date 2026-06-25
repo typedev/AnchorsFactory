@@ -142,6 +142,25 @@ the missing-glyph fallback flags it when the font is applied. And a bias and an
 `@` sample on the *same* term don't combine inline — the `@` owns the rest of the
 token; put the sampled position in a `&variable` and add the bias to that.
 
+## Italic fonts
+
+On a slanted font (`italicAngle ≠ 0`) every **X** is projected along the angle
+from the height at which it was *measured* to the anchor's own height — so an
+anchor follows the stem instead of sitting beside it. The shift is
+`tan(-italicAngle) · (Y − S)`, where `S` is where the X source is defined:
+
+- `outline.center@xHeight` placed at `ascender+40` is measured at x-height but
+  the anchor is higher, so it slides right onto the stem at that height
+  (`S = xHeight`);
+- `outline.center` / `outline.center@capHeight` *at* cap-height get **no** shift
+  — the sample height equals the anchor height (`S = Y`), so an `H`'s top stays
+  exactly between its two slanted stems;
+- `box.*` / `width.*` are upright references (`S = 0`), sheared by `tan·Y` as
+  before; `outline.centroid` projects from its own height.
+
+It's automatic — nothing to write in a rule — and on an upright font the angle is
+0, so every shift is 0.
+
 ## Labels
 
 A label names a reusable list of anchors:

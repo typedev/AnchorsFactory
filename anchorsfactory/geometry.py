@@ -333,29 +333,50 @@ def _dependent(spec) -> bool:
     return isinstance(spec, Pos) and spec.frame is Frame.OUTLINE and spec.at is None
 
 
-def _needs_shift(xspec) -> bool:
-    """Whether an X expression references an upright BOX/ADVANCE frame (so it
-    needs the italic shear; OUTLINE crossings and the centroid are already on
-    the slanted outline)."""
-    if isinstance(xspec, Pos):
-        return xspec.frame in (Frame.ADVANCE, Frame.BOX)
+def _italic_gap(font, glyph, xspec, anchor_y: float) -> float:
+    """The height span ``anchor_y - S`` over which an X expression must be
+    sheared to follow the italic angle, summed per term. ``S`` is the height at
+    which each X source is *defined*:
+
+    - BOX/ADVANCE → ``0`` (an upright reference; gap ``anchor_y``, the historical
+      ``tan·y`` shear);
+    - OUTLINE → its ``@`` sample height, or ``anchor_y`` when there is none
+      (plain ``outline.*`` is already on the slant → gap ``0``);
+    - centroid → its own ``y`` (project the area centre up the slant);
+    - a bare number / unknown → ``0`` (a constant nudge is not sheared).
+
+    So an X measured at height ``S`` is projected along the slant to the anchor's
+    height ``anchor_y``. Warnings are suppressed here (the value resolve already
+    reported them when it sampled the contour).
+    """
     if isinstance(xspec, Neg):
-        return _needs_shift(xspec.term)
+        return -_italic_gap(font, glyph, xspec.term, anchor_y)
     if isinstance(xspec, Sum):
-        return any(_needs_shift(t) for t in xspec.terms)
-    return False
+        return sum(_italic_gap(font, glyph, t, anchor_y) for t in xspec.terms)
+    if isinstance(xspec, Centroid):
+        _, cy = _centroid(glyph)
+        return anchor_y - cy
+    if isinstance(xspec, Pos):
+        if xspec.frame in (Frame.ADVANCE, Frame.BOX):
+            return anchor_y                      # S = 0
+        bounds = glyph.bounds or (0.0, 0.0, 0.0, 0.0)
+        return anchor_y - _sample_line(font, glyph, xspec, Axis.X, anchor_y, bounds)
+    return 0.0                                   # Abs / other: not sheared
 
 
-def _shift_x(font, xspec, y: float) -> float:
-    """The italic shear correction (a single shift of the anchor point) for an X
-    expression that references a BOX/ADVANCE frame."""
-    return _italic_shift(font, y) if (_needs_shift(xspec) and y) else 0.0
+def _shift_x(font, glyph, xspec, anchor_y: float) -> float:
+    """The italic shear for an X expression: ``tan(-angle) · (anchor_y - S)``,
+    projecting each X source from the height it was measured at to the anchor's
+    height (zero on an upright font, where the angle is 0)."""
+    if not font.info.italicAngle:
+        return 0.0
+    return _italic_shift(font, _italic_gap(font, glyph, xspec, anchor_y))
 
 
 def resolve_x(font, glyph, xspec, y: float, *, warnings=None) -> float:
     """Resolve an X strategy to a position in font units, at height *y*."""
     return _axis(font, glyph, xspec, Axis.X, cross=y, warnings=warnings) \
-        + _shift_x(font, xspec, y)
+        + _shift_x(font, glyph, xspec, y)
 
 
 def resolve(font, glyph, spec: AnchorSpec, *, warnings=None) -> tuple[float, float]:
@@ -380,9 +401,9 @@ def resolve(font, glyph, spec: AnchorSpec, *, warnings=None) -> tuple[float, flo
     if _dependent(ys) and not _dependent(xs):
         x = _axis(font, glyph, xs, Axis.X, warnings=warnings)
         y = _axis(font, glyph, ys, Axis.Y, cross=x, warnings=warnings)
-        x += _shift_x(font, xs, y)         # apply shear now that the height is known
+        x += _shift_x(font, glyph, xs, y)  # apply shear now that the height is known
     else:
         y = _axis(font, glyph, ys, Axis.Y, warnings=warnings)
         x = _axis(font, glyph, xs, Axis.X, cross=y, warnings=warnings)
-        x += _shift_x(font, xs, y)
+        x += _shift_x(font, glyph, xs, y)
     return (x, y)
