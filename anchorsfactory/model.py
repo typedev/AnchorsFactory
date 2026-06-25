@@ -5,36 +5,33 @@ engine. Any DSL front-end — the current ``.txt`` format or a future syntax —
 parses *into* these structures; the engine consumes them. The IR is
 vocabulary-agnostic: it encodes *frame + position*, not surface keywords.
 
-Naming follows the ``frame.position`` scheme agreed during design:
+A single :class:`Pos` node carries a ``frame.position`` for either axis (its
+``axis``): the ``align`` slot is an :class:`HAlign` (X: left/center/right), a
+:class:`VEdge` (Y: bottom/middle/top), or a :class:`Frac` (a ``*n/m`` position
+along the frame). ``run`` picks an ink span on an ``OUTLINE`` frame; ``at`` fixes
+the sample line (a height on X, a column on Y). Other strategy nodes:
+:class:`Centroid` (area centre of mass, polymorphic), :class:`Abs` (absolute,
+axis-neutral), :class:`Sum` / :class:`Neg` (``+``/``-`` arithmetic), and the
+Y-only :class:`FontMetric` and :class:`Y` (``$glyph``). ``X``, ``XAbs``/``YAbs``,
+and ``YSum`` remain as back-compat aliases of ``Pos`` / ``Abs`` / ``Sum``.
 
-    frame    : ADVANCE | BOX | OUTLINE   — what we measure against
-    h-align  : LEFT | CENTER | RIGHT     — position within the frame
-    run      : which ink span (stem) when the frame is OUTLINE
-    at-edge  : sample OUTLINE at the glyph's own TOP/BOTTOM extreme
+Examples (surface token -> IR)::
 
-Horizontal (X) tokens -> IR::
+    width.center     -> Pos ADVANCE/CENTER (X)           # advance midpoint
+    box.right        -> Pos BOX/RIGHT (X)                # bbox xMax
+    box*2/3          -> Pos BOX/Frac(2,3) (X)            # fractional position
+    outline.first.center -> Pos OUTLINE/CENTER run=FIRST (X)   # left stem
+    outline.center@top   -> Pos OUTLINE/CENTER at=VEdge.TOP (X)
+    box.top          -> Pos BOX/VEdge.TOP (Y)            # this glyph's own bbox top
+    outline.middle   -> Pos OUTLINE/VEdge.MIDDLE (Y)     # vertical span centre at X
+    outline.centroid -> Centroid()                       # polymorphic, both axes
+    400              -> Abs(400)                          # axis-neutral
+    $H*5/6           -> Y("H", Frac(5, 6))               # fraction from baseline
+    capHeight*1/2+xHeight*1/2 -> Sum(FontMetric, FontMetric)
+    outline.centroid-25       -> Sum(Centroid, Neg(Abs(25)))
 
-    width.center          -> X(ADVANCE, CENTER)
-    width.left            -> X(ADVANCE, LEFT)            # origin (x = 0)
-    width.right           -> X(ADVANCE, RIGHT)           # advance width
-    box.left              -> X(BOX, LEFT)                # bbox xMin
-    box.center            -> X(BOX, CENTER)
-    box.right             -> X(BOX, RIGHT)               # bbox xMax
-    outline.left          -> X(OUTLINE, LEFT)            # leftmost crossing
-    outline.right         -> X(OUTLINE, RIGHT)           # rightmost crossing
-    outline.first.center  -> X(OUTLINE, CENTER, run=Run.FIRST)   # left stem
-    outline.last.center   -> X(OUTLINE, CENTER, run=Run.LAST)    # right stem
-    outline.2.center      -> X(OUTLINE, CENTER, run=2)           # 2nd stem (1-based)
-    outline.center@top    -> X(OUTLINE, CENTER, at=VEdge.TOP)    # old `topcenter`
-    400                   -> XAbs(400)
-
-Vertical (height / Y) tokens -> IR::
-
-    $H        -> Y("H", VEdge.TOP)        # default edge is TOP
-    $H.bottom -> Y("H", VEdge.BOTTOM)
-    $H.middle -> Y("H", VEdge.MIDDLE)
-    $H*5/6    -> Y("H", Frac(5, 6))       # fraction of the glyph's top, from baseline
-    575       -> YAbs(575)
+Dataclass ``__str__``\\ s render these tokens back, so the IR doubles as the
+serializer.
 """
 
 from __future__ import annotations

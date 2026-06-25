@@ -40,24 +40,33 @@ No real font ships with the repo; see "test fonts" below.
 The pipeline is `parse → validate → resolve geometry → apply → save`, split so
 each layer is testable and the DSL surface is decoupled from the engine.
 
-- `model.py` — the IR (the parser/engine contract). `frame.position` vocabulary:
-  `Frame{ADVANCE,BOX,OUTLINE}`×`HAlign`, `Run` (which ink span/stem), `VEdge`,
-  `Frac`, `FontMetric`, `YSum` (summed heights); selectors
+- `model.py` — the IR (the parser/engine contract). One `frame.position` node
+  `Pos(frame, align, run, at, axis)` serves **both axes**: `Frame{ADVANCE,BOX,
+  OUTLINE}` with `align` an `HAlign` (X) / `VEdge` (Y) / `Frac` (a `*n/m`
+  position); `Run` (which ink span/stem); plus `Centroid` (area centre of mass,
+  polymorphic), `Abs` (absolute, axis-neutral), `Sum`/`Neg` (`+`/`-`
+  arithmetic), `FontMetric`, `Y` (`$glyph`). Selectors
   `GlyphName/Unicode/UnicodeRange/Glob/Category`; `Op{REPLACE,ADD,REMOVE}`;
-  `LabelRef`, `VarRef` (`&name`, a named axis expression); `Document`. Dataclass
-  `__str__`s render canonical DSL tokens (so they double as the serializer).
+  `LabelRef`, `VarRef` (`&name`, a named axis expression); `Document`. (`X`,
+  `XAbs`/`YAbs`, `YSum` remain as back-compat aliases of `Pos`/`Abs`/`Sum`.)
+  Dataclass `__str__`s render canonical DSL tokens (so they double as the serializer).
 - `geometry.py` — resolves an `AnchorSpec` to (x, y). **Analytic** contour
-  intersection via `fontTools.misc.bezierTools` (not a pixel scan); decomposes
-  components, pairs crossings into stems, applies italic shift, and samples the
-  contour at exactly the requested height (no inset/nudge). Reads `font.info` for
-  metrics; `X.at` may sample the contour at a fixed height (metric/number/
-  `$glyph`/`&variable`) decoupled from the anchor's Y.
+  intersection via `fontTools.misc.bezierTools` (not a pixel scan) on a scanline
+  perpendicular to the axis (horizontal for X, vertical for Y); pairs crossings
+  into stems, samples at exactly the requested position (no inset/nudge). Resolves
+  the two axes in dependency order (an `outline` position with no `@` samples on
+  the other axis's coordinate; both at once = an axis cycle, rejected). Italic
+  shear is **height-aware**: every X is projected along `italicAngle` from the
+  height it was measured at to the anchor's height (`tan(-angle)·(Y−S)`). Also
+  `Centroid` (via `StatisticsPen`) and `Frac` positions. `@` decouples the sample
+  line (a height on X, a column on Y) from the anchor's other coordinate.
 - `parser.py` — legacy `.txt` → IR. `dsl.py` — the new language → IR. Both
   produce a `Document`; the engine never sees surface syntax.
 - `apply.py` — the **accumulation model**: rules scanned in order, each matching
   selector mutates a glyph's anchor list (`=` replace, `+=` add, `-=` remove);
-  labels and `&`-variables resolved late (with axis/undefined/cycle checks). Plus
-  `accumulate`, `validate_document` (pre-flight).
+  labels and `&`-variables resolved late (with axis/undefined/variable-cycle and
+  both-axes-outline axis-cycle checks). Plus `accumulate`, `validate_document`
+  (pre-flight).
 - `runner.py` — file IO + `!extends` resolution/merge; safe-save default
   (`*_anchored.ufo`, never overwrites unless `--in-place`). `cli.py` — the
   `anchorsfactory` command; loads+validates rules once, then per-font.
@@ -68,12 +77,16 @@ each layer is testable and the DSL surface is decoupled from the engine.
 ## Rule language
 
 See `docs/anchor-rules.md` (full spec) and `README.md`. Key points: an anchor is
-`name (X Y)`; X is `width/box/outline . [run] . align [@edge]` where `@edge` is a
-glyph extreme (`@top`/`@bottom`) or a fixed sample height (`@xHeight`, `@<n>`);
-Y is a number, a font metric keyword (`capHeight`, `xHeight`, …), `$Glyph[.edge|
-*frac]`, or a `+`-sum of those (no spaces); a `&name` variable can alias any X/Y
-expression (late-bound like a label, with axis checking); operators `=`/`+=`/`-=`;
-selectors include ranges/globs/categories; `!extends` inherits a base.
+`name (X Y)`, and one `frame.position` grammar serves **both axes** —
+`width/box/outline . [run] . align [@…]`, with `align` = `left/center/right` (X)
+/ `bottom/middle/top` (Y) / a `*n/m` fraction. `outline.*` samples the contour
+(on X at a height, on Y at a column); `@…` fixes that sample line; `box.top`
+reads the glyph's own bbox; `outline.centroid` is the area centre. Y also takes
+a number, a font metric (`capHeight`, …), or `$Glyph[.edge|*frac]`. Terms
+combine with `+`/`-` (a base position plus a bias, e.g. `outline.centroid-25`).
+`&name` aliases any X/Y expression (late-bound, axis-checked); operators
+`=`/`+=`/`-=`; selectors include ranges/globs/categories; `!extends` inherits a
+base. Italic shear is automatic (height-aware).
 
 ## Conventions
 

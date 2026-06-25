@@ -85,8 +85,8 @@ edge) the bounding-box edge is used and a warning is recorded.
 | `capHeight*1/2+xHeight*1/2` | a **sum** of terms (no spaces); here the midpoint between x-height and cap-height |
 | `box.bottom` / `box.middle` / `box.top` | this glyph's **own** bbox: `yMin` / centre / `yMax` |
 | `box*2/3` | a fractional position up the bbox |
-| `outline.bottom` / `outline.top` / `outline.center` | lowest / highest / centre crossing on a **vertical** scanline at the anchor's X |
-| `outline.N.center` | centre of the N-th vertical span at X (e.g. a bar of `E`, `Ё`) |
+| `outline.bottom` / `outline.top` / `outline.middle` | lowest / highest / centre crossing on a **vertical** scanline at the anchor's X (the centre is `middle`, not `center`) |
+| `outline.N.middle` | centre of the N-th vertical span at X (e.g. a bar of `E`, `Ё`) |
 | `outline.centroid` | the area centre of mass (the y of it); see [Centroid](#centroid) |
 | `<number>` | absolute Y in font units (integer) |
 | `&name` | a variable standing in for the whole Y — see [Variables](#variables) |
