@@ -28,12 +28,13 @@ log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class ComputeDiagnostic:
-    """One spec that :func:`compute_document` (``on_error='collect'``) could not place.
+    """One spec that :func:`compute_document` (``on_error='collect'``) flagged.
 
-    ``severity`` is ``"error"`` (the anchor was skipped) — a ``"warning"`` level
-    (placed via a geometry fallback) is reserved for the strict-resolve work
-    discussed in issue #4. ``rule`` will point at the originating rule's source
-    once provenance (issue #3) lands; it stays ``None`` until then.
+    ``severity`` is ``"error"`` — the anchor was skipped (geometry raised) — or
+    ``"warning"`` — the anchor *was* placed but via a geometry fallback rather
+    than a clean computation, so its position is suspect (see :func:`_degrade`).
+    ``rule`` will point at the originating rule's source once provenance
+    (issue #3) lands; it stays ``None`` until then.
     """
     glyph: str                       # target (suffixed) glyph name
     anchor: str                      # spec.name
