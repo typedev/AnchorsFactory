@@ -43,6 +43,12 @@ def _rect(x0, y0, x1, y1):
     return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
 
 
+def _hole(x0, y0, x1, y1):
+    """A counter — the reverse winding of :func:`_rect`, so the nonzero fill rule
+    cuts it out (matching how real font counters are wound)."""
+    return _rect(x0, y0, x1, y1)[::-1]
+
+
 def build_demo_font():
     """Return a fresh in-memory :class:`RFont` populated with demo glyphs."""
     font = RFont()
@@ -66,7 +72,7 @@ def build_demo_font():
     # O: a ring (outer + counter) with overshoot — 4 crossings → 2 stems.
     _glyph(font, "O", 720, 0x4F, [
         _rect(80, -10, 640, CAP + 10),
-        _rect(180, 110, 540, CAP - 110),
+        _hole(180, 110, 540, CAP - 110),
     ])
     # A: a solid trapezoid — a single stem that narrows with height.
     _glyph(font, "A", 680, 0x41, [
@@ -84,7 +90,7 @@ def build_demo_font():
     for name, uni, w in (("o", 0x6F, 500), ("a", 0x61, 500), ("e", 0x65, 500)):
         _glyph(font, name, w, uni, [
             _rect(70, -10, w - 70, XH + 10),
-            _rect(150, 100, w - 150, XH - 100),
+            _hole(150, 100, w - 150, XH - 100),
         ])
 
     # ---- Marks ----

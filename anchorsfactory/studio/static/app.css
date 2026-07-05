@@ -186,7 +186,7 @@ button.icon{padding:5px 8px;line-height:1;font-size:13px}
 .metric{stroke:var(--metric);stroke-width:1;stroke-dasharray:2 5;vector-effect:non-scaling-stroke}
 .metric-lbl{fill:var(--metric);font-family:var(--mono);font-size:11px}
 .bbox{fill:none;stroke:var(--metric);stroke-width:1;stroke-dasharray:4 4;opacity:.5;vector-effect:non-scaling-stroke}
-.ink{fill:var(--ink);fill-rule:evenodd}
+.ink{fill:var(--ink);fill-rule:nonzero}   /* font outlines: overlaps fill solid, counters cut by winding */
 .scan{stroke:var(--scan);stroke-width:1;stroke-dasharray:5 4;opacity:.85;vector-effect:non-scaling-stroke}
 .stem{stroke:var(--stem);stroke-width:3;stroke-linecap:round;vector-effect:non-scaling-stroke}
 .cross{fill:var(--scan)}
