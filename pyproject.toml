@@ -42,12 +42,14 @@ dev = ["pytest", "build"]
 [project.scripts]
 anchorsfactory = "anchorsfactory.cli:main"
 anchorsfactory-convert = "anchorsfactory.convert:main"
+anchorsfactory-studio = "anchorsfactory.studio.server:main"
 
 [tool.setuptools]
-packages = ["anchorsfactory", "anchorsfactory.rules"]
+packages = ["anchorsfactory", "anchorsfactory.rules", "anchorsfactory.studio"]
 
 [tool.setuptools.package-data]
 "anchorsfactory.rules" = ["*.af"]
+"anchorsfactory.studio" = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -255,6 +255,32 @@ def accumulate(doc: Document, name: str, unicodes) -> list:
     return acc
 
 
+def accumulate_provenance(doc: Document, name: str, unicodes) -> list:
+    """Like :func:`accumulate`, but tag each surviving spec with the index of the
+    rule that placed it.
+
+    Returns a list of ``(AnchorSpec, rule_index)`` in final order — where
+    ``rule_index`` indexes ``doc.rules`` (and, when the DSL parser set it,
+    ``doc.sources`` for the source line). This is the provenance backbone for the
+    studio ("which rule produced this anchor"); the plain :func:`accumulate` is
+    unchanged for the batch/apply path.
+    """
+    acc: list = []                             # (spec, rule_index)
+    for i, (selector, op, items) in enumerate(doc.rules):
+        if not _matches(selector, name, unicodes):
+            continue
+        if op is Op.REMOVE:
+            drop = _remove_targets(items, doc.labels)
+            acc = [(s, idx) for (s, idx) in acc if s.name not in drop]
+        else:
+            specs = _resolve_items(items, doc.labels)
+            if doc.variables:
+                specs = [_resolve_vars_in_spec(s, doc.variables) for s in specs]
+            tagged = [(s, i) for s in specs]
+            acc = tagged if op is Op.REPLACE else acc + tagged
+    return acc
+
+
 def compute_document(font, doc: Document, *, replace=True, round_coords=True,
                      on_error="raise", names=None) -> ComputeResult:
     """Compute the anchors *doc* describes for *font*, without mutating it.

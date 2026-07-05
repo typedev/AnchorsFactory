@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>anchorsfactory · studio</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2312161C'/%3E%3Ccircle cx='8' cy='8' r='3.4' fill='none' stroke='%23FF5C39' stroke-width='1.4'/%3E%3Ccircle cx='8' cy='8' r='1.3' fill='%23FF5C39'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header>
+  <div class="brand"><b>anchorsfactory</b><span class="dot">·</span>studio</div>
+  <div class="meta" id="fontmeta">—</div>
+  <div class="spacer"></div>
+  <button id="theme" class="ghost icon" title="toggle light / dark theme" aria-label="toggle theme">◐</button>
+  <button id="loadfont" class="ghost" title="drop a .ufoz/.zip (or a .ufo folder) anywhere, or click to pick a file">load .ufoz ▾</button>
+  <input id="fontfile" type="file" accept=".ufoz,.zip" hidden>
+  <div class="pill" id="status">idle</div>
+</header>
+<div id="drop"><div class="box">
+  <div class="big">drop a .ufoz or .zip</div>
+  <div class="small">a zipped UFO (.ufoz / .zip), or a .ufo folder — stays on your machine</div>
+</div></div>
+<main>
+  <section class="editor">
+    <div class="bar">
+      <label for="preset">preset</label>
+      <select id="preset"></select>
+      <div class="spacer" style="flex:1"></div>
+      <button id="findbtn" class="ghost" title="find in rules (Ctrl+F)">find</button>
+      <button id="download" class="primary">download .af</button>
+    </div>
+    <div class="find" id="find" hidden>
+      <input id="findq" placeholder="find in rules…" spellcheck="false" autocomplete="off">
+      <span class="find-count" id="findcount"></span>
+      <button id="findprev" class="ghost icon" title="previous (Shift+Enter)">↑</button>
+      <button id="findnext" class="ghost icon" title="next (Enter)">↓</button>
+      <button id="findclose" class="ghost icon" title="close (Esc)">✕</button>
+    </div>
+    <div class="ed" id="ed">
+      <div class="ed-gutter" id="gutter"><div class="gnums" id="gnums"></div></div>
+      <div class="ed-body" id="edbody">
+        <pre class="ed-hl" id="hl" aria-hidden="true"></pre>
+        <textarea id="rules" spellcheck="false" autocomplete="off" autocapitalize="off" wrap="off"></textarea>
+        <div class="ac" id="ac" hidden></div>
+      </div>
+    </div>
+    <div class="problems" id="problems"></div>
+  </section>
+  <div class="split col" data-t="edw" title="drag to resize · double-click to reset"></div>
+  <section class="stage">
+    <div class="gridwrap">
+      <div class="gridhead">
+        <span>affected glyphs · <span id="count">0</span></span>
+        <input id="glyphq" class="mini" placeholder="filter glyphs…" spellcheck="false" autocomplete="off">
+      </div>
+      <div class="glyphgrid" id="grid"></div>
+    </div>
+    <div class="split row" data-t="gridh" title="drag to resize · double-click to reset"></div>
+    <div class="inspector">
+      <div class="canvas" id="canvas"><div class="empty">select a glyph</div></div>
+      <div class="split col" data-t="row" title="drag to resize · double-click to reset"></div>
+      <aside class="readout" id="readout"></aside>
+    </div>
+    <div class="legend">
+      <span><i class="swatch" style="background:var(--anchor)"></i>anchor</span>
+      <span><i class="swatch" style="background:var(--scan)"></i>sample scanline</span>
+      <span><i class="swatch" style="background:var(--stem)"></i>ink stem</span>
+      <span><i class="swatch" style="background:var(--metric)"></i>metric / bbox</span>
+    </div>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

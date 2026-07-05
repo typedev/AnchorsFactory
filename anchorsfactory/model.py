@@ -482,3 +482,8 @@ class Document:
     # replays them into a SuffixSpec. Empty = just the unsuffixed base glyph.
     suffix_ops: list = field(default_factory=list)
     extends: list[str] = field(default_factory=list)  # base rules to inherit (!extends)
+    # 1-based source line for each rule, parallel to `rules` — set by the DSL
+    # parser for editor / provenance tooling (which rule placed an anchor). Empty
+    # from the legacy parser and after !extends merges; consumers must treat it as
+    # optional (degrade to "no line" when a rule's index is out of range).
+    sources: list[int] = field(default_factory=list)

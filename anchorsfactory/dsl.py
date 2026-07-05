@@ -312,6 +312,7 @@ def parse_dsl(lines) -> Document:
     labels: dict[str, list[AnchorSpec]] = {}
     variables: dict[str, object] = {}
     rules: list = []
+    sources: list[int] = []                    # source line per rule (parallel to rules)
     shift_x = 0
     suffix_ops: list = []
     extends: list[str] = []
@@ -405,9 +406,11 @@ def parse_dsl(lines) -> Document:
                 raise DSLError(f"line {n}: empty left-hand side")
             for sel_tok in selectors:
                 rules.append((_parse_selector(sel_tok), op, items))
+                sources.append(n)              # every selector on this line shares line n
 
     return Document(labels=labels, variables=variables, rules=rules,
-                    shift_x=shift_x, suffix_ops=suffix_ops, extends=extends)
+                    sources=sources, shift_x=shift_x, suffix_ops=suffix_ops,
+                    extends=extends)
 
 
 def parse_dsl_file(path: str) -> Document:

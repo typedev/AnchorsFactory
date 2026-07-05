@@ -1,0 +1,222 @@
+"""The Studio server: a dependency-free stdlib HTTP server that serves the
+single-page UI and two JSON endpoints (``/api/state``, ``/api/compute``).
+
+The font is opened once and kept in memory; rule text is sent from the browser
+on every edit, so the server is otherwise stateless. No font bytes ever leave
+the machine.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import mimetypes
+import shutil
+import threading
+from functools import partial
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from importlib.resources import files
+
+from ..presets import is_preset, list_presets, preset_text
+from .demo import build_demo_font, font_metrics
+from .render import build_view
+from .upload import load_uploaded_font
+
+log = logging.getLogger("anchorsfactory.studio")
+
+_STATIC = files("anchorsfactory.studio").joinpath("static")
+
+
+def _seed_rules(rules: str) -> str:
+    """The editable rule text to open with: a preset's source, or a file's."""
+    if is_preset(rules):
+        return preset_text(rules)
+    with open(rules, encoding="utf-8") as fh:
+        return fh.read()
+
+
+def _font_state(font, name: str) -> dict:
+    """The font-dependent slice of the client state."""
+    return {
+        "font": name,
+        "unitsPerEm": float(getattr(font.info, "unitsPerEm", 1000) or 1000),
+        "italicAngle": float(font.info.italicAngle or 0),
+        "metrics": font_metrics(font),
+    }
+
+
+class Studio:
+    """Holds the opened font and the state a session starts from.
+
+    ``lock`` serialises the shared font across the threaded server: a compute
+    reads it and a drop-upload swaps it, so both take the lock.
+    """
+
+    def __init__(self, font, rules_text: str, font_name: str):
+        self.font = font
+        self.rules_text = rules_text
+        self.lock = threading.Lock()
+        self._tmpdir = None                    # temp dir of an uploaded font, if any
+        self.state = {
+            **_font_state(font, font_name),
+            "presets": list_presets(),
+            "presetTexts": {name: preset_text(name) for name in list_presets()},
+            "rules": rules_text,
+        }
+
+    def set_font(self, font, name: str, tmpdir=None):
+        """Swap in a freshly loaded font, returning the previous temp dir (if any)
+        for the caller to clean up outside the lock."""
+        old = self._tmpdir
+        self.font = font
+        self._tmpdir = tmpdir
+        self.state.update(_font_state(font, name))
+        return old
+
+
+class _Handler(BaseHTTPRequestHandler):
+    def __init__(self, *args, studio: Studio, **kwargs):
+        self.studio = studio
+        super().__init__(*args, **kwargs)
+
+    # Quieter, single-line logging via our logger instead of stderr prints.
+    def log_message(self, fmt, *args):
+        log.info("%s - %s", self.address_string(), fmt % args)
+
+    def _send_json(self, obj, status=200):
+        body = json.dumps(obj).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        if self.path in ("/", "/index.html"):
+            self._send_static("index.html", "text/html; charset=utf-8")
+        elif self.path == "/api/state":
+            self._send_json(self.studio.state)
+        elif self.path.startswith("/static/"):
+            rel = self.path[len("/static/"):].split("?", 1)[0]
+            ctype = mimetypes.guess_type(rel)[0] or "application/octet-stream"
+            self._send_static(rel, ctype)
+        else:
+            self._send_json({"error": "not found"}, status=404)
+
+    def _send_static(self, rel, ctype):
+        """Serve a file from the package's ``static/`` dir (traversal-safe)."""
+        node = _STATIC
+        for part in rel.split("/"):
+            if part in ("", ".", ".."):
+                self._send_json({"error": "not found"}, status=404)
+                return
+            node = node.joinpath(part)
+        try:
+            body = node.read_bytes()
+        except (FileNotFoundError, IsADirectoryError, OSError):
+            self._send_json({"error": "not found"}, status=404)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        # served fresh each request → never let a browser cache a stale UI.
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _read_json(self):
+        length = int(self.headers.get("Content-Length", 0))
+        raw = self.rfile.read(length) if length else b"{}"
+        return json.loads(raw)
+
+    def do_POST(self):
+        if self.path == "/api/compute":
+            self._compute()
+        elif self.path == "/api/font":
+            self._load_font()
+        else:
+            self._send_json({"error": "not found"}, status=404)
+
+    def _compute(self):
+        try:
+            rules = self._read_json().get("rules", "")
+        except (ValueError, AttributeError):
+            self._send_json({"ok": False, "problems": ["malformed request body"],
+                             "diagnostics": [], "glyphs": {}}, status=400)
+            return
+        with self.studio.lock:
+            view = build_view(self.studio.font, rules)
+        self._send_json(view)
+
+    def _load_font(self):
+        """Accept a dropped UFO (files reconstructed from the browser) and swap it
+        in as the active font."""
+        try:
+            payload = self._read_json()
+            font, name, tmp = load_uploaded_font(payload.get("files", []),
+                                                 payload.get("name", "font"))
+        except ValueError as exc:                       # empty / non-UFO / malformed
+            self._send_json({"ok": False, "error": str(exc)}, status=400)
+            return
+        except Exception as exc:                        # OpenFont / IO failure
+            log.warning("font upload failed: %s", exc)
+            self._send_json({"ok": False, "error": f"could not open font: {exc}"},
+                            status=400)
+            return
+        with self.studio.lock:
+            old = self.studio.set_font(font, name, tmp)
+        if old:
+            shutil.rmtree(old, ignore_errors=True)
+        self._send_json({"ok": True, "state": _font_state(font, name)})
+
+
+def serve(studio: Studio, host: str, port: int):
+    handler = partial(_Handler, studio=studio)
+    httpd = ThreadingHTTPServer((host, port), handler)
+    url = f"http://{host}:{port}/"
+    print(f"anchorsfactory studio → {url}  (font: {studio.state['font']}, Ctrl-C to stop)")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nstopped.")
+    finally:
+        httpd.server_close()
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="anchorsfactory-studio",
+        description="Visual debugger for anchor rules (opens a local web UI).",
+    )
+    p.add_argument("ufo", nargs="?",
+                   help="a .ufo to debug; omitted → built-in demo font")
+    p.add_argument("-r", "--rules", default="default",
+                   help="preset name or .af path to open with (default: 'default')")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8765)
+    p.add_argument("-v", "--verbose", action="store_true")
+    return p
+
+
+def main(argv=None) -> int:
+    args = build_parser().parse_args(argv)
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    rules_text = _seed_rules(args.rules)
+    if args.ufo:
+        from fontParts.world import OpenFont
+        font = OpenFont(args.ufo)
+        name = getattr(font.info, "familyName", None) or args.ufo
+    else:
+        font = build_demo_font()
+        name = "demo"
+    serve(Studio(font, rules_text, name), args.host, args.port)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

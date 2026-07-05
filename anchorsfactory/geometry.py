@@ -407,3 +407,98 @@ def resolve(font, glyph, spec: AnchorSpec, *, warnings=None) -> tuple[float, flo
         x = _axis(font, glyph, xs, Axis.X, cross=y, warnings=warnings)
         x += _shift_x(font, glyph, xs, y)
     return (x, y)
+
+
+def _first_outline(node) -> Optional[Pos]:
+    """The OUTLINE :class:`Pos` governing an axis, if any (through ``Sum``/``Neg``)."""
+    if isinstance(node, Neg):
+        return _first_outline(node.term)
+    if isinstance(node, Sum):
+        for t in node.terms:
+            found = _first_outline(t)
+            if found is not None:
+                return found
+        return None
+    if isinstance(node, Pos) and node.frame is Frame.OUTLINE:
+        return node
+    return None
+
+
+def _uses_centroid(node) -> bool:
+    if isinstance(node, Centroid):
+        return True
+    if isinstance(node, Neg):
+        return _uses_centroid(node.term)
+    if isinstance(node, Sum):
+        return any(_uses_centroid(t) for t in node.terms)
+    return False
+
+
+def _kind(node) -> str:
+    """A short label naming the strategy family, for a debug UI (``box``,
+    ``advance``, ``outline``, ``centroid``, ``metric``, ``glyph``, ``abs``,
+    ``sum``)."""
+    if isinstance(node, Sum):
+        return "sum"
+    if isinstance(node, Neg):
+        return _kind(node.term)
+    if isinstance(node, Centroid):
+        return "centroid"
+    if isinstance(node, Abs):
+        return "abs"
+    if isinstance(node, FontMetric):
+        return "metric"
+    if isinstance(node, Y):
+        return "glyph"
+    if isinstance(node, Pos):
+        return {Frame.ADVANCE: "advance", Frame.BOX: "box",
+                Frame.OUTLINE: "outline"}[node.frame]
+    return type(node).__name__.lower()
+
+
+def explain(font, glyph, spec: AnchorSpec, *, warnings=None) -> dict:
+    """Resolve *spec* on *glyph* **and** expose the intermediate geometry a debug
+    UI overlays to show *why* the anchor landed where it did.
+
+    Returns a plain dict (JSON-ready) with the final point plus, where relevant,
+    the scanline(s) sampled and the ink structure found on them:
+
+    - ``name``/``x``/``y`` — the resolved anchor (identical to :func:`resolve`;
+      ``x`` includes italic shear, not the document-level ``shift_x``).
+    - ``bounds`` — the glyph bbox ``[xMin, yMin, xMax, yMax]`` or ``None``.
+    - ``x_kind``/``y_kind`` — the strategy family per axis (see :func:`_kind`).
+    - ``x_sample`` — when X samples the outline: ``{height, crossings, stems}``
+      for the horizontal scanline it read (``stems`` = paired ink spans).
+    - ``y_sample`` — when Y samples the outline: ``{column, crossings, stems}``.
+    - ``centroid`` — ``[cx, cy]`` when either axis uses the area centroid.
+    - ``warnings`` — soft-degradation reasons (same channel as :func:`resolve`).
+
+    The scanline recovery reuses exactly the helpers :func:`resolve` used
+    internally, so the overlay is faithful to the placement, not a re-derivation.
+    """
+    sink = warnings if warnings is not None else []
+    x, y = resolve(font, glyph, spec, warnings=sink)
+    bounds = glyph.bounds
+    info: dict = {
+        "name": spec.name,
+        "x": x,
+        "y": y,
+        "bounds": list(bounds) if bounds is not None else None,
+        "x_kind": _kind(spec.x),
+        "y_kind": _kind(spec.y),
+        "warnings": list(sink),
+    }
+    if bounds is not None:
+        px = _first_outline(spec.x)
+        if px is not None:                 # horizontal scanline at a height
+            h = _sample_line(font, glyph, px, Axis.X, y, bounds)
+            cs = _crossings(glyph, h, Axis.X)
+            info["x_sample"] = {"height": h, "crossings": cs, "stems": _spans(cs)}
+        py = _first_outline(spec.y)
+        if py is not None:                 # vertical scanline at a column
+            c = _sample_line(font, glyph, py, Axis.Y, x, bounds)
+            cs = _crossings(glyph, c, Axis.Y)
+            info["y_sample"] = {"column": c, "crossings": cs, "stems": _spans(cs)}
+    if _uses_centroid(spec.x) or _uses_centroid(spec.y):
+        info["centroid"] = list(_centroid(glyph))
+    return info
