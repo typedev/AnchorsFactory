@@ -23,6 +23,12 @@ async function boot(){
     if(t !== undefined){ EDITOR.setValue(t); compute(); }
   });
   $("#download").addEventListener("click", download);
+  $("#openrules").addEventListener("click", () => $("#rulesfile").click());
+  $("#rulesfile").addEventListener("change", async e => {
+    const f = e.target.files[0];
+    if(f) loadRulesText(await f.text());
+    e.target.value = "";
+  });
   $("#glyphq").addEventListener("input", e => { GLYPH_FILTER = e.target.value.trim(); renderGrid(); });
   setupTheme();
   setupFind();
@@ -325,6 +331,10 @@ function setupFontDrop(){
     if(!roots.length) return;
     const collected=[];
     for(const r of roots) await walkEntry(r, "", collected);
+    if(collected.length === 1 && /\.(af|dsl|txt)$/i.test(collected[0].path)){
+      loadRulesText(await collected[0].file.text());   // a dropped rules file → editor
+      return;
+    }
     await sendFont(roots[0].name, collected);
   });
   $("#loadfont").addEventListener("click", () => $("#fontfile").click());
@@ -567,6 +577,15 @@ function download(){
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob); a.download="anchors.af"; a.click();
   URL.revokeObjectURL(a.href);
+}
+
+// Load custom rule text into the editor (from the "open" picker or a dropped
+// .af). Such a file may `!extends default` to inherit a bundled preset.
+function loadRulesText(text){
+  EDITOR.setValue(text);
+  $("#preset").selectedIndex = -1;                 // content is now custom, not a raw preset
+  SELECTED = null; HL_ANCHOR = null;
+  compute();
 }
 
 boot();

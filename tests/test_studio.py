@@ -106,6 +106,26 @@ def test_build_view_agrees_with_compute_document(font):
             assert got[name] == pytest.approx(want[name])
 
 
+def test_build_view_resolves_extends_preset(font):
+    # custom rules inheriting the bundled default, then overriding H
+    rules = "!extends default\nH = zz (box.left ascender)\n"
+    view = build_view(font, rules)
+    assert view["ok"]
+    # inherited: O still gets its default anchors (O is not in the edited text)
+    assert "O" in view["glyphs"]
+    assert view["glyphs"]["O"]["anchors"][0]["line"] is None      # inherited → no editor line
+    # override wins: H replaced by the edited rule, which keeps its source line
+    h = {a["name"]: a for a in view["glyphs"]["H"]["anchors"]}
+    assert set(h) == {"zz"}
+    assert h["zz"]["line"] == 2
+
+
+def test_resolve_document_rejects_path_extends():
+    from anchorsfactory.studio.render import resolve_document
+    with pytest.raises(ValueError):
+        resolve_document("!extends ./local/base.af\nH = top (box.center capHeight)")
+
+
 def test_build_view_reports_parse_error_without_raising(font):
     view = build_view(font, "H = top (this is not valid dsl")
     assert view["ok"] is False

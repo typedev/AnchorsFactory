@@ -18,8 +18,8 @@
   <div class="pill" id="status">idle</div>
 </header>
 <div id="drop"><div class="box">
-  <div class="big">drop a .ufoz or .zip</div>
-  <div class="small">a zipped UFO (.ufoz / .zip), or a .ufo folder — stays on your machine</div>
+  <div class="big">drop a font or a .af</div>
+  <div class="small">a zipped UFO (.ufoz / .zip) or .ufo folder to debug — or a .af rules file to edit</div>
 </div></div>
 <main>
   <section class="editor">
@@ -28,6 +28,8 @@
       <select id="preset"></select>
       <div class="spacer" style="flex:1"></div>
       <button id="findbtn" class="ghost" title="find in rules (Ctrl+F)">find</button>
+      <button id="openrules" class="ghost" title="open a .af rules file (may !extends a preset)">open</button>
+      <input id="rulesfile" type="file" accept=".af,.dsl,.txt" hidden>
       <button id="download" class="primary">download .af</button>
     </div>
     <div class="find" id="find" hidden>

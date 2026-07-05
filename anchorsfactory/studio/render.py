@@ -13,9 +13,11 @@ from fontTools.pens.recordingPen import DecomposingRecordingPen
 from fontTools.pens.svgPathPen import SVGPathPen
 
 from ..apply import accumulate_provenance, validate_document
-from ..dsl import parse_dsl
+from ..dsl import DSLError, parse_dsl
 from ..geometry import explain
-from ..model import resolve_suffixes
+from ..model import Document, resolve_suffixes
+from ..presets import is_preset
+from ..runner import load_document
 
 
 def glyph_to_svg_path(glyph) -> str:
@@ -55,6 +57,46 @@ def _anchor_payload(font, target, spec, gname, diagnostics, shift_x, rule, line)
     return info
 
 
+def _layer(base: Document, child: Document, *, inherited: bool) -> Document:
+    """Layer *child* on *base* (mirrors ``runner._merge``) while keeping source
+    lines aligned with rules. ``inherited=True`` marks the child's rules as coming
+    from a preset, so they carry no editor line (click-to-rule only points at the
+    edited text)."""
+    if inherited:
+        child_src = [None] * len(child.rules)
+    else:
+        child_src = list(child.sources) + [None] * (len(child.rules) - len(child.sources))
+    return Document(
+        labels={**base.labels, **child.labels},
+        variables={**base.variables, **child.variables},
+        rules=base.rules + child.rules,
+        sources=base.sources + child_src,
+        shift_x=child.shift_x or base.shift_x,
+        suffix_ops=base.suffix_ops + child.suffix_ops,
+    )
+
+
+def resolve_document(rules_text: str) -> Document:
+    """Parse the edited rules and resolve any ``!extends <preset>`` so custom
+    rules can inherit a bundled preset (e.g. ``!extends default`` then a few
+    overrides). Bases are merged first, the edited rules on top.
+
+    Only **bundled preset names** may be inherited here — the studio has no access
+    to the user's file paths — so a path reference raises a clear error. Edited
+    rules keep their source lines (for click-to-rule); inherited ones do not.
+    """
+    doc = parse_dsl(rules_text.splitlines())
+    if not doc.extends:
+        return doc
+    base = Document()
+    for ref in doc.extends:
+        if not is_preset(ref):
+            raise DSLError(f"!extends {ref!r}: only a bundled preset name can be "
+                           f"inherited in studio (not a file path)")
+        base = _layer(base, load_document(ref), inherited=True)
+    return _layer(base, doc, inherited=False)
+
+
 def build_view(font, rules_text: str) -> dict:
     """Compute everything the UI needs for *rules_text* against *font*.
 
@@ -64,8 +106,8 @@ def build_view(font, rules_text: str) -> dict:
     so the editor can show them inline.
     """
     try:
-        doc = parse_dsl(rules_text.splitlines())
-    except ValueError as exc:                        # DSLError/ParseError subclass this
+        doc = resolve_document(rules_text)           # resolves !extends <preset>
+    except ValueError as exc:                        # DSLError / !extends cycle subclass this
         return {"ok": False, "problems": [str(exc)], "diagnostics": [], "glyphs": {}}
 
     problems = validate_document(doc)
