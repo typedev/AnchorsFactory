@@ -1,0 +1,53 @@
+# AnchorsFactory — Hebrew anchor rules
+#
+# Niqqud centre on the letter (box centre) and live in three vertical bands:
+# below the baseline (most niqqud), an "above" band where marks are drawn
+# (just under xHeight), and a high dot band at capHeight (holam, shin/sin dot).
+# Anchor scheme:
+#   base side : top    — above-letter marks, at the letter's own box top
+#               bottom — below-base niqqud, centred on the letter at baseline
+#               dot    — the high dot band near the right advance edge
+#   mark side : _top / _bottom / _dot
+#
+# Defaults tuned against a 1000-UPM sans (Noto Sans Hebrew) — retune per font.
+
+# ============================================================
+#  VARIABLES — retune these per font
+# ============================================================
+&aboveDrop = 8                      # the above-mark design band sits this far below xHeight
+&aboveY    = xHeight-&aboveDrop     # height marks are drawn at (mark-side `_top`/`_dot`)
+&dotInset  = 20                     # `dot` X inset from the right advance edge
+&dotY      = capHeight              # height of the dot band (holam / shin+sin dots)
+
+# ============================================================
+#  LABELS
+# ============================================================
+@hebBase   = top (box.center box.top), bottom (box.center baseline), dot (width.right-&dotInset &dotY)
+@hebTop    = _top (box.center &aboveY)
+@hebBottom = _bottom (box.center baseline)
+@hebDot    = _dot (outline.center@bottom &aboveY)
+
+# ============================================================
+#  BASE GLYPHS
+# ============================================================
+U+05D0..U+05EA = @hebBase           # letters alef .. tav
+# wide / final presentation variants share the letter geometry: extend this
+# preset with your foundry's variant glob (e.g. `*.wide = @hebBase`).
+
+# ============================================================
+#  MARKS
+# ============================================================
+# below-base niqqud
+U+05B0..U+05B8 = @hebBottom         # sheva .. qamats
+U+05BB         = @hebBottom         # qubuts
+U+05BD         = @hebBottom         # meteg
+U+05C7         = @hebBottom         # qamats qatan
+# high dots
+U+05B9..U+05BA = @hebDot            # holam, holam haser for vav
+U+05C1..U+05C2 = @hebDot            # shin dot, sin dot
+# above-base
+U+05BF         = @hebTop            # rafe
+# cantillation (U+0591..U+05AF) is split above/below per mark — too varied for
+# a blanket rule; extend this preset with per-mark @hebTop/@hebBottom lines.
+# dagesh (U+05BC) sits inside the letter — give it a centred anchor if your
+# composition scheme uses one.

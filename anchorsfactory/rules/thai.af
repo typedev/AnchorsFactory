@@ -1,0 +1,47 @@
+# AnchorsFactory — Thai anchor rules
+#
+# Thai combining marks are zero-width and drawn *left of the origin*, so their
+# attachment points are fixed offsets from the origin (width.left), not from
+# the box. Anchor scheme (the names used by libre Thai fonts):
+#   base side : top    — the mark band just below xHeight (above vowels, tones)
+#               bottom — on the baseline (below vowels: sara u/uu, phinthu)
+#   mark side : _top / _bottom; above-base marks also carry their own base-side
+#               `top` so tone marks can stack on above-base vowels (mkmk).
+#
+# Defaults tuned against a 1000-UPM sans (Noto Sans Thai) — retune per font.
+
+# ============================================================
+#  VARIABLES — retune these per font
+# ============================================================
+&aboveDrop  = 20                    # the mark band sits this far below xHeight
+&aboveY     = xHeight-&aboveDrop    # Y of `top` on bases and `_top` on marks
+&topInset   = 92                    # `top` X inset from the advance edge (≈ right sidebearing + half the last stem)
+&footY      = 50                    # scanline height for the `bottom` X: just above the baseline, so round feet that lift off it still register
+&markInset  = 89                    # zero-width marks: how far left of the origin the attachment sits
+&stackShift = 44                    # stacking `top` on a mark: X shift right of its ink centre
+
+# ============================================================
+#  LABELS
+# ============================================================
+@thaiBase   = top (width.right-&topInset &aboveY), bottom (outline.right@&footY baseline)
+@thaiTop    = _top (width.left-&markInset &aboveY)
+@thaiBottom = _bottom (width.left-&markInset baseline)
+@thaiStack  = top (outline.center+&stackShift box.top)
+
+# ============================================================
+#  BASE GLYPHS
+# ============================================================
+U+0E01..U+0E2E = @thaiBase          # consonants (ko kai .. ho nokhuk)
+
+# ============================================================
+#  MARKS
+# ============================================================
+# above-base vowels & signs: attach below (_top), and offer a stacking `top`
+U+0E31         = @thaiTop, @thaiStack   # mai han akat
+U+0E34..U+0E37 = @thaiTop, @thaiStack   # sara i, ii, ue, uee
+U+0E47         = @thaiTop, @thaiStack   # mai taikhu
+U+0E4D..U+0E4E = @thaiTop, @thaiStack   # nikhahit, yamakkan
+# tone marks: attach below; `top` allows a further stack level
+U+0E48..U+0E4C = @thaiTop, @thaiStack   # mai ek .. thanthakhat
+# below-base vowels & signs
+U+0E38..U+0E3A = @thaiBottom            # sara u, sara uu, phinthu

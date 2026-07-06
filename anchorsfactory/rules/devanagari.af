@@ -1,0 +1,59 @@
+# AnchorsFactory — Devanagari anchor rules
+#
+# Anchor scheme (the names used by libre Devanagari fonts):
+#   base side : top     — headline (shirorekha) attachment: reph, above matras
+#               bottom  — first below-base level (u/uu matras, virama)
+#               bottom2 — second stacking level below (conjunct + matra)
+#   mark side : _top on above-base marks, _bottom on below-base marks
+#
+# Geometry carries the shape (outline/box/width frames); the &variables carry
+# the design's fixed clearances. Defaults are tuned against a 2000-UPM sans
+# master (Anek Devanagari) — retune them per font (Noto-style values noted).
+
+# ============================================================
+#  VARIABLES — retune these per font
+# ============================================================
+&headDrop   = 40                    # how far the headline attachment sits below capHeight (Noto Devanagari: 0)
+&headY      = capHeight-&headDrop   # Y of every `top` / `_top`
+&topInset   = 298                   # `top` X inset from the right ink edge — the headline overhang left of the reph hook (Noto @1000 UPM: 184)
+&stemY      = 100                   # scanline height used to find the base stem: low, below the letter-body clutter, above baseline serifs
+&stemX      = outline.last.center@&stemY   # centre of the rightmost stem — the column below-base marks hang from
+&bottomLift = 23                    # clearance of `bottom`/`bottom2`/`_bottom` above the ink bottom / baseline
+&stackShift = 7                     # X pull-back of the second stack level (bottom2) from the stem centre
+&markInset  = 265                   # zero-width marks are drawn left of the origin; distance origin -> attachment point (very font-specific)
+
+# ============================================================
+#  LABELS
+# ============================================================
+@devaBase   = top (outline.right-&topInset &headY), bottom (&stemX outline.bottom+&bottomLift), bottom2 (&stemX-&stackShift outline.bottom+&bottomLift)
+@devaTop    = _top (outline.center@bottom &headY)
+@devaBottom = _bottom (width.left-&markInset baseline+&bottomLift)
+
+# ============================================================
+#  BASE GLYPHS
+# ============================================================
+U+0904..U+0939 = @devaBase          # independent vowels + consonants
+U+0958..U+095F = @devaBase          # nukta consonants
+U+0972..U+097F = @devaBase          # additional vowels / consonants
+U+0950         = @devaBase          # om
+# spacing (Mc) matras behave like bases: they carry the headline `top` and stack levels
+U+093E..U+0940 = @devaBase          # aa, i, ii
+U+0949..U+094C = @devaBase          # candra o .. au
+# unencoded conjuncts — glyph-name fallback (AGL/Glyphs `k_ssa-deva` convention).
+# Foundry naming schemes differ; extend this preset and add your own glob.
+*_*-deva = @devaBase
+
+# ============================================================
+#  MARKS
+# ============================================================
+# above-base
+U+0900..U+0902 = @devaTop           # inverted candrabindu, candrabindu, anusvara
+U+0945..U+0948 = @devaTop           # candra e .. ai matras
+U+0951         = @devaTop           # udatta (stress sign)
+U+0953..U+0955 = @devaTop           # grave, acute, candra long e
+# below-base
+U+093C         = @devaBottom        # nukta
+U+0941..U+0944 = @devaBottom        # u, uu, vocalic r/rr matras
+U+094D         = @devaBottom        # virama (halant)
+U+0952         = @devaBottom        # anudatta
+U+0962..U+0963 = @devaBottom        # vocalic l/ll matras
