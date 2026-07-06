@@ -3,7 +3,7 @@ const SVGNS = "http://www.w3.org/2000/svg";
 const REDUCED = matchMedia("(prefers-reduced-motion:reduce)").matches;
 const LH = 20, PAD = 14;                     // editor line-height / padding (match app.css)
 let META = null, VIEW = {glyphs:{}, layers:[]}, SELECTED = null, GLYPH_FILTER = "", HL_ANCHOR = null;
-let baseEd = null, customEd = null, activeEd = null;
+let baseEd = null, customEd = null, activeEd = null, customOpen = false;
 const lastPos = {};                          // glyph -> {anchor -> {x,y}} for tweening
 
 const $ = s => document.querySelector(s);
@@ -38,9 +38,12 @@ function setFontMeta(){
 const persist = debounce(() => {
   try {
     localStorage.setItem("af.rules", JSON.stringify(
-      {preset: $("#preset").value, base: baseEd.getValue(), custom: customEd.getValue()}));
+      {preset: $("#preset").value, base: baseEd.getValue(), custom: customEd.getValue(), customOpen}));
   } catch(_){}
 }, 400);
+
+// Custom layer is collapsible: closed → work with the base only.
+function setCustomOpen(open){ customOpen = open; $(".editor").classList.toggle("solo-base", !open); persist(); }
 
 function setupEditors(){
   const onChange = () => { persist(); scheduleCompute(); };
@@ -54,11 +57,14 @@ function setupEditors(){
     $("#preset").value = saved.preset || META.presets[0] || "";
     baseEd.setValue(saved.base ?? META.rules);
     customEd.setValue(saved.custom ?? "");
+    customOpen = !!saved.customOpen;
   } else {
     $("#preset").value = presetOf(META.rules) || META.presets[0] || "";
     baseEd.setValue(META.rules);
     customEd.setValue("# custom rules — layered over the base below, and win\n");
+    customOpen = false;                            // start with just the base
   }
+  $(".editor").classList.toggle("solo-base", !customOpen);
 
   $("#preset").addEventListener("change", e => {
     const t = META.presetTexts[e.target.value];
@@ -71,11 +77,13 @@ function setupEditors(){
       else if(a === "open"){ $("#rulesfile").click(); }
       else if(a === "dl-custom") downloadText(customEd.getValue(), "custom.af");
       else if(a === "dl-base") downloadText(baseEd.getValue(), "base.af");
+      else if(a === "add-custom"){ setCustomOpen(true); customEd.focus(); compute(); }
+      else if(a === "close"){ setCustomOpen(false); if(activeEd === customEd) activeEd = baseEd; compute(); }
     });
   });
   $("#rulesfile").addEventListener("change", async e => {
     const f = e.target.files[0];
-    if(f){ customEd.setValue(await f.text()); persist(); SELECTED = null; HL_ANCHOR = null; compute(); }
+    if(f){ setCustomOpen(true); customEd.setValue(await f.text()); persist(); SELECTED = null; HL_ANCHOR = null; compute(); }
     e.target.value = "";
   });
   $("#glyphq").addEventListener("input", e => { GLYPH_FILTER = e.target.value.trim(); renderGrid(); });
@@ -317,7 +325,7 @@ function setupFontDrop(){
     const collected=[];
     for(const r of roots) await walkEntry(r, "", collected);
     if(collected.length === 1 && /\.(af|dsl|txt)$/i.test(collected[0].path)){   // a rules file → custom layer
-      customEd.setValue(await collected[0].file.text()); persist(); SELECTED = null; HL_ANCHOR = null; compute(); return;
+      setCustomOpen(true); customEd.setValue(await collected[0].file.text()); persist(); SELECTED = null; HL_ANCHOR = null; compute(); return;
     }
     await sendFont(roots[0].name, collected);
   });
@@ -368,7 +376,9 @@ function downloadText(text, filename){
  * ===================================================================== */
 async function compute(){
   const status = $("#status"); status.className = "pill"; status.textContent = "computing…";
-  const layers = [{name:"base", text: baseEd.getValue()}, {name:"custom", text: customEd.getValue()}];
+  const layers = customOpen
+    ? [{name:"base", text: baseEd.getValue()}, {name:"custom", text: customEd.getValue()}]
+    : [{name:"base", text: baseEd.getValue()}];
   VIEW = await (await fetch("/api/compute", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({layers})})).json();
   markErrorLines();
   renderProblems();

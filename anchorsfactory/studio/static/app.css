@@ -67,6 +67,12 @@ main{display:grid;grid-template-columns:var(--edw,380px) 6px minmax(0,1fr);min-h
 .ln-badge{font-family:var(--mono);font-size:9.5px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:1px 6px}
 .layer-ed{flex:1;min-height:0;position:relative}
 .mini-btn{padding:3px 7px;font-size:11px}
+/* custom layer closed → base takes the whole column (panes keep their grid slots) */
+#addcustom{display:none}
+.editor.solo-base{grid-template-rows:0 0 minmax(0,1fr) auto}
+.editor.solo-base #lyCustom{overflow:hidden}
+.editor.solo-base .split[data-t="baseh"]{visibility:hidden;pointer-events:none}
+.editor.solo-base #addcustom{display:inline-block}
 select,button{
   font-family:var(--mono);font-size:12px;color:var(--text);
   background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 9px;cursor:pointer;
