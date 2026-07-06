@@ -1,0 +1,3 @@
+# Thai consonant KO KAI: top anchor centred on the ink at its top edge,
+# bottom anchor centred on the ink at the baseline.
+koKai-thai = top (outline.center@top box.top), bottom (outline.center@bottom 0)

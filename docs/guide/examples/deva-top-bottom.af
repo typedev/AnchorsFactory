@@ -1,0 +1,3 @@
+# Devanagari consonant KA: top anchor sits on the headline (shirorekha),
+# just left of its right end; bottom anchor centred under the letter.
+Ka.dv = top (outline.right-298 box.top-31), bottom (width.center box.bottom+23)
