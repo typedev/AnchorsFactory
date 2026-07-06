@@ -23,15 +23,6 @@
 </div></div>
 <main>
   <section class="editor">
-    <div class="bar">
-      <label for="preset">preset</label>
-      <select id="preset"></select>
-      <div class="spacer" style="flex:1"></div>
-      <button id="findbtn" class="ghost" title="find in rules (Ctrl+F)">find</button>
-      <button id="openrules" class="ghost" title="open a .af rules file (may !extends a preset)">open</button>
-      <input id="rulesfile" type="file" accept=".af,.dsl,.txt" hidden>
-      <button id="download" class="primary">download .af</button>
-    </div>
     <div class="find" id="find" hidden>
       <input id="findq" placeholder="find in rules…" spellcheck="false" autocomplete="off">
       <span class="find-count" id="findcount"></span>
@@ -39,15 +30,28 @@
       <button id="findnext" class="ghost icon" title="next (Enter)">↓</button>
       <button id="findclose" class="ghost icon" title="close (Esc)">✕</button>
     </div>
-    <div class="ed" id="ed">
-      <div class="ed-gutter" id="gutter"><div class="gnums" id="gnums"></div></div>
-      <div class="ed-body" id="edbody">
-        <pre class="ed-hl" id="hl" aria-hidden="true"></pre>
-        <textarea id="rules" spellcheck="false" autocomplete="off" autocapitalize="off" wrap="off"></textarea>
-        <div class="ac" id="ac" hidden></div>
+    <div class="layer" id="lyCustom">
+      <div class="layer-head">
+        <span class="ln-name">custom</span><span class="ln-badge">overrides</span>
+        <div class="spacer" style="flex:1"></div>
+        <button data-a="find" class="ghost mini-btn" title="find in rules (Ctrl+F)">find</button>
+        <button data-a="open" class="ghost mini-btn" title="open a .af into this layer">open</button>
+        <button data-a="dl-custom" class="ghost mini-btn" title="download this layer">⤓ .af</button>
       </div>
+      <div class="layer-ed" id="edCustom"></div>
+    </div>
+    <div class="split row" data-t="baseh" title="drag to resize · double-click to reset"></div>
+    <div class="layer" id="lyBase">
+      <div class="layer-head">
+        <span class="ln-name">base</span>
+        <select id="preset" class="mini" title="base preset"></select>
+        <div class="spacer" style="flex:1"></div>
+        <button data-a="dl-base" class="ghost mini-btn" title="download this layer">⤓ .af</button>
+      </div>
+      <div class="layer-ed" id="edBase"></div>
     </div>
     <div class="problems" id="problems"></div>
+    <input id="rulesfile" type="file" accept=".af,.dsl,.txt" hidden>
   </section>
   <div class="split col" data-t="edw" title="drag to resize · double-click to reset"></div>
   <section class="stage">

@@ -54,15 +54,19 @@ main{display:grid;grid-template-columns:var(--edw,380px) 6px minmax(0,1fr);min-h
 .split.col{cursor:col-resize} .split.col::after{inset:-3px -4px}
 .split.row{cursor:row-resize} .split.row::after{inset:-4px -3px}
 .split:hover,.split.drag{background:var(--anchor)}
-/* ---- editor pane ---- */
+/* ---- editor pane: a stack of rule layers (custom over base) ---- */
 .editor{
-  display:flex;flex-direction:column;min-height:0;
-  background:var(--panel);border-right:1px solid var(--line);
+  position:relative;display:grid;
+  grid-template-rows:minmax(60px,1fr) 6px var(--baseh,220px) auto;
+  min-height:0;background:var(--panel);border-right:1px solid var(--line);
 }
-.editor .bar{
-  display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);
-}
-.editor .bar label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.layer{display:flex;flex-direction:column;min-height:0;min-width:0}
+.layer-head{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--line);background:var(--panel)}
+.ln-name{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+#lyCustom .ln-name{color:var(--anchor)}
+.ln-badge{font-family:var(--mono);font-size:9.5px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:1px 6px}
+.layer-ed{flex:1;min-height:0;position:relative}
+.mini-btn{padding:3px 7px;font-size:11px}
 select,button{
   font-family:var(--mono);font-size:12px;color:var(--text);
   background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 9px;cursor:pointer;
@@ -70,8 +74,8 @@ select,button{
 button.primary{background:color-mix(in srgb,var(--anchor) 16%,var(--panel2));border-color:color-mix(in srgb,var(--anchor) 45%,transparent);color:var(--ink)}
 button:hover{border-color:var(--muted)}
 button.icon{padding:5px 8px;line-height:1;font-size:13px}
-/* ---- find bar (rules) ---- */
-.find{display:flex;align-items:center;gap:6px;padding:6px 10px;border-bottom:1px solid var(--line);background:var(--panel2)}
+/* ---- find bar (rules) — overlays the top of the editor stack ---- */
+.find{position:absolute;top:0;left:0;right:0;z-index:30;display:flex;align-items:center;gap:6px;padding:6px 10px;border-bottom:1px solid var(--line);background:var(--panel2)}
 .find[hidden]{display:none}
 .find input{flex:1;min-width:0;font-family:var(--mono);font-size:12px;color:var(--text);background:var(--canvas);border:1px solid var(--line);border-radius:6px;padding:5px 8px;outline:0}
 .find input:focus{border-color:var(--anchor)}
@@ -80,13 +84,13 @@ button.icon{padding:5px 8px;line-height:1;font-size:13px}
 .mini{font-family:var(--mono);font-size:11px;color:var(--text);background:var(--canvas);border:1px solid var(--line);border-radius:6px;padding:3px 8px;outline:0;width:130px;text-transform:none;letter-spacing:normal}
 .mini:focus{border-color:var(--anchor)}
 /* ---- code editor (textarea + highlight overlay + gutter) ---- */
-.ed{flex:1;display:flex;min-height:0;position:relative;overflow:hidden;background:var(--canvas)}
+.ed{position:absolute;inset:0;display:flex;min-height:0;overflow:hidden;background:var(--canvas)}
 .ed-gutter{width:46px;flex:none;overflow:hidden;background:var(--panel);border-right:1px solid var(--line)}
 .gnums{padding:var(--pad) 0;font-family:var(--mono);font-size:var(--fs);line-height:var(--lh)}
 .gl{height:var(--lh);text-align:right;padding-right:9px;color:var(--muted);opacity:.45;white-space:nowrap}
 .gl.err{color:var(--err);opacity:1;font-weight:600}
 .ed-body{position:relative;flex:1;min-width:0;overflow:hidden}
-.ed-hl,#rules{
+.ed-hl,.ed-ta{
   position:absolute;inset:0;margin:0;border:0;padding:var(--pad);
   font-family:var(--mono);font-size:var(--fs);line-height:var(--lh);tab-size:2;
   white-space:pre;overflow:hidden;
@@ -94,8 +98,8 @@ button.icon{padding:5px 8px;line-height:1;font-size:13px}
 .ed-hl{pointer-events:none;color:var(--ink);z-index:1}
 .ed-hl .ln{display:block;min-height:var(--lh)}
 .ed-hl .ln.err{background:color-mix(in srgb,var(--err) 13%,transparent);box-shadow:inset 2px 0 var(--err)}
-#rules{overflow:auto;background:transparent;color:transparent;caret-color:var(--ink);z-index:2;resize:none;outline:0}
-#rules::selection{background:color-mix(in srgb,var(--anchor) 32%,transparent)}
+.ed-ta{overflow:auto;background:transparent;color:transparent;caret-color:var(--ink);z-index:2;resize:none;outline:0}
+.ed-ta::selection{background:color-mix(in srgb,var(--anchor) 32%,transparent)}
 .t-comment{color:var(--muted);font-style:italic}
 .t-op{color:var(--anchor)}
 .t-kw{color:var(--scan)}

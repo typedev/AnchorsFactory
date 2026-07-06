@@ -120,6 +120,36 @@ def test_build_view_resolves_extends_preset(font):
     assert h["zz"]["line"] == 2
 
 
+def test_build_view_layers_merge_and_provenance(font):
+    layers = [
+        {"name": "base", "text": "H = top (box.center capHeight), bottom (box.center 0)"},
+        {"name": "custom", "text": "H += hook (outline.right 0)\nH = zz (box.left ascender)"},
+    ]
+    view = build_view(font, layers)
+    assert view["layers"] == ["base", "custom"]
+    # custom's `H = zz` (layer 1, line 2) replaces everything the base placed
+    h = {a["name"]: (a["layer"], a["line"]) for a in view["glyphs"]["H"]["anchors"]}
+    assert h == {"zz": (1, 2)}
+
+
+def test_build_view_layers_base_stays_visible(font):
+    layers = [
+        {"name": "base", "text": preset_text("default")},
+        {"name": "custom", "text": "H = zz (box.left ascender)"},
+    ]
+    view = build_view(font, layers)
+    # base (layer 0) still places O; custom (layer 1) overrides only H
+    assert view["glyphs"]["O"]["anchors"][0]["layer"] == 0
+    assert {a["name"]: a["layer"] for a in view["glyphs"]["H"]["anchors"]} == {"zz": 1}
+
+
+def test_build_view_layers_report_error_with_layer_name(font):
+    view = build_view(font, [{"name": "base", "text": ""},
+                             {"name": "custom", "text": "H = ("}])
+    assert view["ok"] is False
+    assert view["problems"] and view["problems"][0].startswith("custom:")
+
+
 def test_resolve_document_rejects_path_extends():
     from anchorsfactory.studio.render import resolve_document
     with pytest.raises(ValueError):

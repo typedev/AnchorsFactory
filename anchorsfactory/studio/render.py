@@ -34,13 +34,13 @@ def glyph_to_svg_path(glyph) -> str:
     return pen.getCommands()
 
 
-def _anchor_payload(font, target, spec, gname, diagnostics, shift_x, rule, line):
+def _anchor_payload(font, target, spec, gname, diagnostics, shift_x, layer, line):
     """Resolve one spec on *target*, returning its JSON dict (or ``None`` on a
     hard geometry failure, which is recorded in *diagnostics*).
 
-    *rule*/*line* are the provenance of this spec (index into ``doc.rules`` and
-    the 1-based source line, or ``None`` when unknown) — the studio uses them to
-    jump from an anchor to the rule that placed it."""
+    *layer*/*line* are the provenance of this spec (which rule layer, and the
+    1-based source line within it, or ``None`` when inherited/unknown) — the
+    studio uses them to jump from an anchor to the rule that placed it."""
     sink: list[str] = []
     try:
         info = explain(font, target, spec, warnings=sink)
@@ -52,9 +52,37 @@ def _anchor_payload(font, target, spec, gname, diagnostics, shift_x, rule, line)
         diagnostics.append({"glyph": gname, "anchor": spec.name,
                             "reason": reason, "severity": "warning"})
     info["x"] = info["x"] + shift_x                  # document-level global X shift
-    info["rule"] = rule
+    info["layer"] = layer
     info["line"] = line
     return info
+
+
+def resolve_stack(layers) -> Document:
+    """Merge an ordered list of rule *layers* (bottom → top) into one Document.
+
+    Each layer is ``{"name": str, "text": str}``; later layers override earlier
+    ones (the accumulation model), so the top layer wins. Each layer is resolved
+    independently (its own ``!extends`` against presets) and its source lines are
+    tagged with the layer's index, so every rule's provenance is ``(layer, line)``
+    — the studio maps that back to the right editor pane. A layer that fails to
+    parse raises, prefixed with its name.
+    """
+    merged = Document()
+    for i, layer in enumerate(layers):
+        try:
+            doc = resolve_document(layer.get("text", ""))
+        except ValueError as exc:
+            raise DSLError(f"{layer.get('name') or f'layer {i}'}: {exc}")
+        src = list(doc.sources) + [None] * (len(doc.rules) - len(doc.sources))
+        merged = Document(
+            labels={**merged.labels, **doc.labels},
+            variables={**merged.variables, **doc.variables},
+            rules=merged.rules + doc.rules,
+            sources=merged.sources + [(i, s) for s in src],
+            shift_x=doc.shift_x or merged.shift_x,
+            suffix_ops=merged.suffix_ops + doc.suffix_ops,
+        )
+    return merged
 
 
 def _layer(base: Document, child: Document, *, inherited: bool) -> Document:
@@ -97,18 +125,23 @@ def resolve_document(rules_text: str) -> Document:
     return _layer(base, doc, inherited=False)
 
 
-def build_view(font, rules_text: str) -> dict:
-    """Compute everything the UI needs for *rules_text* against *font*.
+def build_view(font, rules) -> dict:
+    """Compute everything the UI needs for *rules* against *font*.
 
-    Returns ``{ok, problems, diagnostics, glyphs}`` where ``glyphs`` maps each
-    affected (suffixed) glyph name to ``{name, advance, bounds, path, anchors}``.
-    Parse and validation errors come back as ``problems`` (never an exception),
-    so the editor can show them inline.
+    *rules* is either a rules string (a single layer) or a list of layers
+    ``[{"name", "text"}, ...]`` bottom → top. Returns ``{ok, problems,
+    diagnostics, glyphs, layers}`` where ``glyphs`` maps each affected (suffixed)
+    glyph name to ``{name, advance, bounds, path, anchors}`` and each anchor
+    carries its ``(layer, line)`` provenance. Parse/validation errors come back
+    as ``problems`` (never an exception), so the editor can show them inline.
     """
+    layers = [{"name": "rules", "text": rules}] if isinstance(rules, str) else list(rules)
+    names = [l.get("name") for l in layers]
     try:
-        doc = resolve_document(rules_text)           # resolves !extends <preset>
+        doc = resolve_stack(layers)                  # merge layers, resolve each layer's !extends
     except ValueError as exc:                        # DSLError / !extends cycle subclass this
-        return {"ok": False, "problems": [str(exc)], "diagnostics": [], "glyphs": {}}
+        return {"ok": False, "problems": [str(exc)], "diagnostics": [],
+                "glyphs": {}, "layers": names}
 
     problems = validate_document(doc)
     diagnostics: list[dict] = []
@@ -116,7 +149,7 @@ def build_view(font, rules_text: str) -> dict:
 
     sfx = resolve_suffixes(doc.suffix_ops)
     font_names = {g.name for g in font} if sfx.all else None
-    sources = doc.sources                            # rule index -> source line (may be empty)
+    sources = doc.sources                            # rule index -> (layer, line) or None
 
     order_pos: dict[str, int] = {}                   # glyph name -> position in the font's glyphOrder
     try:
@@ -137,9 +170,10 @@ def build_view(font, rules_text: str) -> dict:
             target = font[gname]
             placed: dict[str, dict] = {}             # name -> payload (last wins, like replace)
             for spec, rule in specs:
-                line = sources[rule] if rule < len(sources) else None
+                origin = sources[rule] if rule < len(sources) else None
+                layer, line = origin if origin else (None, None)
                 payload = _anchor_payload(font, target, spec, gname,
-                                          diagnostics, doc.shift_x, rule, line)
+                                          diagnostics, doc.shift_x, layer, line)
                 if payload is not None:
                     placed[spec.name] = payload
             if not placed:
@@ -156,4 +190,4 @@ def build_view(font, rules_text: str) -> dict:
             fallback += 1
 
     return {"ok": not problems, "problems": problems,
-            "diagnostics": diagnostics, "glyphs": glyphs}
+            "diagnostics": diagnostics, "glyphs": glyphs, "layers": names}

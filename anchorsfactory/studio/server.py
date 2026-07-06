@@ -141,11 +141,13 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _compute(self):
         try:
-            rules = self._read_json().get("rules", "")
+            body = self._read_json()
         except (ValueError, AttributeError):
             self._send_json({"ok": False, "problems": ["malformed request body"],
                              "diagnostics": [], "glyphs": {}}, status=400)
             return
+        # a layer stack (bottom → top) or, for back-compat, a single rules string
+        rules = body.get("layers") if isinstance(body.get("layers"), list) else body.get("rules", "")
         with self.studio.lock:
             view = build_view(self.studio.font, rules)
         self._send_json(view)
