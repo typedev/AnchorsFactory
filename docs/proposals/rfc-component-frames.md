@@ -1,6 +1,6 @@
 # RFC: Per-component frames — `comp1.outline.*`, `comp2.box.*`
 
-Status: draft · Priority: P1 · Evidence: [world-scripts research](../research/world-scripts-applicability.md)
+Status: **implemented** (v0.5.x) · Priority: P1 · Evidence: [world-scripts research](../research/world-scripts-applicability.md)
 
 ## Motivation
 

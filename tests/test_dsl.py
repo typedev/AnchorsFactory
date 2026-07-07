@@ -39,6 +39,27 @@ def test_bad_anchor_ref_rejected(bad):
 
 
 @pytest.mark.parametrize("tok, x", [
+    ("comp1.box.right", X(Frame.BOX, HAlign.RIGHT, component=1)),
+    ("comp2.outline.center@top", X(Frame.OUTLINE, HAlign.CENTER, at=VEdge.TOP, component=2)),
+    ("complast.outline.left", X(Frame.OUTLINE, HAlign.LEFT, component=-1)),
+])
+def test_component_frame_parses(tok, x):
+    spec = _one(parse_dsl([f"@x = a ({tok} 0)"]))
+    assert spec.x == x
+    assert str(spec.x) == tok                          # round-trips
+
+
+def test_component_centroid_parses():
+    assert _one(parse_dsl(["@x = a (comp2.outline.centroid 0)"])).x == Centroid(component=2)
+
+
+@pytest.mark.parametrize("bad", ["@x = a (comp1.width.center 0)", "@x = a (comp0.box.left 0)"])
+def test_bad_component_frame_rejected(bad):
+    with pytest.raises(DSLError):
+        parse_dsl([bad])
+
+
+@pytest.mark.parametrize("tok, x", [
     ("width.center", X(Frame.ADVANCE, HAlign.CENTER)),
     ("box.left", X(Frame.BOX, HAlign.LEFT)),
     ("outline.right", X(Frame.OUTLINE, HAlign.RIGHT)),

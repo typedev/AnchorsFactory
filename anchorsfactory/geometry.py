@@ -12,6 +12,7 @@ import math
 from typing import Optional
 
 from fontTools.misc.bezierTools import curveLineIntersections
+from fontTools.pens.boundsPen import BoundsPen
 from fontTools.pens.recordingPen import DecomposingRecordingPen
 from fontTools.pens.statisticsPen import StatisticsPen
 
@@ -35,15 +36,46 @@ class AxisCycleError(ValueError):
 _MERGE_EPS = 1.0
 
 
-def _segments(glyph):
+def _comp_str(component) -> str:
+    return "last" if component == -1 else str(component)
+
+
+def _resolve_component(glyph, component, *, warnings=None):
+    """Map a 1-based/``-1`` component qualifier to a 0-based index into
+    ``glyph.components``, or ``None`` (measure the whole glyph). A qualifier that
+    can't be honoured (glyph has too few components) degrades to whole-glyph with
+    a warning — consistent with the bbox-edge fallback policy."""
+    if component is None:
+        return None
+    comps = glyph.components
+    n = len(comps)
+    idx = component - 1 if component > 0 else n + component
+    if n == 0 or not (0 <= idx < n):
+        _degrade(warnings, f"glyph {glyph.name!r}: component {_comp_str(component)} not "
+                           f"available ({n} component(s)); measuring the whole glyph")
+        return None
+    return idx
+
+
+def _draw_source(glyph, component, pen):
+    """Draw the whole glyph, or only its *component*-th component (0-based), into
+    *pen*. A component draws as an ``addComponent`` the decomposing pen expands."""
+    if component is None:
+        glyph.draw(pen)
+    else:
+        list(glyph.components)[component].draw(pen)
+
+
+def _segments(glyph, component=None):
     """Yield outline segments (components decomposed) as point tuples.
 
     Each yielded tuple is a segment in the form accepted by
     ``segmentSegmentIntersections``: 2 points = line, 3 = quadratic,
-    4 = cubic.
+    4 = cubic. With *component* set (0-based), only that component's outline is
+    walked.
     """
     pen = DecomposingRecordingPen(glyph.font)
-    glyph.draw(pen)
+    _draw_source(glyph, component, pen)
     cur = start = None
     for op, pts in pen.value:
         if op == "moveTo":
@@ -116,16 +148,25 @@ def _seg_crossings(seg, value: float, axis: Axis = Axis.X) -> list[float]:
     return [ix.pt[out] for ix in curveLineIntersections(seg, line)]
 
 
-def _crossings(glyph, value: float, axis: Axis = Axis.X) -> list[float]:
+def _crossings(glyph, value: float, axis: Axis = Axis.X, component=None) -> list[float]:
     """Sorted coordinates (along *axis*) where the outline crosses the scanline
-    perpendicular to *axis* at *value* (horizontal scanline on X, vertical on Y)."""
+    perpendicular to *axis* at *value* (horizontal scanline on X, vertical on Y).
+    With *component* set (0-based), only that component's outline is sampled."""
     if glyph.bounds is None:
         return []
     cs: list[float] = []
-    for seg in _segments(glyph):
+    for seg in _segments(glyph, component):
         cs.extend(_seg_crossings(seg, value, axis))
     cs.sort()
     return cs
+
+
+def _component_bounds(glyph, component):
+    """The bbox ``(xMin, yMin, xMax, yMax)`` of one component's decomposed outline
+    (0-based index), or ``None`` if it draws nothing."""
+    pen = BoundsPen(glyph.font)
+    _draw_source(glyph, component, pen)
+    return pen.bounds
 
 
 def _spans(xs: list[float], eps: float = _MERGE_EPS) -> list[tuple[float, float]]:
@@ -215,17 +256,19 @@ def _along(lo: float, hi: float, align) -> float:
     return lo + _t(align) * (hi - lo)
 
 
-def _centroid(glyph, *, warnings=None) -> tuple[float, float]:
-    """Area centre of mass of the (component-decomposed) outline."""
+def _centroid(glyph, component=None, *, warnings=None) -> tuple[float, float]:
+    """Area centre of mass of the (component-decomposed) outline. With *component*
+    set (0-based), only that component's area is measured."""
     if glyph.bounds is None:
         _degrade(warnings, f"glyph {glyph.name!r} has no outline; centroid using origin")
         return (0.0, 0.0)
     rec = DecomposingRecordingPen(glyph.font)
-    glyph.draw(rec)
+    _draw_source(glyph, component, rec)
     stats = StatisticsPen(glyph.font)
     rec.replay(stats)
     if not stats.area:                     # empty / open / zero-area contour
-        xMin, yMin, xMax, yMax = glyph.bounds
+        box = _component_bounds(glyph, component) if component is not None else glyph.bounds
+        xMin, yMin, xMax, yMax = box or glyph.bounds
         _degrade(warnings, f"glyph {glyph.name!r}: zero-area outline; centroid using bbox centre")
         return ((xMin + xMax) / 2, (yMin + yMax) / 2)
     return (stats.meanX, stats.meanY)
@@ -254,7 +297,10 @@ def _sample_line(font, glyph, p: Pos, axis: Axis, cross, bounds, *, warnings=Non
 
 def _pos(font, glyph, p: Pos, axis: Axis, *, cross=None, warnings=None) -> float:
     """Resolve a frame-relative :class:`Pos` along *axis* (no italic shift)."""
-    bounds = glyph.bounds
+    comp = _resolve_component(glyph, getattr(p, "component", None), warnings=warnings)
+    # A component qualifier scopes the box/scanline to that component's outline
+    # (its own bbox drives box edges and @top/@bottom too).
+    bounds = _component_bounds(glyph, comp) if comp is not None else glyph.bounds
     if bounds is None:
         if p.frame is not Frame.ADVANCE:   # BOX/OUTLINE need a box; ADVANCE uses width
             _degrade(warnings, f"glyph {glyph.name!r} has no bounds; using empty box")
@@ -270,7 +316,7 @@ def _pos(font, glyph, p: Pos, axis: Axis, *, cross=None, warnings=None) -> float
     # OUTLINE — sample where the ink actually is, on the scanline perpendicular
     # to this axis, at exactly the requested position (no inset/nudge).
     sample = _sample_line(font, glyph, p, axis, cross, bounds, warnings=warnings)
-    cs = _crossings(glyph, sample, axis)
+    cs = _crossings(glyph, sample, axis, comp)
     if not cs:
         # No ink crosses there — fall back to the bounding-box edge, and say why:
         # a sample outside the ink box versus one inside it that still finds no
@@ -311,7 +357,8 @@ def _axis(font, glyph, spec, axis: Axis, *, cross=None, warnings=None) -> float:
     if isinstance(spec, Abs):
         return float(spec.value)
     if isinstance(spec, Centroid):
-        cx, cy = _centroid(glyph, warnings=warnings)
+        comp = _resolve_component(glyph, spec.component, warnings=warnings)
+        cx, cy = _centroid(glyph, comp, warnings=warnings)
         return cx if axis is Axis.X else cy
     if isinstance(spec, Neg):              # subtracted term inside a sum
         return -_axis(font, glyph, spec.term, axis, cross=cross, warnings=warnings)
@@ -354,12 +401,15 @@ def _italic_gap(font, glyph, xspec, anchor_y: float) -> float:
     if isinstance(xspec, Sum):
         return sum(_italic_gap(font, glyph, t, anchor_y) for t in xspec.terms)
     if isinstance(xspec, Centroid):
-        _, cy = _centroid(glyph)
+        comp = _resolve_component(glyph, xspec.component)
+        _, cy = _centroid(glyph, comp)
         return anchor_y - cy
     if isinstance(xspec, Pos):
         if xspec.frame in (Frame.ADVANCE, Frame.BOX):
             return anchor_y                      # S = 0
-        bounds = glyph.bounds or (0.0, 0.0, 0.0, 0.0)
+        comp = _resolve_component(glyph, getattr(xspec, "component", None))
+        bounds = (_component_bounds(glyph, comp) if comp is not None else glyph.bounds) \
+            or (0.0, 0.0, 0.0, 0.0)
         return anchor_y - _sample_line(font, glyph, xspec, Axis.X, anchor_y, bounds)
     return 0.0                                   # Abs / other: not sheared
 
@@ -425,13 +475,22 @@ def _first_outline(node) -> Optional[Pos]:
 
 
 def _uses_centroid(node) -> bool:
+    return _first_centroid(node) is not None
+
+
+def _first_centroid(node) -> Optional[Centroid]:
+    """The :class:`Centroid` governing an axis, if any (through ``Sum``/``Neg``) —
+    carries its component qualifier for the overlay."""
     if isinstance(node, Centroid):
-        return True
+        return node
     if isinstance(node, Neg):
-        return _uses_centroid(node.term)
+        return _first_centroid(node.term)
     if isinstance(node, Sum):
-        return any(_uses_centroid(t) for t in node.terms)
-    return False
+        for t in node.terms:
+            found = _first_centroid(t)
+            if found is not None:
+                return found
+    return None
 
 
 def _kind(node) -> str:
@@ -491,14 +550,19 @@ def explain(font, glyph, spec: AnchorSpec, *, warnings=None) -> dict:
     if bounds is not None:
         px = _first_outline(spec.x)
         if px is not None:                 # horizontal scanline at a height
-            h = _sample_line(font, glyph, px, Axis.X, y, bounds)
-            cs = _crossings(glyph, h, Axis.X)
+            comp = _resolve_component(glyph, getattr(px, "component", None))
+            pbounds = (_component_bounds(glyph, comp) or bounds) if comp is not None else bounds
+            h = _sample_line(font, glyph, px, Axis.X, y, pbounds)
+            cs = _crossings(glyph, h, Axis.X, comp)
             info["x_sample"] = {"height": h, "crossings": cs, "stems": _spans(cs)}
         py = _first_outline(spec.y)
         if py is not None:                 # vertical scanline at a column
-            c = _sample_line(font, glyph, py, Axis.Y, x, bounds)
-            cs = _crossings(glyph, c, Axis.Y)
+            comp = _resolve_component(glyph, getattr(py, "component", None))
+            pbounds = (_component_bounds(glyph, comp) or bounds) if comp is not None else bounds
+            c = _sample_line(font, glyph, py, Axis.Y, x, pbounds)
+            cs = _crossings(glyph, c, Axis.Y, comp)
             info["y_sample"] = {"column": c, "crossings": cs, "stems": _spans(cs)}
-    if _uses_centroid(spec.x) or _uses_centroid(spec.y):
-        info["centroid"] = list(_centroid(glyph))
+    cxs = _first_centroid(spec.x) or _first_centroid(spec.y)
+    if cxs is not None:
+        info["centroid"] = list(_centroid(glyph, _resolve_component(glyph, cxs.component)))
     return info

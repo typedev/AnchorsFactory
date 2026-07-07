@@ -114,6 +114,17 @@ def test_abs_is_unified_and_polymorphic():
     assert str(Abs(-25)) == "-25"
 
 
+def test_component_frame_rendering_and_validation():
+    assert str(Pos(Frame.BOX, HAlign.RIGHT, component=2)) == "comp2.box.right"
+    assert str(Pos(Frame.OUTLINE, HAlign.CENTER, at=VEdge.TOP, component=-1)) == \
+        "complast.outline.center@top"
+    assert str(Centroid(component=1)) == "comp1.outline.centroid"
+    with pytest.raises(ValueError):                     # advance belongs to whole glyph
+        Pos(Frame.ADVANCE, HAlign.CENTER, component=1)
+    with pytest.raises(ValueError):                     # 1-based
+        Pos(Frame.BOX, HAlign.CENTER, component=0)
+
+
 def test_anchor_ref_rendering_and_hash():
     from anchorsfactory.model import AnchorRef, Neg
     assert str(AnchorRef("top")) == "%top"

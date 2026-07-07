@@ -101,6 +101,13 @@ class Frac:
 # --------------------------------------------------------------------------- #
 #  Frame-relative positions (both axes)
 # --------------------------------------------------------------------------- #
+def _comp_prefix(component) -> str:
+    """The ``compN.`` / ``complast.`` frame prefix for a component qualifier."""
+    if component is None:
+        return ""
+    return "complast." if component == -1 else f"comp{component}."
+
+
 @dataclass(frozen=True)
 class Pos:
     """A computed position along one axis: ``frame.[run.]align[@at]``.
@@ -125,11 +132,20 @@ class Pos:
     align: Union[HAlign, VEdge, Frac]
     run: Optional[Union[Run, int]] = None   # OUTLINE only; None = whole envelope
     at: object = None
-    axis: Axis = Axis.X                      # last field: legacy X(...) calls keep working
+    axis: Axis = Axis.X                      # legacy X(...) calls keep working
+    # measure only the N-th component's outline (1-based; -1 = last). BOX/OUTLINE
+    # only; None = the whole glyph. Appended last to preserve positional calls.
+    component: Optional[int] = None
 
     def __post_init__(self):
         if self.frame is Frame.ADVANCE and self.axis is Axis.Y:
             raise ValueError("ADVANCE has no vertical analogue; use a font metric")
+        if self.component is not None:
+            if self.frame is Frame.ADVANCE:
+                raise ValueError("the advance belongs to the whole glyph; "
+                                 "a `compN.` qualifier needs box or outline")
+            if self.component != -1 and self.component < 1:
+                raise ValueError("component index is 1-based (or -1 for last)")
         # align kind must match the axis (a Frac is allowed on either)
         if not isinstance(self.align, Frac):
             want = HAlign if self.axis is Axis.X else VEdge
@@ -159,13 +175,14 @@ class Pos:
                     raise ValueError("on Y, `@…` is a column (left/right or an X value), not a Y edge")
 
     def __str__(self):
+        pre = _comp_prefix(self.component)
         if isinstance(self.align, Frac):        # frame*n/m (no run/@ — validated)
-            return f"{self.frame.value}*{self.align}"
+            return f"{pre}{self.frame.value}*{self.align}"
         parts = [self.frame.value]
         if self.run is not None:
             parts.append(self.run.value if isinstance(self.run, Run) else str(self.run))
         parts.append(self.align.value)
-        s = ".".join(parts)
+        s = pre + ".".join(parts)
         if self.at is not None:
             s += "@" + (self.at.value if isinstance(self.at, (VEdge, HAlign)) else str(self.at))
         return s
@@ -183,10 +200,14 @@ class Centroid:
     scanline-sampled ``outline.left/right/center``, it is a *global* property of
     the contour, so it is independent on both axes (no axis cycle) and takes no
     ``run``/``@``. Polymorphic like a bare number — usable in either slot.
+
+    ``component`` (1-based; -1 = last) restricts the measurement to the N-th
+    component's outline, like the ``compN.`` frame qualifier; None = whole glyph.
     """
+    component: Optional[int] = None
 
     def __str__(self):
-        return "outline.centroid"
+        return f"{_comp_prefix(self.component)}outline.centroid"
 
 
 @dataclass(frozen=True)

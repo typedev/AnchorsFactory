@@ -176,6 +176,37 @@ Details:
 - Cannot appear in a `&variable` definition (a variable must stay
   glyph-agnostic); it is a per-anchor term.
 
+### Per-component frames (`compN.` / `complast.`)
+
+Prefix any frame with `comp<N>.` (1-based, in component order) or `complast.` to
+measure **only that component's outline** instead of the whole glyph:
+
+```
+# lam-alef ligature: one mark seat per part
+*lam_alef* += diaA_1 (comp1.outline.center@top box.top+&liftA),
+              diaA_2 (comp2.outline.center@top box.top+&liftA)
+```
+
+The qualifier restricts which outline the frame reads: `comp2.box.right` is the
+second component's bbox right edge; `comp1.outline.center@top` samples the first
+component's ink at *its own* top; `comp2.outline.centroid` its area centre. It is
+how you seat marks on ligature parts, where `outline.first/last` (ink spans on
+one scanline) can't tell the letters apart.
+
+Details:
+
+- **`width` takes no qualifier** — the advance belongs to the whole glyph
+  (a load-time error).
+- A component-qualified `box`/`@top`/`@bottom` uses *that component's* bbox, not
+  the glyph's.
+- On a glyph with fewer than N components (or none), it **falls back to the
+  unqualified frame** with a warning (the bbox-edge degrade policy).
+- Own contours (on a glyph mixing contours and components) are measured only by
+  unqualified frames; `comp1` always means the first *component*.
+- Italic shear is unchanged — it is a function of the sample height, independent
+  of which outline subset was measured.
+- Combines with derived anchors: `diaB_2 (%diaA_2 %diaB_1)`.
+
 ## Italic fonts
 
 On a slanted font (`italicAngle ≠ 0`) every **X** is projected along the angle

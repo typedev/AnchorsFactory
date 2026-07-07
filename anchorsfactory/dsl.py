@@ -39,9 +39,25 @@ _OPS = {"=": Op.REPLACE, "+=": Op.ADD, "-=": Op.REMOVE}
 # --------------------------------------------------------------------------- #
 #  Position tokens — one `frame.[run.]align[@at]` grammar for both axes
 # --------------------------------------------------------------------------- #
+_COMP_RE = re.compile(r"^comp(\d+|last)\.(.+)$")
+
+
+def _strip_component(tok: str):
+    """Split an optional ``compN.``/``complast.`` prefix off a frame token,
+    returning ``(component, rest)`` — component is 1-based (``-1`` = last), or
+    ``None`` when absent. Index validity (≥1 / not on ``width``) is enforced by
+    :class:`~anchorsfactory.model.Pos`."""
+    m = _COMP_RE.match(tok)
+    if not m:
+        return None, tok
+    return (-1 if m.group(1) == "last" else int(m.group(1))), m.group(2)
+
+
 def _is_frame_token(tok: str) -> bool:
-    """Whether *tok* opens a frame position (``box.…`` / ``box*n/m`` / ``outline.…@…``)."""
-    head = tok.split("@", 1)[0].split("*", 1)[0].split(".", 1)[0]
+    """Whether *tok* opens a frame position (``box.…`` / ``box*n/m`` /
+    ``outline.…@…``), optionally with a ``compN.`` component qualifier."""
+    _, rest = _strip_component(tok)
+    head = rest.split("@", 1)[0].split("*", 1)[0].split(".", 1)[0]
     return head in _FRAME
 
 
@@ -74,8 +90,9 @@ def _parse_at(tok: str, axis: Axis):
 
 
 def _parse_pos(tok: str, axis: Axis):
-    """``frame.[run.]align[@at]`` | ``frame*n/m`` | ``outline.centroid`` →
-    :class:`Pos` / :class:`Centroid` for *axis*."""
+    """``[compN.]frame.[run.]align[@at]`` | ``frame*n/m`` | ``outline.centroid``
+    → :class:`Pos` / :class:`Centroid` for *axis*."""
+    component, tok = _strip_component(tok)
     base, sep, at_tok = tok.partition("@")
     if "*" in base:                           # a fractional position: frame*n/m
         framepart, _, fractok = base.partition("*")
@@ -90,7 +107,7 @@ def _parse_pos(tok: str, axis: Axis):
             frac = Frac(int(a), int(b))
         except ValueError as e:
             raise DSLError(f"bad fraction {fractok!r} in {tok!r}: {e}")
-        return _make_pos(_FRAME[framepart], frac, axis=axis)
+        return _make_pos(_FRAME[framepart], frac, axis=axis, component=component)
     parts = base.split(".")
     frame = _FRAME[parts[0]]                  # caller guarantees parts[0] is a frame
     rest = parts[1:]
@@ -99,7 +116,7 @@ def _parse_pos(tok: str, axis: Axis):
             raise DSLError(f"centroid only applies to outline, got {tok!r}")
         if sep:
             raise DSLError(f"outline.centroid takes no '@', got {tok!r}")
-        return Centroid()
+        return Centroid(component=component)
     run = None
     if len(rest) == 2:
         run_tok, align_tok = rest
@@ -115,7 +132,8 @@ def _parse_pos(tok: str, axis: Axis):
     else:
         raise DSLError(f"malformed position token {tok!r}")
     at = _parse_at(at_tok, axis) if sep else None
-    return _make_pos(frame, _parse_align(align_tok, axis, tok), run=run, at=at, axis=axis)
+    return _make_pos(frame, _parse_align(align_tok, axis, tok), run=run, at=at,
+                     axis=axis, component=component)
 
 
 def _split_signed(expr: str):
