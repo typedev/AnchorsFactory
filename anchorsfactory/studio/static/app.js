@@ -97,7 +97,7 @@ const KW = new Set(["width","box","outline","advance","left","center","right",
   "bottom","middle","top","first","last","centroid"]);
 const METRICS = ["capHeight","xHeight","ascender","descender","baseline"];
 const METRIC_SET = new Set(METRICS);
-const DIRECTIVES = new Set(["!extends","!suffixes","!shiftx"]);
+const DIRECTIVES = new Set(["!extends","!suffixes","!shiftx","!propagate"]);
 const BARE = [...KW, ...METRICS];
 let CHAR_W = 0;
 
@@ -106,7 +106,7 @@ function highlightLine(line){
   const hash = line.indexOf("#");
   let code = line, tail = "";
   if(hash >= 0){ code = line.slice(0, hash); tail = line.slice(hash); }
-  const re = /(U\+[0-9A-Fa-f]+)|(@[\w.]+)|(&\w+)|(\$[\w.]+)|(\*\d+\/\d+)|(!?[A-Za-z][\w]*)|(-?\d+(?:\.\d+)?)|(\+=|-=|=)|([(),.])/g;
+  const re = /(U\+[0-9A-Fa-f]+)|(@[\w.]+)|(&\w+)|(%[\w.]+)|(\$[\w.]+)|(\*\d+\/\d+)|(!?[A-Za-z][\w]*)|(-?\d+(?:\.\d+)?)|(\+=|-=|=)|([(),.])/g;
   let m, last = 0;
   const put = (cls, txt) => { out += cls ? `<span class="t-${cls}">${escapeHtml(txt)}</span>` : escapeHtml(txt); };
   while((m = re.exec(code))){
@@ -115,11 +115,12 @@ function highlightLine(line){
     if(m[1]) put("uni", t);
     else if(m[2]) put("label", t);
     else if(m[3]) put("var", t);
-    else if(m[4]) put("glyphref", t);
-    else if(m[5]) put("num", t);
-    else if(m[6]) put(DIRECTIVES.has(t) ? "dir" : KW.has(t) ? "kw" : METRIC_SET.has(t) ? "metric" : null, t);
-    else if(m[7]) put("num", t);
-    else if(m[8]) put("op", t);
+    else if(m[4]) put("glyphref", t);            // %anchor — reference to another anchor
+    else if(m[5]) put("glyphref", t);
+    else if(m[6]) put("num", t);
+    else if(m[7]) put(DIRECTIVES.has(t) ? "dir" : KW.has(t) ? "kw" : METRIC_SET.has(t) ? "metric" : null, t);
+    else if(m[8]) put("num", t);
+    else if(m[9]) put("op", t);
     else put(null, t);
     last = re.lastIndex;
   }
@@ -515,9 +516,11 @@ function renderInspector(){
     const warn = (a.warnings||[]).map(w=>escapeHtml(w)).join("<br>");
     const layerName = (VIEW.layers||[])[a.layer] ?? a.layer;
     const card=document.createElement("div"); card.className="anchor-card"; card.dataset.anchor = a.name;
+    const derived = a.derived_from ? "%" + a.derived_from.join(" %") : null;
     card.innerHTML =
       `<div class="nm">${escapeHtml(a.name)}`+
         `${a.propagated?' <span class="tag-prop">propagated</span>':''}`+
+        `${derived?` <span class="tag-prop" title="derived from ${escapeHtml(derived)}">↦ ${escapeHtml(derived)}</span>`:''}`+
         `${warn?' <span title="fallback">⚠</span>':''}</div>`+
       `<div class="co">x ${round(a.x)}   y ${round(a.y)}</div>`+
       `<div class="kd">x: ${a.x_kind} · y: ${a.y_kind}</div>`+

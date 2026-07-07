@@ -22,6 +22,7 @@ Sigils at a glance:
 |-------|---------|
 | `@name` | label — define or reference (a list of anchors) |
 | `&name` | variable — define or reference (one axis's value) |
+| `%name` | derived anchor — another anchor's position on the same glyph |
 | `$Glyph` | reference a glyph's own geometry (in a Y position) |
 | `!name` | directive (pragma) |
 | `#` | comment |
@@ -141,6 +142,39 @@ minus 50), so a glyph *named* with a hyphen can't be referenced inline in a sum 
 the missing-glyph fallback flags it when the font is applied. And a bias and an
 `@` sample on the *same* term don't combine inline — the `@` owns the rest of the
 token; put the sampled position in a `&variable` and add the bias to that.
+
+### Derived anchors (`%name` — relative to another anchor)
+
+`%name` is the position of **another anchor on the same glyph**. Like the
+centroid it is polymorphic: in an X slot it yields that anchor's x, in a Y slot
+its y, and it composes in `+`/`-` sums (`%top-25`). Use it when one anchor should
+track another rather than be measured independently:
+
+```
+a = top    (outline.center@xHeight capHeight),
+    bottom (%top 0)         # reuse top's x, sit on the baseline
+```
+
+Here `top` and `bottom` both centre on the ink, but the contour cross-section
+differs by height, so measuring each independently lets their x drift apart;
+`%top` pins `bottom` to the *same* x.
+
+Details:
+
+- **Order-independent.** `%name` resolves against the glyph's final anchor list
+  in dependency order — the referent may be declared after the anchor that uses
+  it. A `%a → %b → %a` cycle is rejected (naming the chain).
+- **Missing target degrades** — the anchor is skipped (a warning in the studio),
+  like a missing `$glyph`.
+- It also works inside an `@` sample line: `outline.center@%top` samples the
+  outline at the *height of* anchor `top` (the `@`-axis flips, as always).
+- References an inherited anchor too (see `!propagate`) — both live in the same
+  final list.
+- **Italic:** no extra shear — the referent's coordinates are already final
+  (sheared); `%ref+bias` shifts along the axis, not along the italic angle. Use
+  an outline term when you need angle-following.
+- Cannot appear in a `&variable` definition (a variable must stay
+  glyph-agnostic); it is a per-anchor term.
 
 ## Italic fonts
 

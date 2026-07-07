@@ -114,6 +114,14 @@ def test_abs_is_unified_and_polymorphic():
     assert str(Abs(-25)) == "-25"
 
 
+def test_anchor_ref_rendering_and_hash():
+    from anchorsfactory.model import AnchorRef, Neg
+    assert str(AnchorRef("top")) == "%top"
+    assert str(Sum((AnchorRef("bottom"), Neg(Abs(7))))) == "%bottom-7"
+    assert str(AnchorSpec("b", AnchorRef("top"), Abs(0))) == "b (%top 0)"
+    assert AnchorRef("top") == AnchorRef("top") and hash(AnchorRef("top"))   # frozen/hashable
+
+
 def test_sum_rendering():
     assert YSum is Sum
     assert str(Sum((FontMetric("capHeight", Frac(1, 2)),

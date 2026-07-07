@@ -12,7 +12,8 @@ from __future__ import annotations
 from fontTools.pens.recordingPen import DecomposingRecordingPen
 from fontTools.pens.svgPathPen import SVGPathPen
 
-from ..apply import Propagated, accumulate_provenance, propagate_seed, validate_document
+from ..apply import (Propagated, accumulate_provenance, propagate_seed,
+                     substitute_anchor_refs, validate_document)
 from ..dsl import DSLError, parse_dsl
 from ..geometry import explain
 from ..model import Document, resolve_suffixes
@@ -186,18 +187,27 @@ def build_view(font, rules) -> dict:
                 continue
             target = font[gname]
             placed: dict[str, dict] = {}             # name -> payload (last wins, like replace)
-            for spec, rule in specs:
+            # substitute %refs to computed coords so explain() never meets an AnchorRef
+            eff_specs, info = substitute_anchor_refs(font, target, [s for s, _ in specs], doc)
+            for (spec, rule), eff, (refs, ok) in zip(specs, eff_specs, info):
+                if refs and not ok:                  # %reference cycle / missing target
+                    diagnostics.append({
+                        "glyph": gname, "anchor": spec.name, "severity": "error",
+                        "reason": f"%reference {refs} does not resolve (cycle or missing target)"})
+                    continue
                 if isinstance(rule, Propagated):     # inherited from a component
                     layer, line = None, None
                 else:
                     origin = sources[rule] if rule < len(sources) else None
                     layer, line = origin if origin else (None, None)
-                payload = _anchor_payload(font, target, spec, gname,
+                payload = _anchor_payload(font, target, eff, gname,
                                           diagnostics, doc.shift_x, layer, line)
                 if payload is not None:
                     if isinstance(rule, Propagated):
                         payload["propagated"] = True
                         payload["from"] = rule.component
+                    if refs:
+                        payload["derived_from"] = refs
                     placed[spec.name] = payload
             if not placed:
                 continue

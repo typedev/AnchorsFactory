@@ -294,8 +294,25 @@ class VarRef:
         return self.name
 
 
-XStrategy = Union[Pos, Centroid, Abs, Sum, VarRef]
-YStrategy = Union[Pos, Centroid, Y, Abs, FontMetric, Sum, VarRef]
+@dataclass(frozen=True)
+class AnchorRef:
+    """A reference to *another anchor on the same glyph* (a ``%name`` term).
+
+    Polymorphic like :class:`Centroid`: in an X slot it yields the referenced
+    anchor's x, in a Y slot its y; it composes in ``+``/``-`` sums (``%top-25``).
+    Resolved late — after the referenced anchor has its coordinates — against the
+    glyph's *final* accumulated anchor list, above the geometry layer (the engine
+    never samples it; it is substituted for the computed coordinate). A ``%a →
+    %b → %a`` cycle is rejected per glyph; a missing target warns and skips.
+    """
+    name: str            # the target anchor name (no leading '%')
+
+    def __str__(self):
+        return f"%{self.name}"
+
+
+XStrategy = Union[Pos, Centroid, Abs, Sum, VarRef, AnchorRef]
+YStrategy = Union[Pos, Centroid, Y, Abs, FontMetric, Sum, VarRef, AnchorRef]
 
 
 # --------------------------------------------------------------------------- #

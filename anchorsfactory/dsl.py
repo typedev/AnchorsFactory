@@ -16,7 +16,7 @@ import re
 
 from .model import (
     Frame, Axis, HAlign, VEdge, Run, Frac, FONT_METRICS,
-    Pos, Centroid, Abs, Y, FontMetric, Sum, Neg, AnchorSpec, LabelRef, VarRef,
+    Pos, Centroid, Abs, Y, FontMetric, Sum, Neg, AnchorSpec, AnchorRef, LabelRef, VarRef,
     GlyphName, Unicode, UnicodeRange, Glob, Category, Op, Document,
 )
 
@@ -161,6 +161,11 @@ def _parse_slot(tok: str, axis: Axis):
         return _parse_sum(tok, axis)
     if tok.startswith("&"):                  # a &variable standing in for the slot
         return VarRef(tok)
+    if tok.startswith("%"):                  # %anchor — another anchor's position
+        name = tok[1:]
+        if not _NAME_RE.match(name):
+            raise DSLError(f"bad anchor reference {tok!r}")
+        return AnchorRef(name)
     try:                                     # bare number — polymorphic absolute
         return Abs(int(tok))
     except ValueError:

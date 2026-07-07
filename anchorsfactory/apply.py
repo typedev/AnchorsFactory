@@ -20,7 +20,7 @@ from fontTools.misc.transform import Transform
 
 from .geometry import resolve, _dependent
 from .model import (
-    Document, Op, LabelRef, VarRef, AnchorSpec, resolve_suffixes,
+    Document, Op, LabelRef, VarRef, AnchorRef, AnchorSpec, resolve_suffixes,
     Axis, Pos, Centroid, Abs, Y, FontMetric, Sum, Neg, VEdge, HAlign,
     GlyphName, Unicode, UnicodeRange, Glob, Category,
 )
@@ -115,7 +115,7 @@ def _resolve_x(node, variables, seen=()):
     a Y expression used where X is required is an error.
     """
     node, seen = _expand(node, variables, seen)
-    if isinstance(node, (Abs, Centroid)):       # polymorphic — fine on either axis
+    if isinstance(node, (Abs, Centroid, AnchorRef)):   # polymorphic — fine on either axis
         return node
     if isinstance(node, Neg):
         return Neg(_resolve_x(node.term, variables, seen))
@@ -133,7 +133,7 @@ def _resolve_x(node, variables, seen=()):
 def _resolve_y(node, variables, seen=()):
     """Substitute variables in a Y strategy, validating it resolves to a Y."""
     node, seen = _expand(node, variables, seen)
-    if isinstance(node, (Abs, Centroid)):       # polymorphic — fine on either axis
+    if isinstance(node, (Abs, Centroid, AnchorRef)):   # polymorphic — fine on either axis
         return node
     if isinstance(node, Neg):
         return Neg(_resolve_y(node.term, variables, seen))
@@ -301,39 +301,154 @@ class Propagated:
     component: str
 
 
-def _resolve_specs(font, target, specs, doc, *, replace, round_coords,
+def _anchor_refs(node) -> set:
+    """Names referenced by ``%anchor`` (:class:`AnchorRef`) terms within a
+    strategy node, descending sums/negations and an ``@`` sample line."""
+    if isinstance(node, AnchorRef):
+        return {node.name}
+    if isinstance(node, Neg):
+        return _anchor_refs(node.term)
+    if isinstance(node, Sum):
+        out: set = set()
+        for t in node.terms:
+            out |= _anchor_refs(t)
+        return out
+    if isinstance(node, Pos) and node.at is not None and not isinstance(node.at, (VEdge, HAlign)):
+        return _anchor_refs(node.at)
+    return set()
+
+
+def _sub_refs(node, coords: dict, axis: Axis):
+    """Substitute every :class:`AnchorRef` in *node* with the referenced anchor's
+    already-computed coordinate: its x on the X axis, its y on the Y axis. Inside
+    an ``@`` sample line the axis flips (an X position's ``@`` is a height)."""
+    if isinstance(node, AnchorRef):
+        x, y = coords[node.name]
+        return Abs(x if axis is Axis.X else y)
+    if isinstance(node, Neg):
+        return Neg(_sub_refs(node.term, coords, axis))
+    if isinstance(node, Sum):
+        return Sum(tuple(_sub_refs(t, coords, axis) for t in node.terms))
+    if isinstance(node, Pos) and node.at is not None and not isinstance(node.at, (VEdge, HAlign)):
+        other = Axis.Y if axis is Axis.X else Axis.X
+        return replace(node, at=_sub_refs(node.at, coords, other))
+    return node
+
+
+def _resolve_specs(font, target, specs, doc, *, dedup, round_coords,
                    on_error, diagnostics, apply_shift=True):
     """Resolve *specs* onto *target*, returning ``[(name, x, y), ...]``.
 
-    The single spec→coordinate step: geometry resolve, same-name dedup (last
-    wins, keeping position), ``shift_x``, rounding, and diagnostics. Shared by
+    The single spec→coordinate step: same-name dedup (last wins, keeping that
+    occurrence's position), ``%name`` derived-anchor resolution in dependency
+    order, geometry resolve, ``shift_x``, rounding, and diagnostics. Shared by
     :func:`compute_document` (``apply_shift=True``) and :func:`_effective_anchors`
     (``apply_shift=False`` — propagation copies pre-shift geometry so the global
     ``shift_x`` is applied once, at the composite's own placement).
+
+    ``%name`` resolves against the glyph's **final** list: non-derived anchors
+    first, then derived ones once their referents have coordinates. A reference
+    cycle raises (``on_error='raise'``) or is flagged (``'collect'``); a missing
+    target degrades — the anchor is skipped, with a warning under ``'collect'``.
     """
     gname = target.name
+    final = list(specs)
+    if dedup:                                   # last occurrence wins, keeps its position
+        deduped: list = []
+        for s in specs:
+            deduped = [t for t in deduped if t.name != s.name]
+            deduped.append(s)
+        final = deduped
+
+    coords: dict[str, tuple] = {}               # name -> (x, y) pre-shift, for %refs
+    result: list = [None] * len(final)          # per-position (x, y) or None (skipped)
+    pending = list(range(len(final)))
+    while pending:
+        progressed = False
+        rest = []
+        for i in pending:
+            spec = final[i]
+            refs = _anchor_refs(spec.x) | _anchor_refs(spec.y)
+            if any(r not in coords for r in refs):
+                rest.append(i)
+                continue
+            if refs:
+                spec = replace(spec, x=_sub_refs(spec.x, coords, Axis.X),
+                               y=_sub_refs(spec.y, coords, Axis.Y))
+            sink = [] if on_error == "collect" else None
+            try:
+                x, y = resolve(font, target, spec, warnings=sink)
+            except Exception as exc:
+                if on_error == "raise":
+                    raise
+                diagnostics.append(
+                    ComputeDiagnostic(gname, spec.name, str(exc), severity="error"))
+                progressed = True
+                continue
+            for reason in sink or ():
+                diagnostics.append(
+                    ComputeDiagnostic(gname, spec.name, reason, severity="warning"))
+            result[i] = (x, y)
+            coords[final[i].name] = (x, y)       # available to later derived anchors
+            progressed = True
+        if not progressed:                       # remaining refs are cycles or missing
+            for i in rest:
+                spec = final[i]
+                refs = _anchor_refs(spec.x) | _anchor_refs(spec.y)
+                missing = sorted(r for r in refs if r not in {s.name for s in final})
+                if missing:
+                    if on_error == "collect":
+                        diagnostics.append(ComputeDiagnostic(
+                            gname, spec.name,
+                            f"references undefined anchor {missing[0]!r}", severity="warning"))
+                    # raise mode: skip silently, like the missing-$glyph degrade
+                elif on_error == "raise":
+                    raise ValueError(
+                        f"{gname}: anchor {spec.name!r} is in a %reference cycle")
+                else:
+                    diagnostics.append(ComputeDiagnostic(
+                        gname, spec.name,
+                        f"anchor {spec.name!r} is in a %reference cycle", severity="error"))
+            break
+        pending = rest
+
     anchors: list[tuple[str, float, float]] = []
-    for spec in specs:
-        sink = [] if on_error == "collect" else None
-        try:
-            x, y = resolve(font, target, spec, warnings=sink)
-        except Exception as exc:
-            if on_error == "raise":
-                raise
-            diagnostics.append(
-                ComputeDiagnostic(gname, spec.name, str(exc), severity="error"))
+    for i, spec in enumerate(final):
+        if result[i] is None:
             continue
-        for reason in sink or ():
-            diagnostics.append(
-                ComputeDiagnostic(gname, spec.name, reason, severity="warning"))
+        x, y = result[i]
         if apply_shift:
             x += doc.shift_x
         if round_coords:
             x, y = round(x), round(y)
-        if replace:
-            anchors = [a for a in anchors if a[0] != spec.name]
         anchors.append((spec.name, x, y))
     return anchors
+
+
+def substitute_anchor_refs(font, target, specs, doc):
+    """Studio helper: replace every ``%ref`` in *specs* with the referenced
+    anchor's computed coordinate on *target*, so callers can :func:`explain` each
+    spec without the geometry layer meeting an :class:`AnchorRef`.
+
+    Returns ``(eff_specs, info)`` parallel to *specs*: ``eff_specs[i]`` is the
+    substituted spec (unchanged when it has no refs, or when its refs don't
+    resolve), and ``info[i]`` is ``(sorted_ref_names, resolved_bool)``.
+    """
+    refs_per = [sorted(_anchor_refs(s.x) | _anchor_refs(s.y)) for s in specs]
+    if not any(refs_per):
+        return list(specs), [(r, True) for r in refs_per]
+    coords = {n: (x, y) for n, x, y in
+              _resolve_specs(font, target, specs, doc, dedup=True, round_coords=False,
+                             on_error="collect", diagnostics=[], apply_shift=False)}
+    eff, info = [], []
+    for s, refs in zip(specs, refs_per):
+        ok = all(r in coords for r in refs)
+        if refs and ok:
+            s = replace(s, x=_sub_refs(s.x, coords, Axis.X),
+                        y=_sub_refs(s.y, coords, Axis.Y))
+        eff.append(s)
+        info.append((refs, ok if refs else True))
+    return eff, info
 
 
 def _existing_anchors(font, gname: str) -> dict:
@@ -363,7 +478,7 @@ def _effective_anchors(font, gname, doc, memo, stack, *, round_coords) -> dict:
     seed = [s for s, _ in propagate_seed(font, glyph, doc, memo,
                                          stack + (gname,), round_coords=round_coords)]
     specs = accumulate(doc, glyph.name, list(glyph.unicodes), seed=seed)
-    anchors = _resolve_specs(font, glyph, specs, doc, replace=True,
+    anchors = _resolve_specs(font, glyph, specs, doc, dedup=True,
                              round_coords=round_coords, on_error="collect",
                              diagnostics=[], apply_shift=False)
     result = {name: (x, y) for name, x, y in anchors}   # final list → last wins
@@ -463,7 +578,7 @@ def compute_document(font, doc: Document, *, replace=True, round_coords=True,
                 continue
             if keep is not None and gname not in keep:
                 continue
-            anchors = _resolve_specs(font, font[gname], specs, doc, replace=replace,
+            anchors = _resolve_specs(font, font[gname], specs, doc, dedup=replace,
                                      round_coords=round_coords, on_error=on_error,
                                      diagnostics=placed.diagnostics)
             if anchors:

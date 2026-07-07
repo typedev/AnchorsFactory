@@ -21,6 +21,23 @@ def test_anchor_paren_form():
     assert _one(doc) == AnchorSpec("top", X(Frame.BOX, HAlign.CENTER), Y("H", VEdge.TOP))
 
 
+def test_derived_anchor_ref_parses():
+    from anchorsfactory.model import AnchorRef
+    assert _one(parse_dsl(["@x = a (%top 0)"])).x == AnchorRef("top")       # X slot
+    assert _one(parse_dsl(["@x = a (0 %top)"])).y == AnchorRef("top")       # Y slot (polymorphic)
+    spec = _one(parse_dsl(["@x = a (%top-25 0)"]))                          # %ref in a sum
+    assert spec.x == Sum((AnchorRef("top"), Neg(Abs(25))))
+    # inside an @ sample line (a height that is another anchor's y)
+    assert _one(parse_dsl(["@x = a (outline.center@%top 0)"])).x == \
+        X(Frame.OUTLINE, HAlign.CENTER, at=AnchorRef("top"))
+
+
+@pytest.mark.parametrize("bad", ["@x = a (%bad!name 0)", "@x = a (% 0)"])
+def test_bad_anchor_ref_rejected(bad):
+    with pytest.raises(DSLError):
+        parse_dsl([bad])
+
+
 @pytest.mark.parametrize("tok, x", [
     ("width.center", X(Frame.ADVANCE, HAlign.CENTER)),
     ("box.left", X(Frame.BOX, HAlign.LEFT)),
