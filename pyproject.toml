@@ -37,7 +37,7 @@ Repository = "https://github.com/typedev/AnchorsFactory"
 Issues = "https://github.com/typedev/AnchorsFactory/issues"
 
 [project.optional-dependencies]
-dev = ["pytest", "build"]
+dev = ["pytest", "build", "playwright"]
 
 [project.scripts]
 anchorsfactory = "anchorsfactory.cli:main"

@@ -7,10 +7,11 @@
 
 PY := .venv/bin/python
 
-.PHONY: help venv test build check publish-test publish release release-test clean
+.PHONY: help venv browsers test build check publish-test publish release release-test clean
 
 help:
-	@echo "venv         create .venv and install the package (editable) + dev deps"
+	@echo "venv         create .venv and install the package (editable) + dev deps + browsers"
+	@echo "browsers     download the Playwright chromium used by the studio UI test"
 	@echo "test         run the test suite"
 	@echo "build        build sdist + wheel into dist/"
 	@echo "check        build, then validate the artifacts (twine check)"
@@ -23,6 +24,12 @@ help:
 venv:
 	uv venv
 	VIRTUAL_ENV="$(CURDIR)/.venv" uv pip install -e ".[dev]"
+	$(MAKE) browsers
+
+# The studio UI test drives a headless chromium via Playwright; the test skips
+# cleanly if it's missing, so this is only needed to actually run that test.
+browsers:
+	$(PY) -m playwright install chromium
 
 test:
 	$(PY) -m pytest

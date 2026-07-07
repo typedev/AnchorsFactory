@@ -144,6 +144,14 @@ def build_view(font, rules) -> dict:
                 "glyphs": {}, "layers": names}
 
     problems = validate_document(doc)
+    if problems:
+        # The document doesn't resolve (typo'd label, undefined/misused variable,
+        # axis cycle). Surface the problems and stop — computing anyway would let
+        # accumulate() raise mid-glyph and 500 the request. The editor shows these
+        # inline; the user is usually mid-edit, so this fires on nearly every keystroke.
+        return {"ok": False, "problems": problems, "diagnostics": [],
+                "glyphs": {}, "layers": names}
+
     diagnostics: list[dict] = []
     glyphs: dict[str, dict] = {}
 
@@ -160,7 +168,11 @@ def build_view(font, rules) -> dict:
     fallback = 10 ** 9                               # unordered glyphs sort after the known ones, stably
 
     for glyph in font:
-        specs = accumulate_provenance(doc, glyph.name, list(glyph.unicodes))
+        try:
+            specs = accumulate_provenance(doc, glyph.name, list(glyph.unicodes))
+        except ValueError as exc:                    # validate_document should have caught this
+            problems.append(f"glyph {glyph.name}: {exc}")
+            break                                    # same doc breaks every glyph — report once
         if not specs:
             continue
         for suffix in sfx.expand(glyph.name, font_names):

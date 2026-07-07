@@ -163,6 +163,16 @@ def test_build_view_reports_parse_error_without_raising(font):
     assert view["glyphs"] == {}
 
 
+def test_build_view_reports_undefined_label_without_raising(font):
+    # Parses cleanly but references a label that is never defined — this used to
+    # slip past into the per-glyph accumulate() and raise ValueError, 500-ing the
+    # request. It must come back as a problem, not an exception.
+    view = build_view(font, "H = @missing")
+    assert view["ok"] is False
+    assert any("undefined label" in p for p in view["problems"])
+    assert view["glyphs"] == {}
+
+
 def test_build_view_attaches_rule_provenance(font):
     # Three lines; H's anchors come from the box rule, then hook adds one, and
     # the last line replaces top. Each anchor should report the line it came from.

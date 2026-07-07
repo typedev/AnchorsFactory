@@ -285,6 +285,7 @@ function setupSplitters(){
   const defs = {
     edw:   {sel:"main",       axis:"x", sign: 1, min:280, def:400, max:()=>innerWidth*0.7},
     baseh: {sel:".editor",    axis:"y", sign:-1, min: 80, def:220, max:()=>$(".editor").clientHeight*0.7},
+    probh: {sel:".editor",    axis:"y", sign:-1, min: 44, def:150, max:()=>$(".editor").clientHeight*0.6},
     gridh: {sel:".stage",     axis:"y", sign: 1, min: 90, def:200, max:()=>$(".stage").clientHeight*0.72},
     row:   {sel:".inspector", axis:"x", sign:-1, min:180, def:260, max:()=>460},
   };
@@ -379,7 +380,12 @@ async function compute(){
   const layers = customOpen
     ? [{name:"base", text: baseEd.getValue()}, {name:"custom", text: customEd.getValue()}]
     : [{name:"base", text: baseEd.getValue()}];
-  VIEW = await (await fetch("/api/compute", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({layers})})).json();
+  try {
+    const res = await fetch("/api/compute", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({layers})});
+    VIEW = await res.json();
+  } catch(err) {                                    // server 500 / dropped connection / bad JSON
+    VIEW = {ok:false, problems:["studio server error — see terminal: "+String(err)], diagnostics:[], glyphs:{}, layers:[]};
+  }
   markErrorLines();
   renderProblems();
   renderGrid();
@@ -407,8 +413,15 @@ function markErrorLines(){
 
 function renderProblems(){
   const box = $("#problems"); box.innerHTML = "";
-  for(const p of VIEW.problems||[]){ const loc = problemLoc(p); row("err", "error", p, loc); }
-  for(const d of VIEW.diagnostics||[]) row(d.severity==="error"?"err":"warn", `${d.glyph}·${d.anchor}`, d.reason, null);
+  const probs = VIEW.problems||[], diags = VIEW.diagnostics||[];
+  const errs = probs.length + diags.filter(d=>d.severity==="error").length;
+  const cnt = $("#outcount");
+  if(cnt){ cnt.textContent = (probs.length+diags.length) || ""; cnt.classList.toggle("bad", errs>0); }
+  if(!probs.length && !diags.length){
+    box.innerHTML = `<div class="row ok-row"><span class="tag">ok</span><span>no problems</span></div>`; return;
+  }
+  for(const p of probs){ const loc = problemLoc(p); row("err", "error", p, loc); }
+  for(const d of diags) row(d.severity==="error"?"err":"warn", `${d.glyph}·${d.anchor}`, d.reason, null);
   function row(cls, tag, msg, loc){
     const r=document.createElement("div"); r.className="row "+cls+(loc?" clickable":"");
     r.innerHTML=`<span class="tag">${tag}</span><span>${escapeHtml(msg)}</span>`;
