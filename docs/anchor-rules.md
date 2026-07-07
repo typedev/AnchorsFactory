@@ -294,9 +294,10 @@ U+0413         = bar (width.center $H)   # Г → [bar(…)] only — the @ defa
 ## Directives
 
 ```
-!extends  default         # inherit a base ruleset, then layer this file on top
-!suffixes = .alt, .sc     # also place every rule on base+suffix glyph variants
-!shiftx   = -15           # add a constant X offset to every placed anchor
+!extends   default         # inherit a base ruleset, then layer this file on top
+!suffixes  = .alt, .sc     # also place every rule on base+suffix glyph variants
+!shiftx    = -15           # add a constant X offset to every placed anchor
+!propagate = composites    # composites inherit their components' anchors
 ```
 
 `!extends` takes a **bundled preset name** (`default`, `default-italics` — no
@@ -332,6 +333,45 @@ glyph named `base.<suffix>` is treated as a variant of `base`:
 In `all` mode the operators adjust the exclusion set: `-= .numr` excludes a
 suffix, `+= .numr` puts it back. (`all` / `none` are whole-list states, so they
 require `=`, not `+=`/`-=`.)
+
+### `!propagate` — composites inherit their components' anchors
+
+```
+!propagate = none          # default — no inheritance
+!propagate = composites    # seed pure composites (components, no own contours)
+!propagate = all           # …also glyphs mixing contours and components
+```
+
+A composite glyph (e.g. `aacute` assembled from an `a` component plus an
+`acutecomb` component) is *seeded* with the anchors of its components before its
+own rules run. Each inherited anchor is the component's own anchor **as computed
+in this same run** — you write rules for the base letters, and the precomposed
+glyphs get their anchors for free — pushed through the component's transform
+(offset / scale / flip). A component whose base produced no anchors this run
+falls back to that base's pre-existing font anchors.
+
+The inherited set is just the initial accumulator, so the ordinary operators
+compose with it with no new syntax:
+
+```
+!propagate = composites
+aacute += tail (outline.right 0)   # inherited anchors, plus one more
+aacute  = top  (box.center 500)    # `=` ignores what was inherited (hard reset)
+aacute -= top                      # drop one inherited anchor
+```
+
+Details:
+
+- **Mark-side anchors (`_`-prefixed) are never propagated** — an attachment point
+  of a mark is meaningful only on the mark glyph.
+- When several components define the same anchor name, the **later** component
+  wins (a mark stacked on top carries the next attachment level).
+- Composes through `!extends` like the other directives (a child's `!propagate`
+  overrides an inherited one; `none` is the default, so it does not override).
+- Coordinates are copied, not re-measured. To measure fresh geometry per
+  component (ligature seats), use a `compN.` frame instead.
+- `!shiftx` is applied once, at the composite's own placement — inheriting
+  through a component does not compound it.
 
 ```
 !extends default

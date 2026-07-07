@@ -104,6 +104,15 @@ def build_demo_font():
         _rect(150, 560, 230, 640),
         _rect(300, 560, 380, 640),
     ])
+
+    # ---- Composite (for !propagate demos) ----
+    # aacute = a + acute, a pure composite, so `!propagate = composites` in the
+    # editor shows it inheriting a's anchors (pushed through the acute offset).
+    aacute = font.newGlyph("aacute")
+    aacute.unicode = 0x00E1
+    aacute.width = 500
+    aacute.appendComponent("a", offset=(0, 0))
+    aacute.appendComponent("acute", offset=(-30, 40))
     return font
 
 

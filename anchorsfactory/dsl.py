@@ -316,6 +316,7 @@ def parse_dsl(lines) -> Document:
     shift_x = 0
     suffix_ops: list = []
     extends: list[str] = []
+    propagate = "none"
 
     raw_lines = []
     for n, line in enumerate(lines, 1):
@@ -374,6 +375,13 @@ def parse_dsl(lines) -> Document:
                 if op_tok != "=" or not value:
                     raise DSLError(f"line {n}: !extends needs a base name or path")
                 extends.append(value)
+            elif name == "propagate":
+                if op_tok != "=":
+                    raise DSLError(f"line {n}: !propagate only supports '='")
+                if value not in ("none", "composites", "all"):
+                    raise DSLError(f"line {n}: !propagate takes none|composites|all, "
+                                   f"got {value!r}")
+                propagate = value
             else:
                 raise DSLError(f"line {n}: unknown directive !{name}")
             continue
@@ -410,7 +418,7 @@ def parse_dsl(lines) -> Document:
 
     return Document(labels=labels, variables=variables, rules=rules,
                     sources=sources, shift_x=shift_x, suffix_ops=suffix_ops,
-                    extends=extends)
+                    extends=extends, propagate=propagate)
 
 
 def parse_dsl_file(path: str) -> Document:

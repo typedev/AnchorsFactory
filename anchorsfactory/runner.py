@@ -35,6 +35,8 @@ def _merge(base: Document, child: Document) -> Document:
         # replay base directives then the child's: `=` in the child resets, while
         # `+=`/`-=` build on the inherited set (resolve_suffixes does the replay).
         suffix_ops=base.suffix_ops + child.suffix_ops,
+        # last non-default wins, so a child can override an inherited !propagate.
+        propagate=child.propagate if child.propagate != "none" else base.propagate,
     )
 
 

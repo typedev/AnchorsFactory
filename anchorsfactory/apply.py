@@ -16,9 +16,11 @@ import logging
 import unicodedata
 from dataclasses import dataclass, replace
 
+from fontTools.misc.transform import Transform
+
 from .geometry import resolve, _dependent
 from .model import (
-    Document, Op, LabelRef, VarRef, resolve_suffixes,
+    Document, Op, LabelRef, VarRef, AnchorSpec, resolve_suffixes,
     Axis, Pos, Centroid, Abs, Y, FontMetric, Sum, Neg, VEdge, HAlign,
     GlyphName, Unicode, UnicodeRange, Glob, Category,
 )
@@ -234,13 +236,17 @@ def validate_document(doc: Document) -> list[str]:
     return problems
 
 
-def accumulate(doc: Document, name: str, unicodes) -> list:
+def accumulate(doc: Document, name: str, unicodes, *, seed=()) -> list:
     """Build a glyph's anchor list by applying matching rules in order.
 
     ``=`` replaces, ``+=`` appends, ``-=`` drops by anchor name. Labels are
     resolved here, against ``doc.labels``, so overrides take effect late.
+
+    *seed* is the initial accumulator — the anchors inherited from a glyph's
+    components under ``!propagate`` (see :func:`propagate_seed`). A ``=`` rule
+    wipes it, ``+=`` extends it, ``-=`` drops from it, all for free.
     """
-    acc: list = []
+    acc: list = list(seed)
     for selector, op, items in doc.rules:
         if not _matches(selector, name, unicodes):
             continue
@@ -255,7 +261,7 @@ def accumulate(doc: Document, name: str, unicodes) -> list:
     return acc
 
 
-def accumulate_provenance(doc: Document, name: str, unicodes) -> list:
+def accumulate_provenance(doc: Document, name: str, unicodes, *, seed=()) -> list:
     """Like :func:`accumulate`, but tag each surviving spec with the index of the
     rule that placed it.
 
@@ -264,8 +270,12 @@ def accumulate_provenance(doc: Document, name: str, unicodes) -> list:
     ``doc.sources`` for the source line). This is the provenance backbone for the
     studio ("which rule produced this anchor"); the plain :func:`accumulate` is
     unchanged for the batch/apply path.
+
+    *seed* is a list of ``(AnchorSpec, provenance)`` pairs seeding the accumulator
+    (propagated component anchors); their provenance is a :class:`Propagated`
+    marker rather than an ``int`` rule index, which the studio renders specially.
     """
-    acc: list = []                             # (spec, rule_index)
+    acc: list = list(seed)                     # (spec, rule_index | Propagated)
     for i, (selector, op, items) in enumerate(doc.rules):
         if not _matches(selector, name, unicodes):
             continue
@@ -279,6 +289,121 @@ def accumulate_provenance(doc: Document, name: str, unicodes) -> list:
             tagged = [(s, i) for s in specs]
             acc = tagged if op is Op.REPLACE else acc + tagged
     return acc
+
+
+# --------------------------------------------------------------------------- #
+#  !propagate — seed a composite's accumulator with its components' anchors.
+# --------------------------------------------------------------------------- #
+@dataclass(frozen=True)
+class Propagated:
+    """Provenance marker for a seeded (inherited) anchor: the base glyph it came
+    from. Stands in for the ``int`` rule index in :func:`accumulate_provenance`."""
+    component: str
+
+
+def _resolve_specs(font, target, specs, doc, *, replace, round_coords,
+                   on_error, diagnostics, apply_shift=True):
+    """Resolve *specs* onto *target*, returning ``[(name, x, y), ...]``.
+
+    The single spec→coordinate step: geometry resolve, same-name dedup (last
+    wins, keeping position), ``shift_x``, rounding, and diagnostics. Shared by
+    :func:`compute_document` (``apply_shift=True``) and :func:`_effective_anchors`
+    (``apply_shift=False`` — propagation copies pre-shift geometry so the global
+    ``shift_x`` is applied once, at the composite's own placement).
+    """
+    gname = target.name
+    anchors: list[tuple[str, float, float]] = []
+    for spec in specs:
+        sink = [] if on_error == "collect" else None
+        try:
+            x, y = resolve(font, target, spec, warnings=sink)
+        except Exception as exc:
+            if on_error == "raise":
+                raise
+            diagnostics.append(
+                ComputeDiagnostic(gname, spec.name, str(exc), severity="error"))
+            continue
+        for reason in sink or ():
+            diagnostics.append(
+                ComputeDiagnostic(gname, spec.name, reason, severity="warning"))
+        if apply_shift:
+            x += doc.shift_x
+        if round_coords:
+            x, y = round(x), round(y)
+        if replace:
+            anchors = [a for a in anchors if a[0] != spec.name]
+        anchors.append((spec.name, x, y))
+    return anchors
+
+
+def _existing_anchors(font, gname: str) -> dict:
+    """A glyph's pre-existing font anchors as ``{name: (x, y)}`` (fallback source
+    when a component produced no computed anchors this run)."""
+    if gname not in font:
+        return {}
+    return {a.name: (a.x, a.y) for a in font[gname].anchors}
+
+
+def _effective_anchors(font, gname, doc, memo, stack, *, round_coords) -> dict:
+    """The anchors glyph *gname* would be placed with, as ``{name: (x, y)}``
+    (pre-``shift_x``) — the propagation source for composites that reference it.
+
+    Memoised across a compute; *stack* holds the glyphs currently being resolved
+    so a component cycle (a font bug) is detected and treated as "no anchors"
+    rather than recursing forever.
+    """
+    if gname in memo:
+        return memo[gname]
+    if gname in stack:
+        log.warning("component cycle through %r; skipping its propagation", gname)
+        return {}
+    if gname not in font:
+        return {}
+    glyph = font[gname]
+    seed = [s for s, _ in propagate_seed(font, glyph, doc, memo,
+                                         stack + (gname,), round_coords=round_coords)]
+    specs = accumulate(doc, glyph.name, list(glyph.unicodes), seed=seed)
+    anchors = _resolve_specs(font, glyph, specs, doc, replace=True,
+                             round_coords=round_coords, on_error="collect",
+                             diagnostics=[], apply_shift=False)
+    result = {name: (x, y) for name, x, y in anchors}   # final list → last wins
+    memo[gname] = result
+    return result
+
+
+def propagate_seed(font, glyph, doc, memo, stack=(), *, round_coords=True) -> list:
+    """Anchors glyph inherits from its components under ``doc.propagate``.
+
+    Returns a list of ``(AnchorSpec, source_base_name)`` pairs — one per inherited
+    anchor, in first-seen order, later components overriding earlier by name. Each
+    spec is ``AnchorSpec(name, Abs(x), Abs(y))`` in the glyph's own coordinate
+    space (the component transform already applied), so it flows through
+    :func:`resolve` unchanged to the copied point. ``_``-prefixed (mark-side)
+    anchors are never propagated. Empty when propagation is off or the glyph is
+    not covered (``composites`` = components and no contours; ``all`` = any glyph
+    with components).
+    """
+    mode = doc.propagate
+    if mode == "none":
+        return []
+    components = list(getattr(glyph, "components", ()))
+    if not components:
+        return []
+    if mode == "composites" and len(glyph.contours):
+        return []
+    inherited: dict[str, tuple] = {}                # name -> (x, y, source)
+    for comp in components:
+        base = comp.baseGlyph
+        coords = _effective_anchors(font, base, doc, memo, stack,
+                                    round_coords=round_coords) or _existing_anchors(font, base)
+        t = Transform(*comp.transformation)
+        for name, (x, y) in coords.items():
+            if name.startswith("_"):               # mark-side anchor — never inherited
+                continue
+            nx, ny = t.transformPoint((x, y))
+            inherited[name] = (nx, ny, base)
+    return [(AnchorSpec(name, Abs(x), Abs(y)), src)
+            for name, (x, y, src) in inherited.items()]
 
 
 def compute_document(font, doc: Document, *, replace=True, round_coords=True,
@@ -324,9 +449,12 @@ def compute_document(font, doc: Document, *, replace=True, round_coords=True,
     keep = None if names is None else set(names)
     sfx_spec = resolve_suffixes(doc.suffix_ops)
     font_names = {g.name for g in font} if sfx_spec.all else None
+    memo: dict[str, dict] = {}                  # glyph name -> effective anchors (propagation)
     placed = ComputeResult()
     for glyph in font:
-        specs = accumulate(doc, glyph.name, list(glyph.unicodes))
+        seed = [s for s, _ in propagate_seed(font, glyph, doc, memo,
+                                             round_coords=round_coords)]
+        specs = accumulate(doc, glyph.name, list(glyph.unicodes), seed=seed)
         if not specs:
             continue
         for sfx in sfx_spec.expand(glyph.name, font_names):
@@ -335,31 +463,9 @@ def compute_document(font, doc: Document, *, replace=True, round_coords=True,
                 continue
             if keep is not None and gname not in keep:
                 continue
-            target = font[gname]
-            anchors: list[tuple[str, float, float]] = []
-            for spec in specs:
-                sink = [] if on_error == "collect" else None
-                try:
-                    x, y = resolve(font, target, spec, warnings=sink)
-                except Exception as exc:
-                    if on_error == "raise":
-                        raise
-                    placed.diagnostics.append(
-                        ComputeDiagnostic(gname, spec.name, str(exc), severity="error")
-                    )
-                    continue
-                # Anchor resolved (possibly via a fallback) — place it, and flag
-                # any soft degradations as warnings (it is placed, but suspect).
-                for reason in sink or ():
-                    placed.diagnostics.append(
-                        ComputeDiagnostic(gname, spec.name, reason, severity="warning")
-                    )
-                x += doc.shift_x
-                if round_coords:
-                    x, y = round(x), round(y)
-                if replace:
-                    anchors = [a for a in anchors if a[0] != spec.name]
-                anchors.append((spec.name, x, y))
+            anchors = _resolve_specs(font, font[gname], specs, doc, replace=replace,
+                                     round_coords=round_coords, on_error=on_error,
+                                     diagnostics=placed.diagnostics)
             if anchors:
                 placed[gname] = anchors
     return placed

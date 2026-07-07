@@ -487,3 +487,7 @@ class Document:
     # from the legacy parser and after !extends merges; consumers must treat it as
     # optional (degrade to "no line" when a rule's index is out of range).
     sources: list[int] = field(default_factory=list)
+    # !propagate mode: "none" (default) | "composites" | "all". When not "none",
+    # each covered glyph's accumulator is *seeded* with anchors inherited from its
+    # components (see apply.propagate_seed) before the first rule runs.
+    propagate: str = "none"

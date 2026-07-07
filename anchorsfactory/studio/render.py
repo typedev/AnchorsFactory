@@ -12,7 +12,7 @@ from __future__ import annotations
 from fontTools.pens.recordingPen import DecomposingRecordingPen
 from fontTools.pens.svgPathPen import SVGPathPen
 
-from ..apply import accumulate_provenance, validate_document
+from ..apply import Propagated, accumulate_provenance, propagate_seed, validate_document
 from ..dsl import DSLError, parse_dsl
 from ..geometry import explain
 from ..model import Document, resolve_suffixes
@@ -81,6 +81,7 @@ def resolve_stack(layers) -> Document:
             sources=merged.sources + [(i, s) for s in src],
             shift_x=doc.shift_x or merged.shift_x,
             suffix_ops=merged.suffix_ops + doc.suffix_ops,
+            propagate=doc.propagate if doc.propagate != "none" else merged.propagate,
         )
     return merged
 
@@ -101,6 +102,7 @@ def _layer(base: Document, child: Document, *, inherited: bool) -> Document:
         sources=base.sources + child_src,
         shift_x=child.shift_x or base.shift_x,
         suffix_ops=base.suffix_ops + child.suffix_ops,
+        propagate=child.propagate if child.propagate != "none" else base.propagate,
     )
 
 
@@ -166,10 +168,13 @@ def build_view(font, rules) -> dict:
     except Exception:                                # older fontParts / odd fonts — fall back to encounter order
         pass
     fallback = 10 ** 9                               # unordered glyphs sort after the known ones, stably
+    memo: dict[str, dict] = {}                        # propagation cache (shared across glyphs)
 
     for glyph in font:
+        seed = [(s, Propagated(src))
+                for s, src in propagate_seed(font, glyph, doc, memo)]
         try:
-            specs = accumulate_provenance(doc, glyph.name, list(glyph.unicodes))
+            specs = accumulate_provenance(doc, glyph.name, list(glyph.unicodes), seed=seed)
         except ValueError as exc:                    # validate_document should have caught this
             problems.append(f"glyph {glyph.name}: {exc}")
             break                                    # same doc breaks every glyph — report once
@@ -182,11 +187,17 @@ def build_view(font, rules) -> dict:
             target = font[gname]
             placed: dict[str, dict] = {}             # name -> payload (last wins, like replace)
             for spec, rule in specs:
-                origin = sources[rule] if rule < len(sources) else None
-                layer, line = origin if origin else (None, None)
+                if isinstance(rule, Propagated):     # inherited from a component
+                    layer, line = None, None
+                else:
+                    origin = sources[rule] if rule < len(sources) else None
+                    layer, line = origin if origin else (None, None)
                 payload = _anchor_payload(font, target, spec, gname,
                                           diagnostics, doc.shift_x, layer, line)
                 if payload is not None:
+                    if isinstance(rule, Propagated):
+                        payload["propagated"] = True
+                        payload["from"] = rule.component
                     placed[spec.name] = payload
             if not placed:
                 continue

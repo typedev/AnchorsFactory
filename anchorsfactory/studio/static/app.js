@@ -516,10 +516,13 @@ function renderInspector(){
     const layerName = (VIEW.layers||[])[a.layer] ?? a.layer;
     const card=document.createElement("div"); card.className="anchor-card"; card.dataset.anchor = a.name;
     card.innerHTML =
-      `<div class="nm">${escapeHtml(a.name)}${warn?' <span title="fallback">⚠</span>':''}</div>`+
+      `<div class="nm">${escapeHtml(a.name)}`+
+        `${a.propagated?' <span class="tag-prop">propagated</span>':''}`+
+        `${warn?' <span title="fallback">⚠</span>':''}</div>`+
       `<div class="co">x ${round(a.x)}   y ${round(a.y)}</div>`+
       `<div class="kd">x: ${a.x_kind} · y: ${a.y_kind}</div>`+
-      (a.line!=null?`<div class="rule">→ ${escapeHtml(String(layerName))} L${a.line}</div>`:"")+
+      (a.propagated?`<div class="rule">↳ inherited from ${escapeHtml(String(a.from))}</div>`
+        :(a.line!=null?`<div class="rule">→ ${escapeHtml(String(layerName))} L${a.line}</div>`:""))+
       (warn?`<div class="wn">${warn}</div>`:"");
     card.addEventListener("click", ()=>{
       highlightAnchor(a.name);

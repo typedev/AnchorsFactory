@@ -1,6 +1,6 @@
 # RFC: `!propagate` — component anchor inheritance
 
-Status: draft · Priority: P1 · Evidence: [world-scripts research](../research/world-scripts-applicability.md)
+Status: **implemented** (v0.5.0) · Priority: P1 · Evidence: [world-scripts research](../research/world-scripts-applicability.md)
 
 ## Motivation
 
