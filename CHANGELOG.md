@@ -41,6 +41,12 @@ section to the new version (with today's date) and uses it as the release notes.
 - **Playwright** added as a dev dependency for an end-to-end studio UI test
   (`make browsers` downloads the headless chromium; the test skips without it).
 
+### Changed
+
+- The bundled **`devanagari`** preset now derives `bottom2` from `bottom` with a
+  `%bottom` reference (the stacking level tracks the base anchor); placement is
+  identical (69% smoke accuracy unchanged), the intent is explicit.
+
 ## [0.4.1] - 2026-06-24
 
 ### Added

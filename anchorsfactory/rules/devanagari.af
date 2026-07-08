@@ -19,13 +19,15 @@
 &stemY      = 100                   # scanline height used to find the base stem: low, below the letter-body clutter, above baseline serifs
 &stemX      = outline.last.center@&stemY   # centre of the rightmost stem — the column below-base marks hang from
 &bottomLift = 23                    # clearance of `bottom`/`bottom2`/`_bottom` above the ink bottom / baseline
-&stackShift = 7                     # X pull-back of the second stack level (bottom2) from the stem centre
+&stackShift = 7                     # X pull-back of the second stack level (bottom2) from `bottom`
 &markInset  = 265                   # zero-width marks are drawn left of the origin; distance origin -> attachment point (very font-specific)
 
 # ============================================================
 #  LABELS
 # ============================================================
-@devaBase   = top (outline.right-&topInset &headY), bottom (&stemX outline.bottom+&bottomLift), bottom2 (&stemX-&stackShift outline.bottom+&bottomLift)
+# bottom2 is the next stack level *derived from* bottom (%bottom): same height,
+# pulled back by &stackShift — so it always tracks bottom when the stem moves.
+@devaBase   = top (outline.right-&topInset &headY), bottom (&stemX outline.bottom+&bottomLift), bottom2 (%bottom-&stackShift %bottom)
 @devaTop    = _top (outline.center@bottom &headY)
 @devaBottom = _bottom (width.left-&markInset baseline+&bottomLift)
 
