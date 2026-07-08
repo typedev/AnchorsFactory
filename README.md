@@ -69,6 +69,12 @@ U+0413 += desc (outline.right 0)   # Г also gets a descender anchor
   `outline.centroid-25` nudges a slanted mark off the optical centre.
 - `&name` names a reusable X/Y value; `@name` a reusable set of anchors. Both
   are late-bound, so an extending file can override either.
+- `%name` places an anchor relative to **another anchor** on the same glyph —
+  `bottom (%top 0)` reuses `top`'s x so the two don't drift apart.
+- `compN.`/`complast.` measure **one component's** outline (`comp1.outline.center@top`),
+  for seating marks on ligature parts.
+- `!propagate = composites` makes composite glyphs **inherit** their components'
+  anchors — write rules for the base letters, precomposed glyphs get theirs free.
 
 Full reference: **[docs/anchor-rules.md](docs/anchor-rules.md)**.
 

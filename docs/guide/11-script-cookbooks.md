@@ -15,6 +15,7 @@ sections:
 - **Thai** — above/below vowels and tone marks, avoiding ascenders
   (`maitaikhu`-style shifted variants).
 - **Arabic notes** — what the per-glyph model does and does not cover for
-  joining scripts; where derived anchors and propagation proposals come in.
+  joining scripts; where derived anchors (`%name`), propagation (`!propagate`),
+  and per-component frames (`compN.`) come in.
 
 *(stub — to be written)*

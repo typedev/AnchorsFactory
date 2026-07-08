@@ -20,7 +20,7 @@ can never drift from the implementation.
 6. [Sums & biases](06-sums-and-biases.md) — combining terms with `+` / `-`.
 7. [Variables & labels](07-variables-and-labels.md) — `&name` axis values, `@name` anchor sets.
 8. [Selectors & the accumulation model](08-selectors-and-accumulation.md) — who a rule hits, and how `=`/`+=`/`-=` stack.
-9. [Directives](09-directives.md) — `!extends`, `!suffixes`, `!shiftx`.
+9. [Directives](09-directives.md) — `!extends`, `!suffixes`, `!shiftx`, `!propagate`.
 10. [Italic behavior](10-italics.md) — automatic height-aware shear.
 11. [Script cookbooks](11-script-cookbooks.md) — Latin, Cyrillic, Greek, Devanagari, Hebrew, Thai, Arabic notes.
 

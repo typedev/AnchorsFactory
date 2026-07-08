@@ -8,26 +8,24 @@ lists its dependencies explicitly.
 
 ### WS1 — Language features (RFCs in this directory)
 
-| # | Feature | RFC | Prio | Depends on |
-|---|---------|-----|------|------------|
-| 1a | Derived anchors (`%name` term) | [rfc-derived-anchors](rfc-derived-anchors.md) | P1 | — |
-| 1b | Component anchor inheritance (`!propagate`) | [rfc-propagate](rfc-propagate.md) | P1 | — |
-| 1c | Per-component frames (`compN.`) | [rfc-component-frames](rfc-component-frames.md) | P1 | — |
-| 1d | `@` arithmetic / edge insets | [rfc-edge-sampling](rfc-edge-sampling.md) | P2 | — |
+| # | Feature | RFC | Prio | Status |
+|---|---------|-----|------|--------|
+| 1a | Derived anchors (`%name` term) | [rfc-derived-anchors](rfc-derived-anchors.md) | P1 | ✅ implemented |
+| 1b | Component anchor inheritance (`!propagate`) | [rfc-propagate](rfc-propagate.md) | P1 | ✅ implemented |
+| 1c | Per-component frames (`compN.`) | [rfc-component-frames](rfc-component-frames.md) | P1 | ✅ implemented |
+| 1d | `@` arithmetic / edge insets | [rfc-edge-sampling](rfc-edge-sampling.md) | P2 | not started |
 | 1e | Cursive preset (`entry`/`exit`) + nastaliq caveats in docs | — (docs + `rules/*.af`) | P2 | — |
 | 1f | Stem × ink-bottom idiom documentation (axis cycle guidance) | — (docs, studio hint) | P2 | — |
 | 1g | Script/Unicode-block selector `{script:…}` | — (needs a mini-RFC if picked up) | P3 | — |
 
 Implementation notes:
-- 1a–1c are mutually independent at the parser level and can be built in
-  parallel branches; they meet in `apply.py` (1a, 1b) and `geometry.py` (1c) —
-  merge order: 1b (pure seeding, no grammar), then 1a (grammar + resolve
-  order), then 1c (grammar + geometry).
-- Each feature ships with: model node + serializer round-trip test, dsl
-  parser tests, engine tests on synthetic glyphs, a docs section in
-  `anchor-rules.md`, and a studio provenance label where applicable.
-- Suggested release mapping: 1a+1b+1d → **v0.5.0**; 1c → v0.5.x (largest
-  geometry surface); presets and docs ride any release (additive).
+- **1a–1c landed** (July 2026, committed on `master`, pending release) in the
+  designed merge order: 1b (pure seeding, no grammar) → 1a (grammar + resolve
+  order) → 1c (grammar + geometry). Each shipped with a model node + serializer
+  round-trip test, dsl parser tests, engine tests on synthetic glyphs, an
+  `anchor-rules.md` section, and studio provenance (propagated / `%ref` badges).
+- Release mapping: 1a+1b+1c → **v0.5.0** (pending). 1d (`@` arithmetic) remains
+  P2, not started; presets and docs ride any release (additive).
 
 ### WS2 — Studio documentation → `docs/studio.md`
 

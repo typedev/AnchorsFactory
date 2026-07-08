@@ -6,6 +6,34 @@ section to the new version (with today's date) and uses it as the release notes.
 
 ## [Unreleased]
 
+### Added
+
+- **`%name` derived anchors** — a new polymorphic term giving the position of
+  another anchor on the same glyph (its x in an X slot, its y in a Y slot), so an
+  anchor can track another instead of being measured independently:
+  `bottom (%top 0)` reuses `top`'s x. Composes in `+`/`-` sums (`%top-25`) and in
+  an `@` sample line (`outline.center@%top`); resolved in dependency order (a
+  reference cycle is rejected, a missing target degrades). Cannot appear in a
+  `&variable`.
+- **`!propagate` directive** — `none` (default) / `composites` / `all`: a
+  composite glyph inherits its components' anchors (as computed in the same run,
+  pushed through the component transform; falling back to a component's existing
+  font anchors), seeding its accumulator before its own rules run. Mark-side
+  (`_`-prefixed) anchors are never propagated; later components override earlier
+  by name; composes through `!extends`.
+- **`compN.` / `complast.` per-component frames** — a frame qualifier measuring
+  only the N-th component's outline (`comp1.outline.center@top`,
+  `comp2.box.right`, `complast.outline.centroid`), for seating marks on ligature
+  parts. `width` takes no qualifier; too-few-components degrades to the whole
+  glyph with a warning.
+- **Studio: an Output panel** replacing the old unlabeled strip under the rules —
+  a titled, resizable panel (with a splitter) that lists rule problems and
+  per-anchor notes, with a "no problems" empty state. Invalid rules now surface
+  there instead of 500-ing the compute endpoint. Inherited and derived anchors
+  render `propagated` / `↦ %ref` provenance badges.
+- **Playwright** added as a dev dependency for an end-to-end studio UI test
+  (`make browsers` downloads the headless chromium; the test skips without it).
+
 ## [0.4.1] - 2026-06-24
 
 ### Added

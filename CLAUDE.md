@@ -11,8 +11,10 @@ intersection) and writes them into the font. It is the *pre-marking* half of a
 pipeline whose second half (composite assembly by snapping mark anchors to base
 anchors) is done by GlyphConstruction.
 
-The rewrite is complete and released to PyPI (currently **v0.4.1**, on
-`master`); the package is `anchorsfactory/`. The original module script lives in
+The rewrite is complete and released to PyPI (currently **v0.4.1**); the package
+is `anchorsfactory/`. The WS1 world-scripts features (`%name` derived anchors,
+`!propagate`, `compN.` frames) are **committed on `master` but unreleased** —
+they make up the pending **v0.5.0**. The original module script lives in
 `examples/legacy/` for reference only.
 
 ## Environment & commands
@@ -41,15 +43,18 @@ The pipeline is `parse → validate → resolve geometry → apply → save`, sp
 each layer is testable and the DSL surface is decoupled from the engine.
 
 - `model.py` — the IR (the parser/engine contract). One `frame.position` node
-  `Pos(frame, align, run, at, axis)` serves **both axes**: `Frame{ADVANCE,BOX,
-  OUTLINE}` with `align` an `HAlign` (X) / `VEdge` (Y) / `Frac` (a `*n/m`
-  position); `Run` (which ink span/stem); plus `Centroid` (area centre of mass,
-  polymorphic), `Abs` (absolute, axis-neutral), `Sum`/`Neg` (`+`/`-`
-  arithmetic), `FontMetric`, `Y` (`$glyph`). Selectors
+  `Pos(frame, align, run, at, axis, component)` serves **both axes**:
+  `Frame{ADVANCE,BOX,OUTLINE}` with `align` an `HAlign` (X) / `VEdge` (Y) /
+  `Frac` (a `*n/m` position); `Run` (which ink span/stem); `component` (a
+  `compN.`/`complast.` per-component qualifier, 1-based / -1). Plus `Centroid`
+  (area centre of mass, polymorphic, also `component`), `Abs` (absolute,
+  axis-neutral), `AnchorRef` (`%name`, another anchor's position — polymorphic),
+  `Sum`/`Neg` (`+`/`-` arithmetic), `FontMetric`, `Y` (`$glyph`). Selectors
   `GlyphName/Unicode/UnicodeRange/Glob/Category`; `Op{REPLACE,ADD,REMOVE}`;
-  `LabelRef`, `VarRef` (`&name`, a named axis expression); `Document`. (`X`,
-  `XAbs`/`YAbs`, `YSum` remain as back-compat aliases of `Pos`/`Abs`/`Sum`.)
-  Dataclass `__str__`s render canonical DSL tokens (so they double as the serializer).
+  `LabelRef`, `VarRef` (`&name`, a named axis expression); `Document` (incl.
+  `propagate` mode). (`X`, `XAbs`/`YAbs`, `YSum` remain as back-compat aliases of
+  `Pos`/`Abs`/`Sum`.) Dataclass `__str__`s render canonical DSL tokens (so they
+  double as the serializer).
 - `geometry.py` — resolves an `AnchorSpec` to (x, y). **Analytic** contour
   intersection via `fontTools.misc.bezierTools` (not a pixel scan) on a scanline
   perpendicular to the axis (horizontal for X, vertical for Y); pairs crossings
@@ -60,7 +65,10 @@ each layer is testable and the DSL surface is decoupled from the engine.
   height it was measured at to the anchor's height (`tan(-angle)·(Y−S)`; `S=0`
   for box/advance, the `@`/anchor height for outline, `cy` for centroid). Also
   `Centroid` (via `StatisticsPen`) and `Frac` positions. `@` decouples the sample
-  line (a height on X, a column on Y) from the anchor's other coordinate.
+  line (a height on X, a column on Y) from the anchor's other coordinate. A
+  `compN.` qualifier draws only the N-th component into a fresh recorder
+  (`DecomposingRecordingPen` flattens components, so post-hoc filtering is
+  impossible) and scopes crossings/bbox/centroid/`@`-edges to it.
   (Caveat: `glyph.bounds` is the bbox of the *already-slanted* outline, so on
   italics `box.*`/`width.*` double-count the slant — prefer `outline.*`/centroid;
   documented in `docs/anchor-rules.md`.)
@@ -70,7 +78,10 @@ each layer is testable and the DSL surface is decoupled from the engine.
   selector mutates a glyph's anchor list (`=` replace, `+=` add, `-=` remove);
   labels and `&`-variables resolved late (with axis/undefined/variable-cycle and
   both-axes-outline axis-cycle checks). Plus `accumulate`, `validate_document`
-  (pre-flight).
+  (pre-flight). `!propagate` seeds a glyph's accumulator from its components via
+  `propagate_seed`/`_effective_anchors` (memoized, topo, cycle-guarded);
+  `%name` refs resolve in `_resolve_specs` in dependency order (above geometry —
+  the ref's computed coordinate is substituted before `resolve`).
 - `runner.py` — file IO + `!extends` resolution/merge; safe-save default
   (`*_anchored.ufo`, never overwrites unless `--in-place`). `cli.py` — the
   `anchorsfactory` command; loads+validates rules once, then per-font.
@@ -88,9 +99,11 @@ See `docs/anchor-rules.md` (full spec) and `README.md`. Key points: an anchor is
 reads the glyph's own bbox; `outline.centroid` is the area centre. Y also takes
 a number, a font metric (`capHeight`, …), or `$Glyph[.edge|*frac]`. Terms
 combine with `+`/`-` (a base position plus a bias, e.g. `outline.centroid-25`).
-`&name` aliases any X/Y expression (late-bound, axis-checked); operators
-`=`/`+=`/`-=`; selectors include ranges/globs/categories; `!extends` inherits a
-base. Italic shear is automatic (height-aware).
+`&name` aliases any X/Y expression (late-bound, axis-checked); `%name` is another
+anchor's position on the same glyph (`bottom (%top 0)`); `compN.`/`complast.`
+scopes a frame to one component; operators `=`/`+=`/`-=`; selectors include
+ranges/globs/categories; `!extends` inherits a base; `!propagate` makes
+composites inherit component anchors. Italic shear is automatic (height-aware).
 
 ## Conventions
 

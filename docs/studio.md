@@ -34,13 +34,14 @@ Then open the printed URL (default `http://127.0.0.1:8765/`) in a browser.
 | `-v`, `--verbose` | log requests to the terminal |
 
 With no font argument Studio builds a small in-memory demo font (schematic
-`H O A n o a e` plus `acute`/`dieresis` marks) — deliberately crude shapes, but
-real outlines, so every overlay kind has something to show. You can drop a real
-font onto the page at any time (see below).
+`H O A n o a e` plus `acute`/`dieresis` marks and an `aacute` composite for
+`!propagate`) — deliberately crude shapes, but real outlines, so every overlay
+kind has something to show. You can drop a real font onto the page at any time
+(see below).
 
 ## The window
 
-Left: the **rule editors** and a problems list. Right: the **glyph grid** on
+Left: the **rule editors** and an **Output** panel. Right: the **glyph grid** on
 top and the **inspector** (big canvas + anchor readout) below. All panes are
 resizable by dragging the dividers (double-click a divider to reset); sizes,
 theme, and your rule edits persist in the browser's `localStorage`.
@@ -87,11 +88,13 @@ in your rules. Accept a completion with `Tab`/`Enter`, dismiss with `Esc`.
 `Ctrl+F` (or `Cmd+F`) opens find-in-rules for the focused layer; `Enter` /
 `Shift+Enter` step through matches, `Esc` closes.
 
-Parse and validation errors appear in the **problems** list under the editors
-and mark the offending line in red; clicking a problem jumps to that line in
-the right layer. Per-anchor geometry notes (fallbacks, missing crossings)
-appear there too, tagged `glyph·anchor`. The status pill in the header sums it
-up: `ok`, `ok · N notes`, or `N problems`.
+Parse and validation errors appear in the **Output** panel under the editors
+(a titled, resizable panel — drag its splitter) and mark the offending line in
+red; clicking a problem jumps to that line in the right layer. Per-anchor
+geometry notes (fallbacks, missing crossings, unresolved `%refs`) appear there
+too, tagged `glyph·anchor`; when there is nothing to report it reads
+`ok · no problems`. The status pill in the header sums it up: `ok`,
+`ok · N notes`, or `N problems`.
 
 ### The glyph grid
 
@@ -112,14 +115,16 @@ The big canvas shows the selected glyph with the evidence behind each anchor:
 - a crosshair at the **centroid** when an axis uses `outline.centroid`;
 - the anchors themselves, labelled `name (x, y)`. A ⚠ ring means the anchor
   was placed by a fallback (e.g. no crossing at the sample height → bbox edge)
-  — the reason is listed on its card and in the problems list.
+  — the reason is listed on its card and in the Output panel.
 
 The readout beside the canvas lists each anchor's exact coordinates, the
 strategy family used per axis (`x: outline · y: metric`, …), any warnings, and
 its **provenance**: `→ base L12` names the layer and line of the rule that
 placed it. Clicking the card highlights the anchor on the canvas and jumps the
 editor to that rule line. (Anchors inherited from a preset via `!extends` have
-no editor line to jump to.)
+no editor line to jump to.) Two badges flag non-rule origins: **propagated**
+(`↳ inherited from <component>`) for an anchor a composite got via `!propagate`,
+and **↦ %ref** for a `%name` derived anchor.
 
 ## Loading a font
 
@@ -148,7 +153,7 @@ win; when happy, **⤓ .af** the custom layer and add `!extends default` at the
 top for use with the CLI.
 
 **Port rules to a new font.** Drop the new font onto a Studio that already has
-your rules — the rules survive the font swap, and the problems list shows
+your rules — the rules survive the font swap, and the Output panel shows
 exactly which glyphs and anchors degraded.
 
 ## Troubleshooting
@@ -157,7 +162,7 @@ exactly which glyphs and anchors degraded.
   holds the port. Pick another: `--port 8766`.
 - **A dropped font is rejected** — the drop must contain a `.ufo` (a *folder*,
   or a `.zip`/`.ufoz` with one inside; a directory holding `metainfo.plist`
-  also counts). The server's error appears in the problems list, tagged
+  also counts). The server's error appears in the Output panel, tagged
   `font`, and the status pill shows `font error`.
 - **`-r`/preset seems ignored on relaunch** — the browser restores your last
   session's rule text from `localStorage`, which takes precedence over the
