@@ -25,6 +25,16 @@ Studio ships with the package as the `anchorsfactory-studio` console script
 Then open the printed URL (default `http://127.0.0.1:8765/`) in a browser.
 `Ctrl-C` stops the server.
 
+For development there is a one-command launcher that starts the server **and**
+opens it in a Playwright-driven Chromium window (needs the dev browser —
+`make browsers`); closing the window or `Ctrl-C` stops the server:
+
+```bash
+make studio                              # demo font
+make studio ARGS="MyFont.ufo -r my.af"   # a UFO + your rules
+# or directly: python scripts/studio_dev.py [ufo] [-r rules] [--port N] [--headless]
+```
+
 | option | meaning |
 |--------|---------|
 | `ufo` (positional, optional) | a `.ufo` to debug; omitted → a built-in synthetic demo font |

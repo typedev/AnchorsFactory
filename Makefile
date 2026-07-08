@@ -7,11 +7,12 @@
 
 PY := .venv/bin/python
 
-.PHONY: help venv browsers test build check publish-test publish release release-test clean
+.PHONY: help venv browsers studio test build check publish-test publish release release-test clean
 
 help:
 	@echo "venv         create .venv and install the package (editable) + dev deps + browsers"
 	@echo "browsers     download the Playwright chromium used by the studio UI test"
+	@echo "studio       launch Studio + open it in a browser window (ARGS='<ufo> -r <rules>')"
 	@echo "test         run the test suite"
 	@echo "build        build sdist + wheel into dist/"
 	@echo "check        build, then validate the artifacts (twine check)"
@@ -30,6 +31,11 @@ venv:
 # cleanly if it's missing, so this is only needed to actually run that test.
 browsers:
 	$(PY) -m playwright install chromium
+
+# Launch Studio and open it in a Playwright Chromium window. Pass a font/rules
+# via ARGS, e.g.  make studio ARGS="MyFont.ufo -r my.af"
+studio:
+	$(PY) scripts/studio_dev.py $(ARGS)
 
 test:
 	$(PY) -m pytest
