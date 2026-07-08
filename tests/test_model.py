@@ -114,6 +114,20 @@ def test_abs_is_unified_and_polymorphic():
     assert str(Abs(-25)) == "-25"
 
 
+def test_edge_offset_rendering_and_validation():
+    from anchorsfactory.model import EdgeOffset
+    assert str(EdgeOffset(VEdge.TOP, -10)) == "top-10"
+    assert str(EdgeOffset(VEdge.BOTTOM, 8)) == "bottom+8"
+    assert str(Pos(Frame.OUTLINE, HAlign.CENTER, at=EdgeOffset(VEdge.TOP, -10))) == \
+        "outline.center@top-10"
+    assert str(Pos(Frame.OUTLINE, VEdge.MIDDLE, at=EdgeOffset(HAlign.LEFT, -5), axis=Axis.Y)) == \
+        "outline.middle@left-5"
+    with pytest.raises(ValueError):                     # X sample height must be top/bottom
+        Pos(Frame.OUTLINE, HAlign.CENTER, at=EdgeOffset(HAlign.LEFT, -5))
+    with pytest.raises(ValueError):                     # Y sample column must be left/right
+        Pos(Frame.OUTLINE, VEdge.MIDDLE, at=EdgeOffset(VEdge.TOP, -5), axis=Axis.Y)
+
+
 def test_component_frame_rendering_and_validation():
     assert str(Pos(Frame.BOX, HAlign.RIGHT, component=2)) == "comp2.box.right"
     assert str(Pos(Frame.OUTLINE, HAlign.CENTER, at=VEdge.TOP, component=-1)) == \

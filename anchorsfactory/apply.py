@@ -21,7 +21,7 @@ from fontTools.misc.transform import Transform
 from .geometry import resolve, _dependent
 from .model import (
     Document, Op, LabelRef, VarRef, AnchorRef, AnchorSpec, resolve_suffixes,
-    Axis, Pos, Centroid, Abs, Y, FontMetric, Sum, Neg, VEdge, HAlign,
+    Axis, Pos, Centroid, Abs, Y, FontMetric, Sum, Neg, EdgeOffset, VEdge, HAlign,
     GlyphName, Unicode, UnicodeRange, Glob, Category,
 )
 
@@ -124,7 +124,7 @@ def _resolve_x(node, variables, seen=()):
     if isinstance(node, Pos):
         if node.axis is not Axis.X:
             raise ValueError(f"variable holds a Y expression ({node}) but X is required")
-        if node.at is not None and not isinstance(node.at, VEdge):
+        if node.at is not None and not isinstance(node.at, (VEdge, EdgeOffset)):
             node = replace(node, at=_resolve_y(node.at, variables, seen))
         return node
     raise ValueError(f"variable holds a Y expression ({node}) but X is required")
@@ -140,7 +140,7 @@ def _resolve_y(node, variables, seen=()):
     if isinstance(node, Pos):
         if node.axis is not Axis.Y:
             raise ValueError(f"variable holds an X expression ({node}) but Y is required")
-        if node.at is not None and not isinstance(node.at, HAlign):
+        if node.at is not None and not isinstance(node.at, (HAlign, EdgeOffset)):
             node = replace(node, at=_resolve_x(node.at, variables, seen))
         return node
     if isinstance(node, Sum):
@@ -169,7 +169,7 @@ def _check_var_node(node, variables, seen):
             raise ValueError(f"undefined variable {node.name}")
         _check_var_node(variables[node.name], variables, seen + (node.name,))
     elif isinstance(node, Pos):
-        if node.at is not None and not isinstance(node.at, (VEdge, HAlign)):
+        if node.at is not None and not isinstance(node.at, (VEdge, HAlign, EdgeOffset)):
             _check_var_node(node.at, variables, seen)
     elif isinstance(node, Neg):
         _check_var_node(node.term, variables, seen)
@@ -313,7 +313,7 @@ def _anchor_refs(node) -> set:
         for t in node.terms:
             out |= _anchor_refs(t)
         return out
-    if isinstance(node, Pos) and node.at is not None and not isinstance(node.at, (VEdge, HAlign)):
+    if isinstance(node, Pos) and node.at is not None and not isinstance(node.at, (VEdge, HAlign, EdgeOffset)):
         return _anchor_refs(node.at)
     return set()
 
@@ -329,7 +329,7 @@ def _sub_refs(node, coords: dict, axis: Axis):
         return Neg(_sub_refs(node.term, coords, axis))
     if isinstance(node, Sum):
         return Sum(tuple(_sub_refs(t, coords, axis) for t in node.terms))
-    if isinstance(node, Pos) and node.at is not None and not isinstance(node.at, (VEdge, HAlign)):
+    if isinstance(node, Pos) and node.at is not None and not isinstance(node.at, (VEdge, HAlign, EdgeOffset)):
         other = Axis.Y if axis is Axis.X else Axis.X
         return replace(node, at=_sub_refs(node.at, coords, other))
     return node

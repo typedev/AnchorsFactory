@@ -59,6 +59,19 @@ def test_bad_component_frame_rejected(bad):
         parse_dsl([bad])
 
 
+def test_edge_offset_at_parses():
+    from anchorsfactory.model import EdgeOffset
+    assert _one(parse_dsl(["@x = a (outline.center@top-10 0)"])).x == \
+        X(Frame.OUTLINE, HAlign.CENTER, at=EdgeOffset(VEdge.TOP, -10))
+    assert _one(parse_dsl(["@x = a (outline.center@bottom+8 0)"])).x == \
+        X(Frame.OUTLINE, HAlign.CENTER, at=EdgeOffset(VEdge.BOTTOM, 8))
+    # Y axis: an @ column edge ± offset
+    assert _one(parse_dsl(["@x = a (0 outline.middle@right+5)"])).y == \
+        Pos(Frame.OUTLINE, VEdge.MIDDLE, at=EdgeOffset(HAlign.RIGHT, 5), axis=Axis.Y)
+    # bare @top is unchanged (exact edge, not an EdgeOffset)
+    assert _one(parse_dsl(["@x = a (outline.center@top 0)"])).x.at is VEdge.TOP
+
+
 @pytest.mark.parametrize("tok, x", [
     ("width.center", X(Frame.ADVANCE, HAlign.CENTER)),
     ("box.left", X(Frame.BOX, HAlign.LEFT)),

@@ -13,7 +13,7 @@ lists its dependencies explicitly.
 | 1a | Derived anchors (`%name` term) | [rfc-derived-anchors](rfc-derived-anchors.md) | P1 | ✅ implemented |
 | 1b | Component anchor inheritance (`!propagate`) | [rfc-propagate](rfc-propagate.md) | P1 | ✅ implemented |
 | 1c | Per-component frames (`compN.`) | [rfc-component-frames](rfc-component-frames.md) | P1 | ✅ implemented |
-| 1d | `@` arithmetic / edge insets | [rfc-edge-sampling](rfc-edge-sampling.md) | P2 | not started |
+| 1d | `@` arithmetic / edge insets | [rfc-edge-sampling](rfc-edge-sampling.md) | P2 | ✅ implemented |
 | 1e | Cursive preset (`entry`/`exit`) + nastaliq caveats in docs | — (docs + `rules/*.af`) | P2 | — |
 | 1f | Stem × ink-bottom idiom documentation (axis cycle guidance) | — (docs, studio hint) | P2 | — |
 | 1g | Script/Unicode-block selector `{script:…}` | — (needs a mini-RFC if picked up) | P3 | — |
@@ -24,8 +24,8 @@ Implementation notes:
   order) → 1c (grammar + geometry). Each shipped with a model node + serializer
   round-trip test, dsl parser tests, engine tests on synthetic glyphs, an
   `anchor-rules.md` section, and studio provenance (propagated / `%ref` badges).
-- Release mapping: 1a+1b+1c → **v0.5.0** (pending). 1d (`@` arithmetic) remains
-  P2, not started; presets and docs ride any release (additive).
+- Release mapping: 1a+1b+1c+1d → **v0.5.0** (pending). Presets and docs ride any
+  release (additive).
 
 ### WS2 — Studio documentation → `docs/studio.md`
 

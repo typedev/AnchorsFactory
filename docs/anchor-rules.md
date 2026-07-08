@@ -73,6 +73,13 @@ the scanline grazes the outline, so `@top`/`@bottom` returns that tangent point;
 if a height finds no crossing at all (outside the ink box, or a flat collinear
 edge) the bounding-box edge is used and a warning is recorded.
 
+To sample *just inside* an edge — the usual fix for a grazing peak — add a signed
+offset: **`@top-10`** (10 units below the bbox top), `@bottom+8`, and on Y
+`@left-5` / `@right+5`. It stays glyph-relative (unlike a fixed `@120`): the
+offset shifts the sample line, and the italic projection follows it. The `@` tail
+also accepts a metric/variable expression directly — `@xHeight-20`, `@&h+5`,
+`@capHeight*1/2+10`.
+
 ### Y — vertical position
 
 | token | meaning |

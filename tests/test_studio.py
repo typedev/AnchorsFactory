@@ -30,6 +30,16 @@ def font():
     return build_demo_font()
 
 
+def test_edge_offset_shifts_sample_line(font):
+    # @top-40 samples 40 units below the bbox top; on the slanted A that also
+    # moves the centre x — bare @top is unchanged.
+    from anchorsfactory.dsl import parse_dsl
+    top = explain(font, font["A"], parse_dsl(["@x = A (outline.center@top 0)"]).labels["@x"][0])
+    off = explain(font, font["A"], parse_dsl(["@x = A (outline.center@top-40 0)"]).labels["@x"][0])
+    assert off["x_sample"]["height"] == top["x_sample"]["height"] - 40
+    assert off["x"] != top["x"]
+
+
 def test_all_glyph_geometry_covers_every_glyph(font):
     geo = all_glyph_geometry(font)
     assert {g["name"] for g in geo} == {g.name for g in font}

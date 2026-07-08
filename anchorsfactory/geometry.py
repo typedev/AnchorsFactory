@@ -20,7 +20,7 @@ import logging
 
 from .model import (
     Frame, Axis, HAlign, VEdge, Run, Frac,
-    Pos, Centroid, Abs, Y, FontMetric, Sum, Neg, AnchorSpec,
+    Pos, Centroid, Abs, Y, FontMetric, Sum, Neg, EdgeOffset, AnchorSpec,
 )
 
 log = logging.getLogger(__name__)
@@ -287,11 +287,15 @@ def _sample_line(font, glyph, p: Pos, axis: Axis, cross, bounds, *, warnings=Non
             return yMax
         if at is VEdge.BOTTOM:
             return yMin
+        if isinstance(at, EdgeOffset):     # own edge ± offset, kept glyph-relative
+            return (yMax if at.edge is VEdge.TOP else yMin) + at.offset
         return resolve_y(font, at, warnings=warnings)
     if at is HAlign.LEFT:                  # axis Y → a column
         return xMin
     if at is HAlign.RIGHT:
         return xMax
+    if isinstance(at, EdgeOffset):
+        return (xMin if at.edge is HAlign.LEFT else xMax) + at.offset
     return _axis(font, glyph, at, Axis.X, warnings=warnings)
 
 

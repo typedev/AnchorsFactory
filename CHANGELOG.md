@@ -8,6 +8,13 @@ section to the new version (with today's date) and uses it as the release notes.
 
 ### Added
 
+- **`@`-edge offsets** — a signed offset after an own-edge sample line:
+  `outline.center@top-10` samples 10 units below the bbox top (the fix for a
+  scanline grazing a smooth peak), plus `@bottom+8` and, on Y, `@left-5` /
+  `@right+5`. Glyph-relative (the italic projection follows the shifted line);
+  bare `@top`/`@bottom` keep the exact-edge behaviour. (A metric/variable tail
+  like `@xHeight-20` / `@capHeight*1/2+10` already worked.)
+
 - **`%name` derived anchors** — a new polymorphic term giving the position of
   another anchor on the same glyph (its x in an X slot, its y in a Y slot), so an
   anchor can track another instead of being measured independently:

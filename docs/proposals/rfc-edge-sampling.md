@@ -1,6 +1,6 @@
 # RFC: Arithmetic on `@` sample positions (edge insets)
 
-Status: draft · Priority: P2 · Evidence: [world-scripts research](../research/world-scripts-applicability.md), §Engine notes
+Status: **implemented** (v0.5.0) · Priority: P2 · Evidence: [world-scripts research](../research/world-scripts-applicability.md), §Engine notes
 
 ## Motivation
 

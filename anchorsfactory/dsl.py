@@ -16,7 +16,7 @@ import re
 
 from .model import (
     Frame, Axis, HAlign, VEdge, Run, Frac, FONT_METRICS,
-    Pos, Centroid, Abs, Y, FontMetric, Sum, Neg, AnchorSpec, AnchorRef, LabelRef, VarRef,
+    Pos, Centroid, Abs, Y, FontMetric, Sum, Neg, EdgeOffset, AnchorSpec, AnchorRef, LabelRef, VarRef,
     GlyphName, Unicode, UnicodeRange, Glob, Category, Op, Document,
 )
 
@@ -77,15 +77,24 @@ def _parse_align(tok: str, axis: Axis, whole: str):
     return table[tok]
 
 
+_EDGEOFF_RE = re.compile(r"^(top|bottom|left|right)([+-]\d+)$")
+
+
 def _parse_at(tok: str, axis: Axis):
-    """The ``@`` sample line — a bare own-edge sentinel, else a position on the
-    *other* axis (X.at is a height; Y.at is a column)."""
+    """The ``@`` sample line — a bare own-edge sentinel, an own-edge plus a signed
+    offset (``top-10``), else a position on the *other* axis (X.at is a height;
+    Y.at is a column)."""
+    m = _EDGEOFF_RE.match(tok)
     if axis is Axis.X:                       # a height
         if tok in ("top", "bottom"):
             return _EDGE[tok]                # the glyph's own extreme
+        if m and m.group(1) in ("top", "bottom"):
+            return EdgeOffset(_EDGE[m.group(1)], int(m.group(2)))
         return _parse_slot(tok, Axis.Y)
     if tok in ("left", "right"):             # axis Y → a column; own side
         return _HALIGN[tok]
+    if m and m.group(1) in ("left", "right"):
+        return EdgeOffset(_HALIGN[m.group(1)], int(m.group(2)))
     return _parse_slot(tok, Axis.X)
 
 

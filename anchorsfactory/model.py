@@ -101,6 +101,21 @@ class Frac:
 # --------------------------------------------------------------------------- #
 #  Frame-relative positions (both axes)
 # --------------------------------------------------------------------------- #
+@dataclass(frozen=True)
+class EdgeOffset:
+    """A glyph's own bbox edge plus a signed offset, for an ``@`` sample line —
+    ``@top-10`` (10 units below the bbox top), ``@bottom+8``, ``@left-5``,
+    ``@right+5``. The edge is a :class:`VEdge` (TOP/BOTTOM, an X anchor's sample
+    *height*) or an :class:`HAlign` (LEFT/RIGHT, a Y anchor's sample *column*);
+    it resolves to that bbox extreme shifted by ``offset``, staying glyph-relative
+    (unlike a fixed ``@120``). Bare ``@top`` etc. keep the exact-edge behaviour."""
+    edge: Union[VEdge, HAlign]
+    offset: int
+
+    def __str__(self):
+        return f"{self.edge.value}{'+' if self.offset >= 0 else '-'}{abs(self.offset)}"
+
+
 def _comp_prefix(component) -> str:
     """The ``compN.`` / ``complast.`` frame prefix for a component qualifier."""
     if component is None:
@@ -168,11 +183,15 @@ class Pos:
                     raise ValueError("`@middle` is meaningless; sample height must be top or bottom")
                 if isinstance(self.at, HAlign):
                     raise ValueError("on X, `@…` is a height (top/bottom or a Y value), not an X edge")
+                if isinstance(self.at, EdgeOffset) and self.at.edge not in (VEdge.TOP, VEdge.BOTTOM):
+                    raise ValueError("on X, an `@`-edge offset must be off top or bottom")
             else:
                 if self.at is HAlign.CENTER:
                     raise ValueError("`@center` is meaningless; sample column must be left or right")
                 if isinstance(self.at, VEdge):
                     raise ValueError("on Y, `@…` is a column (left/right or an X value), not a Y edge")
+                if isinstance(self.at, EdgeOffset) and self.at.edge not in (HAlign.LEFT, HAlign.RIGHT):
+                    raise ValueError("on Y, an `@`-edge offset must be off left or right")
 
     def __str__(self):
         pre = _comp_prefix(self.component)
