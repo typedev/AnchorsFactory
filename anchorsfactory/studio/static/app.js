@@ -3,6 +3,7 @@ const SVGNS = "http://www.w3.org/2000/svg";
 const REDUCED = matchMedia("(prefers-reduced-motion:reduce)").matches;
 const LH = 20, PAD = 14;                     // editor line-height / padding (match app.css)
 let META = null, VIEW = {glyphs:{}, layers:[]}, SELECTED = null, GLYPH_FILTER = "", HL_ANCHOR = null;
+let GLYPHS = {};                       // last valid glyph view (frozen while rules are invalid)
 let baseEd = null, customEd = null, activeEd = null, customOpen = false;
 const lastPos = {};                          // glyph -> {anchor -> {x,y}} for tweening
 
@@ -363,7 +364,7 @@ async function sendFont(name, collected){
   if(!j.ok){ status.className="pill bad"; status.textContent="font error";
     $("#problems").innerHTML = `<div class="row err"><span class="tag">font</span><span>${escapeHtml(j.error||"load failed")}</span></div>`; return; }
   Object.assign(META, j.state); setFontMeta();
-  SELECTED = null; HL_ANCHOR = null;
+  SELECTED = null; HL_ANCHOR = null; GLYPHS = {};    // a new font invalidates the frozen view
   for(const k in lastPos) delete lastPos[k];
   compute();
 }
@@ -389,9 +390,20 @@ async function compute(){
   }
   markErrorLines();
   renderProblems();
-  renderGrid();
-  if(!VIEW.glyphs[SELECTED]) SELECTED = (sortedGlyphs()[0] || {}).name || null;
-  renderInspector();
+  // Freeze the last valid preview while rules are mid-edit / invalid: the server
+  // returns no glyphs for a broken document, so re-rendering would blank the grid
+  // and drop the selection (then snap to the first glyph when it validates again).
+  // Only refresh the glyph view — and the selection — on a clean compute.
+  const stage = document.querySelector(".stage");
+  if(VIEW.ok){
+    GLYPHS = VIEW.glyphs;
+    stage.classList.remove("stale");
+    renderGrid();
+    if(!GLYPHS[SELECTED]) SELECTED = (sortedGlyphs()[0] || {}).name || null;
+    renderInspector();
+  } else {
+    stage.classList.add("stale");                   // show it's frozen, not live
+  }
   const bad = !VIEW.ok || (VIEW.diagnostics||[]).some(d=>d.severity==="error");
   status.className = "pill " + (bad ? "bad" : "ok");
   status.textContent = VIEW.ok ? (VIEW.diagnostics.length ? `ok · ${VIEW.diagnostics.length} notes` : "ok")
@@ -432,7 +444,7 @@ function renderProblems(){
 }
 
 function sortedGlyphs(){
-  return Object.values(VIEW.glyphs).sort((a,b) => (a.order - b.order) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  return Object.values(GLYPHS).sort((a,b) => (a.order - b.order) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
 function renderGrid(){
@@ -507,8 +519,8 @@ function drawGlyph(g, {small=false}={}){
 
 function renderInspector(){
   const canvas=$("#canvas"), read=$("#readout");
-  if(!SELECTED || !VIEW.glyphs[SELECTED]){ canvas.innerHTML='<div class="empty">no glyph selected</div>'; read.innerHTML=""; return; }
-  const g=VIEW.glyphs[SELECTED];
+  if(!SELECTED || !GLYPHS[SELECTED]){ canvas.innerHTML='<div class="empty">no glyph selected</div>'; read.innerHTML=""; return; }
+  const g=GLYPHS[SELECTED];
   canvas.innerHTML=""; canvas.appendChild(drawGlyph(g,{small:false}));
   read.innerHTML=`<h3>${escapeHtml(g.name)}</h3><div class="sub">adv ${Math.round(g.advance)} · `+
     (g.bounds?`bbox ${g.bounds.map(Math.round).join(" ")}`:"no outline")+`</div>`;

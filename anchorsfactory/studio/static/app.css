@@ -141,6 +141,8 @@ button.icon{padding:5px 8px;line-height:1;font-size:13px}
 .problems .tag{color:var(--muted);flex:none}
 /* ---- right side ---- */
 .stage{display:grid;grid-template-rows:var(--gridh,200px) 6px minmax(0,1fr) auto;min-height:0;min-width:0}
+/* rules mid-edit / invalid → the preview is frozen at the last valid result */
+.stage.stale{opacity:.55;transition:opacity .15s}
 .gridwrap{border-bottom:1px solid var(--line);background:var(--panel);overflow:auto;min-height:0}
 .gridhead{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 14px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);position:sticky;top:0;background:var(--panel);z-index:1}
 .glyphgrid{display:flex;flex-wrap:wrap;gap:10px;padding:4px 14px 16px}
