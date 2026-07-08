@@ -75,6 +75,8 @@ U+0413 += desc (outline.right 0)   # Г also gets a descender anchor
   for seating marks on ligature parts.
 - `!propagate = composites` makes composite glyphs **inherit** their components'
   anchors — write rules for the base letters, precomposed glyphs get theirs free.
+- `@top-10` / `@bottom+8` sample just inside an edge (the fix for a scanline
+  grazing a smooth peak); `@xHeight-20` and other metric/variable insets too.
 
 Full reference: **[docs/anchor-rules.md](docs/anchor-rules.md)**.
 

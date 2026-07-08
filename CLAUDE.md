@@ -49,6 +49,7 @@ each layer is testable and the DSL surface is decoupled from the engine.
   `compN.`/`complast.` per-component qualifier, 1-based / -1). Plus `Centroid`
   (area centre of mass, polymorphic, also `component`), `Abs` (absolute,
   axis-neutral), `AnchorRef` (`%name`, another anchor's position — polymorphic),
+  `EdgeOffset` (`@top-10`, an own bbox edge ± offset, as a `Pos.at` sample line),
   `Sum`/`Neg` (`+`/`-` arithmetic), `FontMetric`, `Y` (`$glyph`). Selectors
   `GlyphName/Unicode/UnicodeRange/Glob/Category`; `Op{REPLACE,ADD,REMOVE}`;
   `LabelRef`, `VarRef` (`&name`, a named axis expression); `Document` (incl.
@@ -95,8 +96,9 @@ See `docs/anchor-rules.md` (full spec) and `README.md`. Key points: an anchor is
 `name (X Y)`, and one `frame.position` grammar serves **both axes** —
 `width/box/outline . [run] . align [@…]`, with `align` = `left/center/right` (X)
 / `bottom/middle/top` (Y) / a `*n/m` fraction. `outline.*` samples the contour
-(on X at a height, on Y at a column); `@…` fixes that sample line; `box.top`
-reads the glyph's own bbox; `outline.centroid` is the area centre. Y also takes
+(on X at a height, on Y at a column); `@…` fixes that sample line (`@top-10` =
+an own-edge inset); `box.top` reads the glyph's own bbox; `outline.centroid` is
+the area centre. Y also takes
 a number, a font metric (`capHeight`, …), or `$Glyph[.edge|*frac]`. Terms
 combine with `+`/`-` (a base position plus a bias, e.g. `outline.centroid-25`).
 `&name` aliases any X/Y expression (late-bound, axis-checked); `%name` is another
