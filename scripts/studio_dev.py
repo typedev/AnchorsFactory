@@ -72,13 +72,19 @@ def main(argv=None) -> int:
         return 1
 
     with sync_playwright() as p:
+        # A sized, resizable window; headless has no window so it keeps a fixed
+        # viewport (deterministic for a smoke check / screenshots).
+        launch_kw = {} if args.headless else {"args": ["--window-size=1440,960"]}
         try:
-            browser = p.chromium.launch(headless=args.headless)
+            browser = p.chromium.launch(headless=args.headless, **launch_kw)
         except Exception as exc:                 # chromium not downloaded / no display
             httpd.shutdown()
             print(f"could not launch Chromium ({exc}); run `make browsers`", file=sys.stderr)
             return 1
-        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        # no_viewport → the page tracks the real window size, so resizing reflows
+        # the layout (a fixed viewport would lock it regardless of the window).
+        page = (browser.new_page(viewport={"width": 1440, "height": 900}) if args.headless
+                else browser.new_page(no_viewport=True))
         page.goto(url, wait_until="domcontentloaded")
         if args.headless:
             print("headless: server up and page loaded OK.")
