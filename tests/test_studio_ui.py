@@ -87,3 +87,53 @@ def test_output_panel_has_resizable_splitter(page):
     after = page.eval_on_selector(
         ".editor", "el => getComputedStyle(el).getPropertyValue('--probh')")
     assert float(before[:-2]) < float(after[:-2])                 # panel grew
+
+
+def _set_rules(page, text):
+    ta = page.locator("#edBase textarea"); ta.click()
+    with page.expect_response(lambda r: "/api/compute" in r.url, timeout=8000):
+        ta.fill(text)
+    page.wait_for_timeout(250)
+
+
+def _names(page):
+    return {b.inner_text() for b in page.query_selector_all(".thumb .cap b")}
+
+
+def test_all_glyphs_tab_lists_every_glyph(page):
+    # a single-glyph rule → only H is affected; the "all glyphs" tab shows the rest.
+    _set_rules(page, "H = top (box.center capHeight)")
+    assert _names(page) == {"H"}                          # affected tab
+
+    with page.expect_response(lambda r: "/api/allglyphs" in r.url, timeout=8000):
+        page.locator("#gridtabs .tab", has_text="all glyphs").click()
+    page.wait_for_timeout(250)
+    allnames = _names(page)
+    assert "H" in allnames and "acute" in allnames        # affected + unaffected together
+    assert len(allnames) >= 10
+    assert page.inner_text("#count").startswith("all ·")
+
+
+def test_hide_affected_leaves_only_unaffected(page):
+    _set_rules(page, "H = top (box.center capHeight)")
+    with page.expect_response(lambda r: "/api/allglyphs" in r.url, timeout=8000):
+        page.locator("#gridtabs .tab", has_text="all glyphs").click()
+    page.wait_for_timeout(200)
+    page.check("#hideaffcb")
+    page.wait_for_timeout(200)
+    names = _names(page)
+    assert "H" not in names                                # the affected glyph is hidden
+    assert "acute" in names                                # unaffected remain
+    assert page.inner_text("#count").startswith("unaffected ·")
+
+
+def test_selecting_unaffected_glyph_inspects_it(page):
+    _set_rules(page, "H = top (box.center capHeight)")
+    with page.expect_response(lambda r: "/api/allglyphs" in r.url, timeout=8000):
+        page.locator("#gridtabs .tab", has_text="all glyphs").click()
+    page.wait_for_timeout(200)
+    page.locator(".thumb .cap b", has_text="O").first.click()   # O is unaffected here
+    page.wait_for_timeout(200)
+    assert page.locator("#readout h3").inner_text() == "O"
+    assert page.locator("#readout .anchor-card").count() == 0   # no anchors, still inspectable
+    assert page.locator("#canvas svg").count() == 1            # outline drawn

@@ -66,7 +66,13 @@
   <section class="stage">
     <div class="gridwrap">
       <div class="gridhead">
-        <span>affected glyphs · <span id="count">0</span></span>
+        <div class="tabs" id="gridtabs">
+          <button class="tab sel" data-tab="affected" title="glyphs at least one rule matched">affected</button>
+          <button class="tab" data-tab="all" title="every glyph in the font">all glyphs</button>
+        </div>
+        <label class="hideaff" id="hideaff" hidden><input type="checkbox" id="hideaffcb"> hide affected</label>
+        <span class="gridcount" id="count">0</span>
+        <div class="gh-spacer"></div>
         <input id="glyphq" class="mini" placeholder="filter glyphs…" spellcheck="false" autocomplete="off">
       </div>
       <div class="glyphgrid" id="grid"></div>

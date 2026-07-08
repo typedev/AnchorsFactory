@@ -98,10 +98,20 @@ too, tagged `glyph·anchor`; when there is nothing to report it reads
 
 ### The glyph grid
 
-"Affected glyphs" — every glyph in the font that at least one rule matched,
-in the font's glyph order, each thumbnail showing its outline, its anchors,
-and the anchor count. The filter box narrows by substring. Click a thumbnail
-to inspect it.
+Two tabs:
+
+- **affected** — every glyph at least one rule matched, in glyph order, each
+  thumbnail showing its outline, anchors, and anchor count. This is the default
+  and answers "what did my rules place".
+- **all glyphs** — every glyph in the font (affected ones keep their anchors), so
+  you can spot glyphs your rules *miss*. A **hide affected** checkbox drops the
+  ones already covered, leaving exactly the unaddressed glyphs. Thumbnails render
+  lazily (drawn as they scroll into view), so even large fonts stay responsive.
+
+The filter box narrows either tab by substring; the count reads `affected · N` /
+`all · N` / `unaffected · N`. Click a thumbnail to inspect it — an unaffected
+glyph shows its outline and metrics with no anchors. The active tab and checkbox
+persist in `localStorage`.
 
 ### The inspector
 

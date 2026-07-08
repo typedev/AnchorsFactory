@@ -20,7 +20,7 @@ from importlib.resources import files
 
 from ..presets import is_preset, list_presets, preset_text
 from .demo import build_demo_font, font_metrics
-from .render import build_view
+from .render import all_glyph_geometry, build_view
 from .upload import load_uploaded_font
 
 log = logging.getLogger("anchorsfactory.studio")
@@ -58,6 +58,7 @@ class Studio:
         self.rules_text = rules_text
         self.lock = threading.Lock()
         self._tmpdir = None                    # temp dir of an uploaded font, if any
+        self._allglyphs = None                 # cached all-glyph geometry (font-scoped)
         self.state = {
             **_font_state(font, font_name),
             "presets": list_presets(),
@@ -71,8 +72,16 @@ class Studio:
         old = self._tmpdir
         self.font = font
         self._tmpdir = tmpdir
+        self._allglyphs = None                 # new font invalidates the geometry cache
         self.state.update(_font_state(font, name))
         return old
+
+    def all_glyphs(self) -> list:
+        """All-glyph geometry, computed once per font and cached (caller holds the
+        lock)."""
+        if self._allglyphs is None:
+            self._allglyphs = all_glyph_geometry(self.font)
+        return self._allglyphs
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -98,6 +107,10 @@ class _Handler(BaseHTTPRequestHandler):
             self._send_static("index.html", "text/html; charset=utf-8")
         elif self.path == "/api/state":
             self._send_json(self.studio.state)
+        elif self.path == "/api/allglyphs":
+            with self.studio.lock:
+                glyphs = self.studio.all_glyphs()
+            self._send_json({"glyphs": glyphs})
         elif self.path.startswith("/static/"):
             rel = self.path[len("/static/"):].split("?", 1)[0]
             ctype = mimetypes.guess_type(rel)[0] or "application/octet-stream"

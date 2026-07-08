@@ -21,13 +21,24 @@ from anchorsfactory.model import (
 )
 from anchorsfactory.presets import preset_text
 from anchorsfactory.studio.demo import build_demo_font, font_metrics
-from anchorsfactory.studio.render import build_view, glyph_to_svg_path
+from anchorsfactory.studio.render import all_glyph_geometry, build_view, glyph_to_svg_path
 from anchorsfactory.studio.upload import load_uploaded_font
 
 
 @pytest.fixture(scope="module")
 def font():
     return build_demo_font()
+
+
+def test_all_glyph_geometry_covers_every_glyph(font):
+    geo = all_glyph_geometry(font)
+    assert {g["name"] for g in geo} == {g.name for g in font}
+    for g in geo:
+        assert set(g) == {"name", "order", "advance", "bounds", "path"}
+        assert "anchors" not in g                       # rule-independent
+    # a glyph no bundled rule matches (a mark) is still present, with an outline
+    acute = next(g for g in geo if g["name"] == "acute")
+    assert acute["path"] and acute["bounds"] is not None
 
 
 # --------------------------------------------------------------------------- #

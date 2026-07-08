@@ -4,6 +4,10 @@ const REDUCED = matchMedia("(prefers-reduced-motion:reduce)").matches;
 const LH = 20, PAD = 14;                     // editor line-height / padding (match app.css)
 let META = null, VIEW = {glyphs:{}, layers:[]}, SELECTED = null, GLYPH_FILTER = "", HL_ANCHOR = null;
 let GLYPHS = {};                       // last valid glyph view (frozen while rules are invalid)
+let GRID_TAB = "affected";             // "affected" | "all"
+let HIDE_AFFECTED = false;             // on the "all" tab: show only unaffected glyphs
+let ALLGLYPHS = null;                  // [{name,order,advance,bounds,path}] for the "all" tab (lazy)
+let ALLMAP = {};                       // name -> all-glyph geometry entry
 let baseEd = null, customEd = null, activeEd = null, customOpen = false;
 const lastPos = {};                          // glyph -> {anchor -> {x,y}} for tweening
 
@@ -21,6 +25,7 @@ async function boot(){
   const sel = $("#preset");
   for(const p of META.presets){ const o=document.createElement("option"); o.value=o.textContent=p; sel.appendChild(o); }
   setupEditors();
+  setupGrid();
   setupTheme();
   setupFind();
   setupFontDrop();
@@ -87,7 +92,52 @@ function setupEditors(){
     if(f){ setCustomOpen(true); customEd.setValue(await f.text()); persist(); SELECTED = null; HL_ANCHOR = null; compute(); }
     e.target.value = "";
   });
-  $("#glyphq").addEventListener("input", e => { GLYPH_FILTER = e.target.value.trim(); renderGrid(); });
+}
+
+/* ===================================================================== *
+ *  Glyph grid: affected / all-glyphs tabs
+ * ===================================================================== */
+function persistGrid(){
+  try { localStorage.setItem("af.grid", JSON.stringify({tab: GRID_TAB, hideAffected: HIDE_AFFECTED})); } catch(_){}
+}
+
+function setupGrid(){
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem("af.grid") || "null"); } catch(_){}
+  if(saved){ GRID_TAB = saved.tab === "all" ? "all" : "affected"; HIDE_AFFECTED = !!saved.hideAffected; }
+  $("#hideaffcb").checked = HIDE_AFFECTED;
+  syncGridChrome();
+
+  document.querySelectorAll("#gridtabs .tab").forEach(btn => {
+    btn.addEventListener("click", () => selectTab(btn.dataset.tab));
+  });
+  $("#hideaffcb").addEventListener("change", e => {
+    HIDE_AFFECTED = e.target.checked; persistGrid(); renderGrid();
+  });
+  const applyFilter = debounce(() => renderGrid(), 120);
+  $("#glyphq").addEventListener("input", e => { GLYPH_FILTER = e.target.value.trim(); applyFilter(); });
+}
+
+// reflect GRID_TAB in the tab buttons + show the hide-affected control only on "all"
+function syncGridChrome(){
+  document.querySelectorAll("#gridtabs .tab").forEach(b => b.classList.toggle("sel", b.dataset.tab === GRID_TAB));
+  $("#hideaff").hidden = GRID_TAB !== "all";
+}
+
+async function selectTab(tab){
+  if(tab === GRID_TAB) return;
+  GRID_TAB = tab; persistGrid(); syncGridChrome();
+  if(tab === "all" && ALLGLYPHS === null) await fetchAllGlyphs();
+  renderGrid();
+}
+
+async function fetchAllGlyphs(){
+  const cnt = $("#count"); cnt.textContent = "loading…";
+  try {
+    const j = await (await fetch("/api/allglyphs")).json();
+    ALLGLYPHS = j.glyphs || [];
+  } catch(err){ ALLGLYPHS = []; }
+  ALLMAP = {}; for(const g of ALLGLYPHS) ALLMAP[g.name] = g;
 }
 
 const scheduleCompute = debounce(() => compute(), 300);
@@ -365,6 +415,7 @@ async function sendFont(name, collected){
     $("#problems").innerHTML = `<div class="row err"><span class="tag">font</span><span>${escapeHtml(j.error||"load failed")}</span></div>`; return; }
   Object.assign(META, j.state); setFontMeta();
   SELECTED = null; HL_ANCHOR = null; GLYPHS = {};    // a new font invalidates the frozen view
+  ALLGLYPHS = null; ALLMAP = {};                     // …and the all-glyphs geometry cache
   for(const k in lastPos) delete lastPos[k];
   compute();
 }
@@ -399,7 +450,7 @@ async function compute(){
     GLYPHS = VIEW.glyphs;
     stage.classList.remove("stale");
     renderGrid();
-    if(!GLYPHS[SELECTED]) SELECTED = (sortedGlyphs()[0] || {}).name || null;
+    if(!glyphData(SELECTED)) SELECTED = (sortedGlyphs()[0] || {}).name || null;
     renderInspector();
   } else {
     stage.classList.add("stale");                   // show it's frozen, not live
@@ -443,23 +494,70 @@ function renderProblems(){
   }
 }
 
+const _bySort = (a,b) => (a.order - b.order) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+
 function sortedGlyphs(){
-  return Object.values(GLYPHS).sort((a,b) => (a.order - b.order) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  return Object.values(GLYPHS).sort(_bySort);
+}
+
+// The glyphs to show for the active tab. "all" overlays computed anchors onto the
+// full geometry (affected glyphs keep their anchors/overlays); hide-affected drops
+// the ones already in the affected set.
+function glyphList(){
+  if(GRID_TAB === "affected") return sortedGlyphs();
+  let all = (ALLGLYPHS || []).map(g => GLYPHS[g.name] || {...g, anchors: []});
+  if(HIDE_AFFECTED) all = all.filter(g => !GLYPHS[g.name]);
+  return all.sort(_bySort);
+}
+
+// A glyph's data for the inspector: computed (with anchors/overlays) if affected,
+// else its plain geometry with no anchors (an unaffected glyph on the "all" tab).
+function glyphData(name){
+  if(GLYPHS[name]) return GLYPHS[name];
+  const g = ALLMAP[name];
+  return g ? {...g, anchors: []} : null;
+}
+
+// Thumbnails draw lazily: the SVG is built only when a card scrolls near view,
+// so an ~800-glyph "all" tab stays responsive.
+let gridObserver = null;
+function ensureObserver(){
+  if(gridObserver) return gridObserver;
+  gridObserver = new IntersectionObserver(entries => {
+    for(const e of entries){
+      if(!e.isIntersecting) continue;
+      gridObserver.unobserve(e.target);
+      const holder = e.target.querySelector(".holder");
+      if(e.target._glyph && holder && !holder.firstChild){
+        holder.classList.remove("ph");
+        holder.appendChild(drawGlyph(e.target._glyph, {small:true}));
+      }
+    }
+  }, {root: $(".gridwrap"), rootMargin: "250px"});
+  return gridObserver;
+}
+
+function setGridCount(shown, total, filtered){
+  const label = GRID_TAB === "affected" ? "affected" : (HIDE_AFFECTED ? "unaffected" : "all");
+  $("#count").textContent = `${label} · ` + (filtered ? `${shown}/${total}` : total);
 }
 
 function renderGrid(){
+  if(GRID_TAB === "all" && ALLGLYPHS === null){ fetchAllGlyphs().then(renderGrid); return; }
   const grid = $("#grid"); grid.innerHTML="";
-  const all = sortedGlyphs();
+  const obs = ensureObserver(); obs.disconnect();     // stop watching the old cards
+  const all = glyphList();
   const f = GLYPH_FILTER.toLowerCase();
   const shown = f ? all.filter(g => g.name.toLowerCase().includes(f)) : all;
-  $("#count").textContent = f ? `${shown.length}/${all.length}` : all.length;
+  setGridCount(shown.length, all.length, !!f);
   for(const g of shown){
     const card = document.createElement("div"); card.className = "thumb" + (g.name===SELECTED?" sel":"");
-    const holder = document.createElement("div"); card.appendChild(holder);
+    card._glyph = g;
+    const holder = document.createElement("div"); holder.className = "holder ph"; card.appendChild(holder);
     card.insertAdjacentHTML("beforeend", `<div class="cap"><b>${escapeHtml(g.name)}</b><span>${g.anchors.length}</span></div>`);
-    holder.appendChild(drawGlyph(g, {small:true}));
     card.addEventListener("click", ()=>{ SELECTED=g.name; HL_ANCHOR=null; renderGrid(); renderInspector(); });
     grid.appendChild(card);
+    obs.observe(card);
   }
 }
 
@@ -519,8 +617,8 @@ function drawGlyph(g, {small=false}={}){
 
 function renderInspector(){
   const canvas=$("#canvas"), read=$("#readout");
-  if(!SELECTED || !GLYPHS[SELECTED]){ canvas.innerHTML='<div class="empty">no glyph selected</div>'; read.innerHTML=""; return; }
-  const g=GLYPHS[SELECTED];
+  const g = SELECTED && glyphData(SELECTED);
+  if(!g){ canvas.innerHTML='<div class="empty">no glyph selected</div>'; read.innerHTML=""; return; }
   canvas.innerHTML=""; canvas.appendChild(drawGlyph(g,{small:false}));
   read.innerHTML=`<h3>${escapeHtml(g.name)}</h3><div class="sub">adv ${Math.round(g.advance)} · `+
     (g.bounds?`bbox ${g.bounds.map(Math.round).join(" ")}`:"no outline")+`</div>`;

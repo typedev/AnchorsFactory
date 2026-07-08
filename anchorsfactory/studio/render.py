@@ -128,6 +128,34 @@ def resolve_document(rules_text: str) -> Document:
     return _layer(base, doc, inherited=False)
 
 
+def all_glyph_geometry(font) -> list[dict]:
+    """Every glyph's rule-independent geometry, for the studio's "all glyphs" tab.
+
+    One dict per glyph — ``{name, order, advance, bounds, path}`` (no anchors,
+    since this is independent of any ruleset) — in the font's glyph order. Empty
+    glyphs (e.g. ``space``) come back with ``path=""`` and ``bounds=None``, which
+    the client already tolerates. The caller caches this per font (it is not
+    cheap on a big font, but never changes until the font is swapped).
+    """
+    order_pos: dict[str, int] = {}
+    try:
+        for i, gname in enumerate(font.glyphOrder):
+            order_pos[gname] = i
+    except Exception:                                # older fontParts / odd fonts
+        pass
+    out: list[dict] = []
+    for i, glyph in enumerate(font):
+        bounds = glyph.bounds
+        out.append({
+            "name": glyph.name,
+            "order": order_pos.get(glyph.name, i),
+            "advance": float(glyph.width),
+            "bounds": list(bounds) if bounds is not None else None,
+            "path": glyph_to_svg_path(glyph),
+        })
+    return out
+
+
 def build_view(font, rules) -> dict:
     """Compute everything the UI needs for *rules* against *font*.
 
