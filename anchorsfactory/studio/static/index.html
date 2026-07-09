@@ -77,11 +77,11 @@
     <div class="gridwrap">
       <div class="gridhead">
         <div class="tabs" id="gridtabs">
-          <button class="tab sel" data-tab="affected" title="glyphs at least one rule matched">affected</button>
           <button class="tab" data-tab="all" title="every glyph in the font">all glyphs</button>
+          <button class="tab sel" data-tab="anchored" title="glyphs at least one anchor rule placed">anchored</button>
           <button class="tab" data-tab="composites" title="composites GlyphConstruction assembled from the placed anchors">composites</button>
         </div>
-        <label class="hideaff" id="hideaff" hidden><input type="checkbox" id="hideaffcb"> hide affected</label>
+        <label class="hideaff" id="unusedwrap" hidden><input type="checkbox" id="unusedcb"> show unused</label>
         <span class="gridcount" id="count">0</span>
         <div class="gh-spacer"></div>
         <input id="glyphq" class="mini" placeholder="filter glyphs…" spellcheck="false" autocomplete="off">

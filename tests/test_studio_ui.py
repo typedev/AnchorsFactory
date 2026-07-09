@@ -103,28 +103,28 @@ def _names(page):
 def test_all_glyphs_tab_lists_every_glyph(page):
     # a single-glyph rule → only H is affected; the "all glyphs" tab shows the rest.
     _set_rules(page, "H = top (box.center capHeight)")
-    assert _names(page) == {"H"}                          # affected tab
+    assert _names(page) == {"H"}                          # default "anchored" tab
 
     with page.expect_response(lambda r: "/api/allglyphs" in r.url, timeout=8000):
         page.locator("#gridtabs .tab", has_text="all glyphs").click()
     page.wait_for_timeout(250)
     allnames = _names(page)
-    assert "H" in allnames and "acute" in allnames        # affected + unaffected together
+    assert "H" in allnames and "acute" in allnames        # anchored + untouched together
     assert len(allnames) >= 10
     assert page.inner_text("#count").startswith("all ·")
 
 
-def test_hide_affected_leaves_only_unaffected(page):
+def test_show_unused_reveals_untouched_glyphs(page):
     _set_rules(page, "H = top (box.center capHeight)")
+    assert _names(page) == {"H"}                            # anchored tab: only the touched glyph
+    # "show unused" (on the anchored tab) reveals the rest alongside H (drawn dimmed)
     with page.expect_response(lambda r: "/api/allglyphs" in r.url, timeout=8000):
-        page.locator("#gridtabs .tab", has_text="all glyphs").click()
-    page.wait_for_timeout(200)
-    page.check("#hideaffcb")
-    page.wait_for_timeout(200)
+        page.check("#unusedcb")
+    page.wait_for_timeout(250)
     names = _names(page)
-    assert "H" not in names                                # the affected glyph is hidden
-    assert "acute" in names                                # unaffected remain
-    assert page.inner_text("#count").startswith("unaffected ·")
+    assert "H" in names                                    # the anchored glyph stays
+    assert "acute" in names                                # untouched glyphs now shown
+    assert page.inner_text("#count").startswith("anchored + unused ·")
 
 
 def test_selecting_unaffected_glyph_inspects_it(page):

@@ -4,8 +4,8 @@ const REDUCED = matchMedia("(prefers-reduced-motion:reduce)").matches;
 const LH = 20, PAD = 14;                     // editor line-height / padding (match app.css)
 let META = null, VIEW = {glyphs:{}, layers:[]}, SELECTED = null, GLYPH_FILTER = "", HL_ANCHOR = null;
 let GLYPHS = {};                       // last valid glyph view (frozen while rules are invalid)
-let GRID_TAB = "affected";             // "affected" | "all" | "composites"
-let HIDE_AFFECTED = false;             // on the "all" tab: show only unaffected glyphs
+let GRID_TAB = "anchored";             // "all" | "anchored" | "composites"
+let SHOW_UNUSED = false;               // "anchored" tab: also reveal (dimmed) glyphs no rule touched
 let ALLGLYPHS = null;                  // [{name,order,advance,bounds,path}] for the "all" tab (lazy)
 let ALLMAP = {};                       // name -> all-glyph geometry entry
 let COMPOSITES = {};                   // name -> GlyphConstruction-assembled composite (for the "composites" tab)
@@ -117,36 +117,41 @@ function setupEditors(){
  *  Glyph grid: affected / all-glyphs tabs
  * ===================================================================== */
 function persistGrid(){
-  try { localStorage.setItem("af.grid", JSON.stringify({tab: GRID_TAB, hideAffected: HIDE_AFFECTED})); } catch(_){}
+  try { localStorage.setItem("af.grid", JSON.stringify({tab: GRID_TAB, showUnused: SHOW_UNUSED})); } catch(_){}
 }
 
 function setupGrid(){
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem("af.grid") || "null"); } catch(_){}
-  if(saved){ GRID_TAB = saved.tab === "all" ? "all" : "affected"; HIDE_AFFECTED = !!saved.hideAffected; }
-  $("#hideaffcb").checked = HIDE_AFFECTED;
+  if(saved){
+    GRID_TAB = ["all","composites"].includes(saved.tab) ? saved.tab : "anchored";  // old "affected" → "anchored"
+    SHOW_UNUSED = !!saved.showUnused;
+  }
+  $("#unusedcb").checked = SHOW_UNUSED;
   syncGridChrome();
 
   document.querySelectorAll("#gridtabs .tab").forEach(btn => {
     btn.addEventListener("click", () => selectTab(btn.dataset.tab));
   });
-  $("#hideaffcb").addEventListener("change", e => {
-    HIDE_AFFECTED = e.target.checked; persistGrid(); renderGrid();
+  $("#unusedcb").addEventListener("change", async e => {
+    SHOW_UNUSED = e.target.checked; persistGrid();
+    if(SHOW_UNUSED && ALLGLYPHS === null) await fetchAllGlyphs();
+    renderGrid();
   });
   const applyFilter = debounce(() => renderGrid(), 120);
   $("#glyphq").addEventListener("input", e => { GLYPH_FILTER = e.target.value.trim(); applyFilter(); });
 }
 
-// reflect GRID_TAB in the tab buttons + show the hide-affected control only on "all"
+// reflect GRID_TAB in the tab buttons + show the "show unused" control only on "anchored"
 function syncGridChrome(){
   document.querySelectorAll("#gridtabs .tab").forEach(b => b.classList.toggle("sel", b.dataset.tab === GRID_TAB));
-  $("#hideaff").hidden = GRID_TAB !== "all";
+  $("#unusedwrap").hidden = GRID_TAB !== "anchored";
 }
 
 async function selectTab(tab){
   if(tab === GRID_TAB) return;
   GRID_TAB = tab; persistGrid(); syncGridChrome();
-  if(tab === "all" && ALLGLYPHS === null) await fetchAllGlyphs();
+  if((tab === "all" || (tab === "anchored" && SHOW_UNUSED)) && ALLGLYPHS === null) await fetchAllGlyphs();
   renderGrid();
   // The selection may not exist in the new tab (a glyph name has no composite,
   // or vice-versa) — refresh it and the inspector so the view isn't stale.
@@ -531,15 +536,13 @@ function sortedGlyphs(){
   return Object.values(GLYPHS).sort(_bySort);
 }
 
-// The glyphs to show for the active tab. "all" overlays computed anchors onto the
-// full geometry (affected glyphs keep their anchors/overlays); hide-affected drops
-// the ones already in the affected set.
+// The glyphs to show for the active tab. "anchored" lists the glyphs some rule
+// placed an anchor on; with "show unused" (or the "all" tab) the whole font is
+// shown, affected glyphs keeping their anchors/overlays and the rest drawn dimmed.
 function glyphList(){
-  if(GRID_TAB === "affected") return sortedGlyphs();
   if(GRID_TAB === "composites") return compositeList();
-  let all = (ALLGLYPHS || []).map(g => GLYPHS[g.name] || {...g, anchors: []});
-  if(HIDE_AFFECTED) all = all.filter(g => !GLYPHS[g.name]);
-  return all.sort(_bySort);
+  if(GRID_TAB === "anchored" && !SHOW_UNUSED) return sortedGlyphs();
+  return (ALLGLYPHS || []).map(g => GLYPHS[g.name] || {...g, anchors: []}).sort(_bySort);
 }
 
 function compositeList(){
@@ -576,14 +579,15 @@ function ensureObserver(){
 }
 
 function setGridCount(shown, total, filtered){
-  const label = GRID_TAB === "affected" ? "affected"
-              : GRID_TAB === "composites" ? "composites"
-              : (HIDE_AFFECTED ? "unaffected" : "all");
+  const label = GRID_TAB === "composites" ? "composites"
+              : GRID_TAB === "all" ? "all"
+              : (SHOW_UNUSED ? "anchored + unused" : "anchored");
   $("#count").textContent = `${label} · ` + (filtered ? `${shown}/${total}` : total);
 }
 
 function renderGrid(){
-  if(GRID_TAB === "all" && ALLGLYPHS === null){ fetchAllGlyphs().then(renderGrid); return; }
+  const needsAll = GRID_TAB === "all" || (GRID_TAB === "anchored" && SHOW_UNUSED);
+  if(needsAll && ALLGLYPHS === null){ fetchAllGlyphs().then(renderGrid); return; }
   const grid = $("#grid"); grid.innerHTML="";
   const obs = ensureObserver(); obs.disconnect();     // stop watching the old cards
   const all = glyphList();
@@ -592,7 +596,9 @@ function renderGrid(){
   setGridCount(shown.length, all.length, !!f);
   const isComp = GRID_TAB === "composites";
   for(const g of shown){
-    const card = document.createElement("div"); card.className = "thumb" + (g.name===SELECTED?" sel":"");
+    // on "anchored + unused", glyphs no rule touched are shown dimmed
+    const dim = GRID_TAB === "anchored" && !GLYPHS[g.name];
+    const card = document.createElement("div"); card.className = "thumb" + (g.name===SELECTED?" sel":"") + (dim?" unused":"");
     card._glyph = g; card._composite = isComp;
     const holder = document.createElement("div"); holder.className = "holder ph"; card.appendChild(holder);
     const capRight = isComp
