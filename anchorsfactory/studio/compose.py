@@ -18,6 +18,7 @@ import contextlib
 import io
 import logging
 import re
+import unicodedata
 
 from fontTools.misc.transform import Transform
 from fontTools.pens.recordingPen import DecomposingRecordingPen
@@ -179,6 +180,23 @@ def _glyph_path(work, gname: str) -> str:
         return ""
 
 
+def _uncovered(font, built) -> list:
+    """Precomposed glyphs the font *has* but that no construction builds — a
+    coverage gap. A glyph counts if its codepoint has a **canonical** Unicode
+    decomposition (i.e. it's a precomposed accented/composite character) and its
+    name isn't among the built composites."""
+    out = []
+    for g in font:
+        if g.name in built:
+            continue
+        for u in (getattr(g, "unicodes", None) or ()):
+            d = unicodedata.decomposition(chr(u))
+            if d and not d.startswith("<"):        # canonical (pre)composition, not <compat>
+                out.append(g.name)
+                break
+    return out
+
+
 def build_composites(font, layers, gc_text: str) -> dict:
     """Assemble the composites *gc_text* describes from the anchors *layers* place.
 
@@ -186,12 +204,12 @@ def build_composites(font, layers, gc_text: str) -> dict:
     ``{ok, problems, composites: {name: payload}}``; on an invalid rule document
     it returns ``ok=False`` with the document problems and no composites."""
     if not gc_text or not gc_text.strip():
-        return {"ok": True, "problems": [], "composites": {}}
+        return {"ok": True, "problems": [], "composites": {}, "uncovered": _uncovered(font, set())}
 
     doc = resolve_stack(layers)
     problems = validate_document(doc)
     if problems:
-        return {"ok": False, "problems": problems, "composites": {}}
+        return {"ok": False, "problems": problems, "composites": {}, "uncovered": []}
 
     # Apply the computed anchors onto a throwaway copy so GlyphConstruction can
     # read them; the shared font stays untouched.
@@ -215,4 +233,5 @@ def build_composites(font, layers, gc_text: str) -> dict:
             if payload is not None:
                 composites[payload["name"]] = payload
 
-    return {"ok": True, "problems": [], "composites": composites}
+    return {"ok": True, "problems": [], "composites": composites,
+            "uncovered": _uncovered(font, set(composites))}

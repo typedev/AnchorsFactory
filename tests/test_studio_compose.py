@@ -45,8 +45,16 @@ def test_missing_component_does_not_crash_batch():
 
 
 def test_empty_gc_yields_no_composites():
-    assert build_composites(build_demo_font(), _layers(), "   ") == {
-        "ok": True, "problems": [], "composites": {}}
+    r = build_composites(build_demo_font(), _layers(), "   ")
+    assert r["ok"] and r["problems"] == [] and r["composites"] == {}
+
+
+def test_reports_uncovered_precomposed_glyphs():
+    # a precomposed glyph the font has but no construction builds is "uncovered"
+    r = build_composites(build_demo_font(), _layers(), "xx = a + acute@top")
+    assert "aacute" in r["uncovered"]                 # U+00E1, not built as "xx"
+    r2 = build_composites(build_demo_font(), _layers(), "aacute = a + acute@top")
+    assert "aacute" not in r2["uncovered"]            # now built → covered
 
 
 def test_shared_font_is_not_mutated():

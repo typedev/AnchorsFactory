@@ -9,6 +9,7 @@ let SHOW_UNUSED = false;               // "anchored" tab: also reveal (dimmed) g
 let ALLGLYPHS = null;                  // [{name,order,advance,bounds,path}] for the "all" tab (lazy)
 let ALLMAP = {};                       // name -> all-glyph geometry entry
 let COMPOSITES = {};                   // name -> GlyphConstruction-assembled composite (for the "composites" tab)
+let UNCOVERED = [];                    // precomposed glyph names the constructions don't build (composites "show uncovered")
 let anchorLayers = [];                 // [{name, host, ed}] bottom→top; [0] is the "default" layer
 let activeLayer = 0;                   // which anchor layer the tab strip is editing
 let gcEd = null, activeEd = null;
@@ -178,16 +179,17 @@ function setupGrid(){
   $("#glyphq").addEventListener("input", e => { GLYPH_FILTER = e.target.value.trim(); applyFilter(); });
 }
 
-// reflect GRID_TAB in the tab buttons + show the "show unused" control only on "anchored"
+// reflect GRID_TAB in the tab buttons + show the coverage reveal on anchored/composites
 function syncGridChrome(){
   document.querySelectorAll("#gridtabs .tab").forEach(b => b.classList.toggle("sel", b.dataset.tab === GRID_TAB));
-  $("#unusedwrap").hidden = GRID_TAB !== "anchored";
+  $("#unusedwrap").hidden = !(GRID_TAB === "anchored" || GRID_TAB === "composites");
+  $("#unusedcb").nextSibling.textContent = GRID_TAB === "composites" ? " show uncovered" : " show unused";
 }
 
 async function selectTab(tab){
   if(tab === GRID_TAB) return;
   GRID_TAB = tab; persistGrid(); syncGridChrome();
-  if((tab === "all" || (tab === "anchored" && SHOW_UNUSED)) && ALLGLYPHS === null) await fetchAllGlyphs();
+  if((tab === "all" || ((tab === "anchored" || tab === "composites") && SHOW_UNUSED)) && ALLGLYPHS === null) await fetchAllGlyphs();
   renderGrid();
   // The selection may not exist in the new tab (a glyph name has no composite,
   // or vice-versa) — refresh it and the inspector so the view isn't stale.
@@ -561,10 +563,12 @@ async function compute(){
   if(VIEW.ok){
     GLYPHS = VIEW.glyphs;
     COMPOSITES = VIEW.composites || {};
+    UNCOVERED = VIEW.uncovered || [];
     stage.classList.remove("stale");
     renderGrid();
     if(GRID_TAB === "composites"){
-      if(!COMPOSITES[SELECTED]) SELECTED = (compositeList()[0] || {}).name || null;
+      if(!COMPOSITES[SELECTED] && !(SHOW_UNUSED && UNCOVERED.includes(SELECTED)))
+        SELECTED = (compositeList()[0] || {}).name || null;
     } else if(!glyphData(SELECTED)){
       SELECTED = (sortedGlyphs()[0] || {}).name || null;
     }
@@ -626,7 +630,12 @@ function sortedGlyphs(){
 // placed an anchor on; with "show unused" (or the "all" tab) the whole font is
 // shown, affected glyphs keeping their anchors/overlays and the rest drawn dimmed.
 function glyphList(){
-  if(GRID_TAB === "composites") return compositeList();
+  if(GRID_TAB === "composites"){
+    if(!SHOW_UNUSED) return compositeList();
+    // reveal precomposed glyphs no construction builds (from the full-font geometry)
+    const gap = UNCOVERED.map(n => ALLMAP[n]).filter(Boolean).map(g => ({...g, anchors: [], uncovered: true}));
+    return compositeList().concat(gap.sort(_bySort));
+  }
   if(GRID_TAB === "anchored" && !SHOW_UNUSED) return sortedGlyphs();
   return (ALLGLYPHS || []).map(g => GLYPHS[g.name] || {...g, anchors: []}).sort(_bySort);
 }
@@ -665,14 +674,14 @@ function ensureObserver(){
 }
 
 function setGridCount(shown, total, filtered){
-  const label = GRID_TAB === "composites" ? "composites"
+  const label = GRID_TAB === "composites" ? (SHOW_UNUSED ? "composites + uncovered" : "composites")
               : GRID_TAB === "all" ? "all"
               : (SHOW_UNUSED ? "anchored + unused" : "anchored");
   $("#count").textContent = `${label} · ` + (filtered ? `${shown}/${total}` : total);
 }
 
 function renderGrid(){
-  const needsAll = GRID_TAB === "all" || (GRID_TAB === "anchored" && SHOW_UNUSED);
+  const needsAll = GRID_TAB === "all" || ((GRID_TAB === "anchored" || GRID_TAB === "composites") && SHOW_UNUSED);
   if(needsAll && ALLGLYPHS === null){ fetchAllGlyphs().then(renderGrid); return; }
   const grid = $("#grid"); grid.innerHTML="";
   const obs = ensureObserver(); obs.disconnect();     // stop watching the old cards
@@ -680,18 +689,20 @@ function renderGrid(){
   const f = GLYPH_FILTER.toLowerCase();
   const shown = f ? all.filter(g => g.name.toLowerCase().includes(f)) : all;
   setGridCount(shown.length, all.length, !!f);
-  const isComp = GRID_TAB === "composites";
   for(const g of shown){
-    // on "anchored + unused", glyphs no rule touched are shown dimmed
-    const dim = GRID_TAB === "anchored" && !GLYPHS[g.name];
+    const isComp = !!g.components;                     // a built composite (vs an uncovered/plain glyph)
+    // dimmed: "anchored + unused" untouched glyphs, or "composites + uncovered" gaps
+    const dim = (GRID_TAB === "anchored" && !GLYPHS[g.name]) || g.uncovered;
     const card = document.createElement("div"); card.className = "thumb" + (g.name===SELECTED?" sel":"") + (dim?" unused":"");
     card._glyph = g; card._composite = isComp;
     const holder = document.createElement("div"); holder.className = "holder ph"; card.appendChild(holder);
-    const capRight = isComp
-      ? ((g.problems && g.problems.length)
-          ? `<span class="warn" title="${escapeHtml(g.problems.join('; '))}">⚠</span>`
-          : `<span>${g.components.length}</span>`)
-      : `<span>${g.anchors.length}</span>`;
+    const capRight = g.uncovered
+      ? `<span title="no construction builds this">—</span>`
+      : isComp
+        ? ((g.problems && g.problems.length)
+            ? `<span class="warn" title="${escapeHtml(g.problems.join('; '))}">⚠</span>`
+            : `<span>${g.components.length}</span>`)
+        : `<span>${g.anchors.length}</span>`;
     card.insertAdjacentHTML("beforeend", `<div class="cap"><b>${escapeHtml(g.name)}</b>${capRight}</div>`);
     card.addEventListener("click", ()=>{ SELECTED=g.name; HL_ANCHOR=null; renderGrid(); renderInspector(); });
     grid.appendChild(card);
@@ -865,7 +876,17 @@ function drawComposite(c, {small=false, canvasEl=null}={}){
 function renderCompositeInspector(canvas, read){
   const c = SELECTED && COMPOSITES[SELECTED];
   clearCanvas(canvas);
-  if(!c){ canvas.insertAdjacentHTML("beforeend", '<div class="empty">no composite selected</div>'); read.innerHTML=""; return; }
+  if(!c){
+    const g = SELECTED && glyphData(SELECTED);        // an "uncovered" precomposed glyph
+    if(g){
+      canvas.appendChild(drawGlyph(g, {small:false, canvasEl:canvas}));
+      read.innerHTML = `<h3>${escapeHtml(g.name)}</h3><div class="sub">uncovered · no construction builds this</div>`;
+    } else {
+      canvas.insertAdjacentHTML("beforeend", '<div class="empty">no composite selected</div>');
+      read.innerHTML = "";
+    }
+    return;
+  }
   canvas.appendChild(drawComposite(c,{small:false, canvasEl:canvas}));
   let html = `<h3>${escapeHtml(c.name)}</h3><div class="sub">adv ${Math.round(c.advance)} · `+
     `${c.components.length} component${c.components.length!==1?"s":""}</div>`;

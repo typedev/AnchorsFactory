@@ -253,6 +253,7 @@ class _Handler(BaseHTTPRequestHandler):
             if view.get("ok") and isinstance(rules, list) and gc_text.strip():
                 comp = build_composites(self.studio.font, rules, gc_text)
                 view["composites"] = comp["composites"]
+                view["uncovered"] = comp.get("uncovered", [])
                 if comp["problems"]:
                     view["problems"] = view.get("problems", []) + comp["problems"]
         # Autosave the base (bottom) layer only, and only when the rules are
