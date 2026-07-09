@@ -10,6 +10,8 @@ let ALLGLYPHS = null;                  // [{name,order,advance,bounds,path}] for
 let ALLMAP = {};                       // name -> all-glyph geometry entry
 let COMPOSITES = {};                   // name -> GlyphConstruction-assembled composite (for the "composites" tab)
 let baseEd = null, customEd = null, gcEd = null, activeEd = null, customOpen = false;
+let RENDER_MODE = "fill";              // inspector outline style: "fill" | "outline" (grid is always filled)
+let ZOOM = 1;                          // inspector preview zoom (grid thumbnails ignore it)
 const lastPos = {};                          // glyph -> {anchor -> {x,y}} for tweening
 
 const $ = s => document.querySelector(s);
@@ -31,6 +33,7 @@ async function boot(){
   setupFind();
   setupFontDrop();
   setupSplitters();
+  setupView();
   compute();
 }
 
@@ -612,10 +615,78 @@ function extent(g){
   return {x0,x1,y0,y1};
 }
 
-function drawGlyph(g, {small=false}={}){
-  const pad = small?60:110;
-  const ex = extent(g);
-  const x0=ex.x0-pad, W=(ex.x1-ex.x0)+2*pad, minY=-(ex.y1+pad), H=(ex.y1-ex.y0)+2*pad;
+// Horizontal ink centre of a glyph/composite (falls back to the advance midpoint).
+function inkMidX(g){
+  if(g.bounds) return (g.bounds[0]+g.bounds[2])/2;
+  return (g.advance || META.unitsPerEm/2)/2;
+}
+
+// A *fixed* viewBox for the inspector: the vertical window is metric-based
+// (descender→ascender + padding) and identical for every glyph, so the baseline
+// and scale never jump between selections; only the horizontal centre follows the
+// glyph. Aspect-matched to the canvas so `meet` maps 1:1 (no letterbox rescaling),
+// and divided by ZOOM around the centre.
+function stableViewBox(midX, canvasEl){
+  const m = META.metrics;
+  const asc = (m.ascender != null ? m.ascender : Math.round(META.unitsPerEm*0.8));
+  const desc = (m.descender != null ? m.descender : -Math.round(META.unitsPerEm*0.2));
+  const padY = (asc - desc) * 0.16;
+  const yc = (asc + desc)/2, hy = (asc - desc) + 2*padY;
+  const cw = (canvasEl && canvasEl.clientWidth) || 600;
+  const ch = (canvasEl && canvasEl.clientHeight) || 600;
+  const wx = hy * (cw/ch);
+  const z = ZOOM || 1, H = hy/z, W = wx/z;
+  return {x0: midX - W/2, y0: -yc - H/2, W, H};   // screen coords (Y points down)
+}
+
+// Outline class for a path: filled ink, or a stroked outline (marks tinted).
+function inkClass(mark){ return RENDER_MODE === "outline" ? ("ink-outline" + (mark?" mark":"")) : "ink"; }
+
+// Replace the canvas artwork but keep the tools overlay (#ctools).
+function clearCanvas(canvas){
+  for(const n of [...canvas.children]) if(n.id !== "ctools") n.remove();
+}
+
+const persistView = () => { try { localStorage.setItem("af.view", JSON.stringify({mode: RENDER_MODE, zoom: ZOOM})); } catch(_){} };
+function syncView(){
+  const mb = $("#ctools [data-v='mode']"); if(mb) mb.textContent = RENDER_MODE;
+  const zl = $("#zoomlbl"); if(zl) zl.textContent = Math.round(ZOOM*100) + "%";
+}
+const scheduleInspector = debounce(() => renderInspector(), 40);
+
+function setupView(){
+  let saved=null; try { saved = JSON.parse(localStorage.getItem("af.view") || "null"); } catch(_){}
+  if(saved){ RENDER_MODE = saved.mode === "outline" ? "outline" : "fill"; ZOOM = +saved.zoom || 1; }
+  const setZoom = z => { ZOOM = Math.max(0.4, Math.min(6, z)); persistView(); syncView(); };
+  $("#ctools").addEventListener("click", e => {
+    const b = e.target.closest("[data-v]"); if(!b) return;
+    const v = b.dataset.v;
+    if(v === "mode") RENDER_MODE = RENDER_MODE === "fill" ? "outline" : "fill";
+    else if(v === "zoom-in") setZoom(ZOOM*1.25);
+    else if(v === "zoom-out") setZoom(ZOOM/1.25);
+    else if(v === "zoom-reset") ZOOM = 1;
+    persistView(); syncView(); renderInspector();
+  });
+  const cv = $("#canvas");
+  cv.addEventListener("wheel", e => {
+    if(!SELECTED) return;
+    e.preventDefault();
+    setZoom(ZOOM * (e.deltaY < 0 ? 1.1 : 1/1.1));
+    scheduleInspector();
+  }, {passive:false});
+  // The stable viewBox is aspect-matched to the canvas, so re-render on resize.
+  if(window.ResizeObserver) new ResizeObserver(debounce(() => renderInspector(), 120)).observe(cv);
+  syncView();
+}
+
+function drawGlyph(g, {small=false, canvasEl=null}={}){
+  let x0, minY, W, H;
+  if(small){                                   // thumbnail: fit this glyph, generous headroom
+    const pad = 150, ex = extent(g);
+    x0 = ex.x0-pad; W = (ex.x1-ex.x0)+2*pad; minY = -(ex.y1+pad); H = (ex.y1-ex.y0)+2*pad;
+  } else {                                      // inspector: fixed metric window (stable) + zoom
+    const vb = stableViewBox(inkMidX(g), canvasEl); x0=vb.x0; minY=vb.y0; W=vb.W; H=vb.H;
+  }
   const svg = el("svg", {viewBox:`${x0} ${minY} ${W} ${H}`, preserveAspectRatio:"xMidYMid meet"});
   if(!small){
     const order=[["descender","descender"],["baseline","baseline"],["xHeight","x-height"],["capHeight","cap-height"],["ascender","ascender"]];
@@ -625,7 +696,7 @@ function drawGlyph(g, {small=false}={}){
     if(g.bounds){ const [bx0,by0,bx1,by1]=g.bounds; svg.appendChild(el("rect",{class:"bbox", x:bx0, y:-by1, width:bx1-bx0, height:by1-by0})); }
   }
   const flip = el("g",{transform:"matrix(1 0 0 -1 0 0)"});
-  flip.appendChild(el("path",{class:"ink", d:g.path})); svg.appendChild(flip);
+  flip.appendChild(el("path",{class: small ? "ink" : inkClass(false), d:g.path})); svg.appendChild(flip);
   if(!small){
     for(const a of g.anchors){
       if(a.x_sample){ const h=a.x_sample.height;
@@ -659,12 +730,17 @@ function drawGlyph(g, {small=false}={}){
 }
 
 // A GlyphConstruction-assembled composite: each component outline drawn under its
-// own transform (base solid, marks tinted), plus a ring at each anchor-join — the
-// point where a mark's `_anchor` snapped onto the base's `anchor`.
-function drawComposite(c, {small=false}={}){
-  const pad = small?60:110;
-  const ex = extent({advance:c.advance||0, bounds:c.bounds, anchors:[]});
-  const x0=ex.x0-pad, W=(ex.x1-ex.x0)+2*pad, minY=-(ex.y1+pad), H=(ex.y1-ex.y0)+2*pad;
+// own transform, plus a ring at each anchor-join (where a mark's `_anchor` snapped
+// onto the base's `anchor`). Grid thumbnails are always filled; the inspector
+// follows the fill/outline mode (in outline, marks are tinted).
+function drawComposite(c, {small=false, canvasEl=null}={}){
+  let x0, minY, W, H;
+  if(small){
+    const pad = 150, ex = extent({advance:c.advance||0, bounds:c.bounds, anchors:[]});
+    x0 = ex.x0-pad; W = (ex.x1-ex.x0)+2*pad; minY = -(ex.y1+pad); H = (ex.y1-ex.y0)+2*pad;
+  } else {
+    const vb = stableViewBox(inkMidX({bounds:c.bounds, advance:c.advance}), canvasEl); x0=vb.x0; minY=vb.y0; W=vb.W; H=vb.H;
+  }
   const svg = el("svg", {viewBox:`${x0} ${minY} ${W} ${H}`, preserveAspectRatio:"xMidYMid meet"});
   if(!small){
     const order=[["descender","descender"],["baseline","baseline"],["xHeight","x-height"],["capHeight","cap-height"],["ascender","ascender"]];
@@ -675,7 +751,7 @@ function drawComposite(c, {small=false}={}){
   const flip = el("g",{transform:"matrix(1 0 0 -1 0 0)"});
   (c.components||[]).forEach((comp, i) => {
     const grp = el("g",{transform:`matrix(${comp.transform.join(" ")})`});
-    grp.appendChild(el("path",{class: i===0 ? "ink" : "comp-mark", d: comp.path}));
+    grp.appendChild(el("path",{class: small ? "ink" : inkClass(i>0), d: comp.path}));
     flip.appendChild(grp);
   });
   svg.appendChild(flip);
@@ -693,8 +769,9 @@ function drawComposite(c, {small=false}={}){
 
 function renderCompositeInspector(canvas, read){
   const c = SELECTED && COMPOSITES[SELECTED];
-  if(!c){ canvas.innerHTML='<div class="empty">no composite selected</div>'; read.innerHTML=""; return; }
-  canvas.innerHTML=""; canvas.appendChild(drawComposite(c,{small:false}));
+  clearCanvas(canvas);
+  if(!c){ canvas.insertAdjacentHTML("beforeend", '<div class="empty">no composite selected</div>'); read.innerHTML=""; return; }
+  canvas.appendChild(drawComposite(c,{small:false, canvasEl:canvas}));
   let html = `<h3>${escapeHtml(c.name)}</h3><div class="sub">adv ${Math.round(c.advance)} · `+
     `${c.components.length} component${c.components.length!==1?"s":""}</div>`;
   if(c.problems && c.problems.length)
@@ -710,8 +787,9 @@ function renderInspector(){
   const canvas=$("#canvas"), read=$("#readout");
   if(GRID_TAB === "composites"){ renderCompositeInspector(canvas, read); return; }
   const g = SELECTED && glyphData(SELECTED);
-  if(!g){ canvas.innerHTML='<div class="empty">no glyph selected</div>'; read.innerHTML=""; return; }
-  canvas.innerHTML=""; canvas.appendChild(drawGlyph(g,{small:false}));
+  clearCanvas(canvas);
+  if(!g){ canvas.insertAdjacentHTML("beforeend", '<div class="empty">no glyph selected</div>'); read.innerHTML=""; return; }
+  canvas.appendChild(drawGlyph(g,{small:false, canvasEl:canvas}));
   read.innerHTML=`<h3>${escapeHtml(g.name)}</h3><div class="sub">adv ${Math.round(g.advance)} · `+
     (g.bounds?`bbox ${g.bounds.map(Math.round).join(" ")}`:"no outline")+`</div>`;
   for(const a of g.anchors){

@@ -160,9 +160,9 @@ button.icon{padding:5px 8px;line-height:1;font-size:13px}
   background:var(--panel2);cursor:pointer;transition:border-color .15s;
 }
 .thumb:hover{border-color:var(--muted)}
-.thumb .holder{min-height:64px}          /* reserve height before the lazy SVG is drawn */
+.thumb .holder{min-height:82px}          /* reserve height before the lazy SVG is drawn */
 .thumb.sel{border-color:var(--anchor);box-shadow:0 0 0 1px color-mix(in srgb,var(--anchor) 45%,transparent)}
-.thumb svg{display:block;width:100%;height:64px;background:
+.thumb svg{display:block;width:100%;height:82px;background:
   linear-gradient(var(--line) 1px,transparent 1px) 0 0/100% 16px,
   linear-gradient(90deg,var(--line) 1px,transparent 1px) 0 0/16px 100%,var(--canvas)}
 .thumb .cap{font-family:var(--mono);font-size:10.5px;padding:3px 6px;color:var(--muted);display:flex;justify-content:space-between}
@@ -176,6 +176,13 @@ button.icon{padding:5px 8px;line-height:1;font-size:13px}
     linear-gradient(90deg,var(--line) 1px,transparent 1px) 0 0/40px 100%,var(--canvas);
 }
 .canvas svg{position:absolute;inset:0;width:100%;height:100%}
+/* fill/outline + zoom controls, overlaid on the preview */
+.ctools{position:absolute;top:10px;left:10px;z-index:6;display:flex;align-items:center;gap:4px;
+  padding:4px;border:1px solid var(--line);border-radius:8px;background:color-mix(in srgb,var(--panel) 88%,transparent)}
+.ctools button{padding:3px 8px;font-size:11px;line-height:1}
+.ctools button[data-v="mode"]{min-width:52px;text-transform:uppercase;letter-spacing:.05em;color:var(--text)}
+.ctools .sep{width:1px;height:16px;background:var(--line);margin:0 2px}
+.ctools #zoomlbl{font-family:var(--mono);font-size:11px;color:var(--muted);min-width:40px;text-align:center}
 .readout{border-left:1px solid var(--line);background:var(--panel);overflow:auto;padding:14px;min-width:0}
 .readout h3{margin:0 0 4px;font-size:12px;font-weight:600;color:var(--ink);font-family:var(--mono)}
 .readout .sub{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:14px}
@@ -212,6 +219,8 @@ button.icon{padding:5px 8px;line-height:1;font-size:13px}
 .metric-lbl{fill:var(--metric);font-family:var(--mono);font-size:11px}
 .bbox{fill:none;stroke:var(--metric);stroke-width:1;stroke-dasharray:4 4;opacity:.5;vector-effect:non-scaling-stroke}
 .ink{fill:var(--ink);fill-rule:nonzero}   /* font outlines: overlaps fill solid, counters cut by winding */
+.ink-outline{fill:none;stroke:var(--ink);stroke-width:1.3;vector-effect:non-scaling-stroke}   /* outline mode */
+.ink-outline.mark{stroke:var(--anchor)}   /* composite marks tinted in outline mode */
 .scan{stroke:var(--scan);stroke-width:1;stroke-dasharray:5 4;opacity:.85;vector-effect:non-scaling-stroke}
 .stem{stroke:var(--stem);stroke-width:3;stroke-linecap:round;vector-effect:non-scaling-stroke}
 .cross{fill:var(--scan)}
