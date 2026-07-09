@@ -81,20 +81,16 @@
       <div class="glyphgrid" id="grid"></div>
     </div>
     <div class="split row" data-t="gridh" title="drag to resize · double-click to reset"></div>
-    <div class="inspector">
-      <div class="canvas" id="canvas">
-        <div class="ctools" id="ctools">
-          <button data-v="mode" class="ghost" title="fill / outline">fill</button>
-          <span class="sep"></span>
-          <button data-v="zoom-out" class="ghost icon" title="zoom out (scroll)">−</button>
-          <span id="zoomlbl" title="zoom (scroll to change)">100%</span>
-          <button data-v="zoom-in" class="ghost icon" title="zoom in (scroll)">+</button>
-          <button data-v="zoom-reset" class="ghost icon" title="reset zoom">⟲</button>
-        </div>
-        <div class="empty">select a glyph</div>
+    <div class="canvas" id="canvas">
+      <div class="ctools" id="ctools">
+        <button data-v="mode" class="ghost" title="fill / outline">fill</button>
+        <span class="sep"></span>
+        <button data-v="zoom-out" class="ghost icon" title="zoom out (scroll)">−</button>
+        <span id="zoomlbl" title="zoom (scroll to change)">100%</span>
+        <button data-v="zoom-in" class="ghost icon" title="zoom in (scroll)">+</button>
+        <button data-v="zoom-reset" class="ghost icon" title="reset zoom">⟲</button>
       </div>
-      <div class="split col" data-t="row" title="drag to resize · double-click to reset"></div>
-      <aside class="readout" id="readout"></aside>
+      <div class="empty">select a glyph</div>
     </div>
     <div class="legend">
       <span><i class="swatch" style="background:var(--anchor)"></i>anchor</span>
@@ -102,6 +98,19 @@
       <span><i class="swatch" style="background:var(--stem)"></i>ink stem</span>
       <span><i class="swatch" style="background:var(--metric)"></i>metric / bbox</span>
     </div>
+  </section>
+  <div class="split col" data-t="sidew" title="drag to resize · double-click to reset"></div>
+  <section class="sidebar">
+    <section class="fonts">
+      <div class="pane-head">
+        <span class="ln-name">fonts</span>
+        <div class="spacer" style="flex:1"></div>
+        <button id="addfont" class="ghost mini-btn" title="load another .ufoz/.zip (or drop it) — added, not replaced">+ load</button>
+      </div>
+      <div class="fontcards" id="fontcards"></div>
+    </section>
+    <div class="split row" data-t="fonth" title="drag to resize · double-click to reset"></div>
+    <aside class="readout" id="readout"></aside>
   </section>
 </main>
 <script src="/static/app.js"></script>

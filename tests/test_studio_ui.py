@@ -136,3 +136,10 @@ def test_selecting_unaffected_glyph_inspects_it(page):
     assert page.locator("#readout h3").inner_text() == "O"
     assert page.locator("#readout .anchor-card").count() == 0   # no anchors, still inspectable
     assert page.locator("#canvas svg").count() == 1            # outline drawn
+
+
+def test_sidebar_lists_fonts_above_the_readout(page):
+    # The right column carries the loaded-font card(s) over the anchor readout.
+    assert page.locator("#fontcards .fontcard").count() >= 1
+    assert page.locator(".sidebar #fontcards").count() == 1
+    assert page.locator(".sidebar #readout").count() == 1

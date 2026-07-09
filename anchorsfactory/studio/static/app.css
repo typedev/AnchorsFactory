@@ -47,7 +47,7 @@ header .spacer{flex:1}
 .pill.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent)}
 .pill.bad{color:var(--err);border-color:color-mix(in srgb,var(--err) 45%,transparent)}
 /* ---- main split (resizable) ---- */
-main{display:grid;grid-template-columns:var(--edw,380px) 6px minmax(0,1fr);min-height:0}
+main{display:grid;grid-template-columns:var(--edw,380px) 6px minmax(0,1fr) 6px var(--sidew,300px);min-height:0}
 /* ---- splitters ---- */
 .split{background:var(--line);position:relative;z-index:5;touch-action:none}
 .split::after{content:"";position:absolute;inset:-3px}   /* wider hit area */
@@ -185,8 +185,7 @@ button.icon{padding:5px 8px;line-height:1;font-size:13px}
   linear-gradient(90deg,var(--line) 1px,transparent 1px) 0 0/16px 100%,var(--canvas)}
 .thumb .cap{font-family:var(--mono);font-size:10.5px;padding:3px 6px;color:var(--muted);display:flex;justify-content:space-between}
 .thumb .cap b{color:var(--text);font-weight:500}
-/* ---- inspector ---- */
-.inspector{display:grid;grid-template-columns:minmax(0,1fr) 6px var(--row,260px);min-height:0;min-width:0}
+/* ---- inspector (canvas is a direct stage row; readout lives in the sidebar) ---- */
 .canvas{
   position:relative;min-width:0;overflow:hidden;
   background:
@@ -201,7 +200,21 @@ button.icon{padding:5px 8px;line-height:1;font-size:13px}
 .ctools button[data-v="mode"]{min-width:52px;text-transform:uppercase;letter-spacing:.05em;color:var(--text)}
 .ctools .sep{width:1px;height:16px;background:var(--line);margin:0 2px}
 .ctools #zoomlbl{font-family:var(--mono);font-size:11px;color:var(--muted);min-width:40px;text-align:center}
-.readout{border-left:1px solid var(--line);background:var(--panel);overflow:auto;padding:14px;min-width:0}
+/* ---- right sidebar: loaded-font cards over the anchor/component readout ---- */
+.sidebar{display:grid;grid-template-rows:var(--fonth,220px) 6px minmax(0,1fr);min-height:0;
+  border-left:1px solid var(--line);background:var(--panel)}
+.fonts{display:flex;flex-direction:column;min-height:0;background:var(--panel)}
+.fontcards{flex:1;min-height:0;overflow:auto;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.fontcard{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--panel2);
+  cursor:pointer;display:flex;align-items:center;gap:8px;transition:border-color .12s,box-shadow .12s}
+.fontcard:hover{border-color:var(--muted)}
+.fontcard.sel{border-color:var(--anchor);box-shadow:0 0 0 1px color-mix(in srgb,var(--anchor) 45%,transparent)}
+.fontcard .fc-body{min-width:0;flex:1}
+.fontcard .fc-name{font-family:var(--mono);font-size:12px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fontcard .fc-meta{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px}
+.fontcard .fc-x{color:var(--muted);border:0;background:transparent;padding:2px 5px;font-size:12px;border-radius:5px}
+.fontcard .fc-x:hover{color:var(--err);background:color-mix(in srgb,var(--err) 12%,transparent)}
+.readout{background:var(--panel);overflow:auto;padding:14px;min-width:0}
 .readout h3{margin:0 0 4px;font-size:12px;font-weight:600;color:var(--ink);font-family:var(--mono)}
 .readout .sub{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:14px}
 .anchor-card{border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-bottom:9px;font-family:var(--mono);font-size:11.5px;cursor:pointer;transition:border-color .12s,box-shadow .12s}
@@ -261,15 +274,11 @@ button.icon{padding:5px 8px;line-height:1;font-size:13px}
 .comp-row .b{color:var(--ink)}
 .comp-row .j{color:var(--scan)}
 .thumb .cap .warn{color:var(--err)}
-/* ---- responsive: stack the editor over the stage on narrow windows ---- */
-@media (max-width:840px){
+/* ---- responsive: stack code / stage / sidebar on narrow windows ---- */
+@media (max-width:1000px){
   header{flex-wrap:wrap;gap:10px 14px}
-  main{grid-template-columns:minmax(0,1fr);grid-template-rows:var(--edh,42vh) minmax(0,1fr)}
-  main>.split.col[data-t="edw"]{display:none}
+  main{grid-template-columns:minmax(0,1fr);grid-template-rows:var(--edh,38vh) minmax(0,1fr) minmax(0,34vh)}
+  main>.split.col[data-t="edw"], main>.split.col[data-t="sidew"]{display:none}
   .editor{border-right:0;border-bottom:1px solid var(--line)}
-}
-@media (max-width:620px){
-  .inspector{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto}
-  .inspector>.split.col[data-t="row"]{display:none}
-  .readout{border-left:0;border-top:1px solid var(--line);max-height:38vh}
+  .sidebar{border-left:0;border-top:1px solid var(--line)}
 }

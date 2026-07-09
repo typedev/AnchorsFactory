@@ -60,7 +60,7 @@ def _base_layer_text(rules) -> str:
 
 
 def _font_state(font, name: str) -> dict:
-    """The font-dependent slice of the client state."""
+    """The font-dependent slice of the client state (the *active* font)."""
     return {
         "font": name,
         "unitsPerEm": float(getattr(font.info, "unitsPerEm", 1000) or 1000),
@@ -69,30 +69,78 @@ def _font_state(font, name: str) -> dict:
     }
 
 
-class Studio:
-    """Holds the opened font and the state a session starts from.
+def _font_card(font, name: str) -> dict:
+    """One entry of the loaded-font list (same as ``_font_state`` but keyed by
+    ``name`` instead of ``font``)."""
+    s = _font_state(font, name)
+    s["name"] = s.pop("font")
+    return s
 
-    ``lock`` serialises the shared font across the threaded server: a compute
-    reads it and a drop-upload swaps it, so both take the lock.
+
+class Studio:
+    """Holds the loaded fonts and the state a session starts from.
+
+    ``fonts`` is a list of ``{name, font, tmpdir, allglyphs}`` and ``active`` an
+    index into it; the *active* font drives compute and the grid. ``lock``
+    serialises the shared fonts across the threaded server (compute reads,
+    add/activate/remove mutate), so every access takes it. ``font`` is a property
+    onto the active entry so ``_compute``/``build_composites``/``all_glyphs`` need
+    no change.
     """
 
     def __init__(self, font, rules_text: str, font_name: str, save_path=None):
-        self.font = font
+        self.fonts = [{"name": font_name, "font": font, "tmpdir": None, "allglyphs": None}]
+        self.active = 0
         self.rules_text = rules_text
         self.lock = threading.Lock()
-        self._tmpdir = None                    # temp dir of an uploaded font, if any
-        self._allglyphs = None                 # cached all-glyph geometry (font-scoped)
         # When set (--save PATH), the base layer is written back here on every
         # valid compute, so edits survive across sessions and browsers.
         self.save_path = Path(save_path) if save_path else None
         self.state = {
             **_font_state(font, font_name),
+            "fonts": [_font_card(font, font_name)],
+            "active": 0,
             "presets": list_presets(),
             "presetTexts": {name: preset_text(name) for name in list_presets()},
             "rules": rules_text,
             "gc": _DEFAULT_GC,
             "save": str(self.save_path) if self.save_path else None,
         }
+
+    @property
+    def font(self):
+        return self.fonts[self.active]["font"]
+
+    def _sync_active(self):
+        """Refresh the active-font slice + the font list in ``state``."""
+        e = self.fonts[self.active]
+        self.state.update(_font_state(e["font"], e["name"]))
+        self.state["fonts"] = [_font_card(x["font"], x["name"]) for x in self.fonts]
+        self.state["active"] = self.active
+
+    def add_font(self, font, name: str, tmpdir=None):
+        """Append a font and make it active."""
+        self.fonts.append({"name": name, "font": font, "tmpdir": tmpdir, "allglyphs": None})
+        self.active = len(self.fonts) - 1
+        self._sync_active()
+
+    def activate(self, i: int):
+        if 0 <= i < len(self.fonts):
+            self.active = i
+            self._sync_active()
+
+    def remove_font(self, i: int):
+        """Drop a loaded font (never the last one), returning its tmpdir to clean
+        up outside the lock."""
+        if not (0 <= i < len(self.fonts)) or len(self.fonts) <= 1:
+            return None
+        entry = self.fonts.pop(i)
+        if self.active >= len(self.fonts):
+            self.active = len(self.fonts) - 1
+        elif self.active > i:
+            self.active -= 1
+        self._sync_active()
+        return entry.get("tmpdir")
 
     def autosave(self, base_text: str) -> None:
         """Persist the base-layer rules to ``save_path`` (a no-op if unset).
@@ -107,22 +155,13 @@ class Studio:
         except OSError as exc:
             log.warning("could not autosave rules to %s: %s", self.save_path, exc)
 
-    def set_font(self, font, name: str, tmpdir=None):
-        """Swap in a freshly loaded font, returning the previous temp dir (if any)
-        for the caller to clean up outside the lock."""
-        old = self._tmpdir
-        self.font = font
-        self._tmpdir = tmpdir
-        self._allglyphs = None                 # new font invalidates the geometry cache
-        self.state.update(_font_state(font, name))
-        return old
-
     def all_glyphs(self) -> list:
-        """All-glyph geometry, computed once per font and cached (caller holds the
-        lock)."""
-        if self._allglyphs is None:
-            self._allglyphs = all_glyph_geometry(self.font)
-        return self._allglyphs
+        """All-glyph geometry for the active font, computed once and cached on its
+        entry (caller holds the lock)."""
+        e = self.fonts[self.active]
+        if e["allglyphs"] is None:
+            e["allglyphs"] = all_glyph_geometry(e["font"])
+        return e["allglyphs"]
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -190,6 +229,10 @@ class _Handler(BaseHTTPRequestHandler):
             self._compute()
         elif self.path == "/api/font":
             self._load_font()
+        elif self.path == "/api/font/activate":
+            self._font_op(lambda body: self.studio.activate(int(body.get("index", 0))))
+        elif self.path == "/api/font/remove":
+            self._remove_font()
         else:
             self._send_json({"error": "not found"}, status=404)
 
@@ -219,8 +262,8 @@ class _Handler(BaseHTTPRequestHandler):
         self._send_json(view)
 
     def _load_font(self):
-        """Accept a dropped UFO (files reconstructed from the browser) and swap it
-        in as the active font."""
+        """Accept a dropped UFO (files reconstructed from the browser) and ADD it
+        as a new active font (previously loaded fonts are kept)."""
         try:
             payload = self._read_json()
             font, name, tmp = load_uploaded_font(payload.get("files", []),
@@ -234,10 +277,31 @@ class _Handler(BaseHTTPRequestHandler):
                             status=400)
             return
         with self.studio.lock:
-            old = self.studio.set_font(font, name, tmp)
-        if old:
-            shutil.rmtree(old, ignore_errors=True)
-        self._send_json({"ok": True, "state": _font_state(font, name)})
+            self.studio.add_font(font, name, tmp)
+        self._send_json({"ok": True, "state": self.studio.state})
+
+    def _font_op(self, op):
+        """Run a font-list mutation under the lock and return the fresh state."""
+        try:
+            body = self._read_json()
+        except (ValueError, AttributeError):
+            self._send_json({"ok": False, "error": "malformed request body"}, status=400)
+            return
+        with self.studio.lock:
+            op(body)
+        self._send_json({"ok": True, "state": self.studio.state})
+
+    def _remove_font(self):
+        try:
+            body = self._read_json()
+        except (ValueError, AttributeError):
+            self._send_json({"ok": False, "error": "malformed request body"}, status=400)
+            return
+        with self.studio.lock:
+            tmp = self.studio.remove_font(int(body.get("index", 0)))
+        if tmp:
+            shutil.rmtree(tmp, ignore_errors=True)
+        self._send_json({"ok": True, "state": self.studio.state})
 
 
 def serve(studio: Studio, host: str, port: int):
@@ -258,8 +322,9 @@ def build_parser() -> argparse.ArgumentParser:
         prog="anchorsfactory-studio",
         description="Visual debugger for anchor rules (opens a local web UI).",
     )
-    p.add_argument("ufo", nargs="?",
-                   help="a .ufo to debug; omitted → built-in demo font")
+    p.add_argument("ufo", nargs="*",
+                   help="one or more .ufo to debug (e.g. a Regular + Italic pair); "
+                        "omitted → built-in demo font")
     p.add_argument("-r", "--rules", default="default",
                    help="preset name or .anchors path to open with (default: 'default')")
     p.add_argument("--save", metavar="PATH",
@@ -280,12 +345,19 @@ def main(argv=None) -> int:
     rules_text = _seed_rules(args.rules)
     if args.ufo:
         from fontParts.world import OpenFont
-        font = OpenFont(args.ufo)
-        name = getattr(font.info, "familyName", None) or args.ufo
+        studio = None
+        for path in args.ufo:
+            font = OpenFont(path)
+            family = getattr(font.info, "familyName", None)
+            style = getattr(font.info, "styleName", None)
+            name = f"{family} {style}".strip() if (family and style) else (family or Path(path).stem)
+            if studio is None:
+                studio = Studio(font, rules_text, name, save_path=args.save)
+            else:
+                studio.add_font(font, name)
     else:
-        font = build_demo_font()
-        name = "demo"
-    serve(Studio(font, rules_text, name, save_path=args.save), args.host, args.port)
+        studio = Studio(build_demo_font(), rules_text, "demo", save_path=args.save)
+    serve(studio, args.host, args.port)
     return 0
 
 

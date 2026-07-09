@@ -315,3 +315,27 @@ def test_load_uploaded_font_rejects_junk():
 def test_load_uploaded_font_blocks_path_traversal(tmp_path):
     with pytest.raises(ValueError):
         load_uploaded_font([{"path": "../escape.txt", "data": ""}], "evil")
+
+
+def test_studio_holds_multiple_fonts():
+    """add/activate/remove keep the font list + active pointer (and the `font`
+    property) in sync, and never drop the last font."""
+    from anchorsfactory.presets import preset_text
+    from anchorsfactory.studio.server import Studio
+
+    f1, f2 = build_demo_font(), build_demo_font()
+    st = Studio(f1, preset_text("default"), "Regular")
+    assert [c["name"] for c in st.state["fonts"]] == ["Regular"]
+    assert st.font is f1 and st.state["active"] == 0
+
+    st.add_font(f2, "Italic")                       # append → becomes active
+    assert [c["name"] for c in st.state["fonts"]] == ["Regular", "Italic"]
+    assert st.state["active"] == 1 and st.font is f2 and st.state["font"] == "Italic"
+
+    st.activate(0)                                  # switch back
+    assert st.state["active"] == 0 and st.font is f1 and st.state["font"] == "Regular"
+
+    st.remove_font(1)
+    assert [c["name"] for c in st.state["fonts"]] == ["Regular"] and st.font is f1
+    assert st.remove_font(0) is None                # never drop the last font
+    assert len(st.fonts) == 1

@@ -27,6 +27,7 @@ const editorForLayer = i => (anchorLayers[i] ? anchorLayers[i].ed : null);
 async function boot(){
   META = await (await fetch("/api/state")).json();
   setFontMeta();
+  renderFontCards();
   const sel = $("#preset");
   for(const p of META.presets){ const o=document.createElement("option"); o.value=o.textContent=p; sel.appendChild(o); }
   setupEditors();
@@ -403,7 +404,8 @@ function setupSplitters(){
     consh: {sel:".editor",    axis:"y", sign:-1, min: 80, def:180, max:()=>$(".editor").clientHeight*0.6},
     outh:  {sel:".editor",    axis:"y", sign:-1, min: 44, def:150, max:()=>$(".editor").clientHeight*0.6},
     gridh: {sel:".stage",     axis:"y", sign: 1, min: 90, def:200, max:()=>$(".stage").clientHeight*0.72},
-    row:   {sel:".inspector", axis:"x", sign:-1, min:180, def:260, max:()=>460},
+    sidew: {sel:"main",       axis:"x", sign:-1, min:220, def:300, max:()=>innerWidth*0.42},
+    fonth: {sel:".sidebar",   axis:"y", sign: 1, min: 80, def:220, max:()=>$(".sidebar").clientHeight*0.7},
   };
   let saved = {}; try { saved = JSON.parse(localStorage.getItem("af.splits") || "{}"); } catch(_){}
   const targetOf = t => document.querySelector(defs[t].sel);
@@ -449,6 +451,7 @@ function setupFontDrop(){
     await sendFont(roots[0].name, collected);
   });
   $("#loadfont").addEventListener("click", () => $("#fontfile").click());
+  $("#addfont").addEventListener("click", () => $("#fontfile").click());
   $("#fontfile").addEventListener("change", async e => {
     const list=[...e.target.files]; if(!list.length) return;
     const collected=list.map(f => ({path: f.webkitRelativePath || f.name, file: f}));
@@ -479,11 +482,55 @@ async function sendFont(name, collected){
   catch(err){ j = {ok:false, error:String(err)}; }
   if(!j.ok){ status.className="pill bad"; status.textContent="font error";
     $("#problems").innerHTML = `<div class="row err"><span class="tag">font</span><span>${escapeHtml(j.error||"load failed")}</span></div>`; return; }
-  Object.assign(META, j.state); setFontMeta();
-  SELECTED = null; HL_ANCHOR = null; GLYPHS = {};    // a new font invalidates the frozen view
-  ALLGLYPHS = null; ALLMAP = {};                     // …and the all-glyphs geometry cache
+  Object.assign(META, j.state); setFontMeta(); renderFontCards();
+  SELECTED = null; HL_ANCHOR = null; GLYPHS = {};    // the new font becomes active
+  ALLGLYPHS = null; ALLMAP = {};                     // …its all-glyphs geometry is fresh
   for(const k in lastPos) delete lastPos[k];
   compute();
+}
+
+/* ===================================================================== *
+ *  Loaded fonts: cards in the sidebar; the active one drives grid+preview.
+ *  Switching keeps SELECTED, so the same glyph re-renders in the new master.
+ * ===================================================================== */
+function renderFontCards(){
+  const box = $("#fontcards"); if(!box) return;
+  const fonts = META.fonts || [{name: META.font, unitsPerEm: META.unitsPerEm, italicAngle: META.italicAngle}];
+  const active = META.active ?? 0;
+  box.innerHTML = "";
+  fonts.forEach((f, i) => {
+    const card = document.createElement("div");
+    card.className = "fontcard" + (i === active ? " sel" : "");
+    card.innerHTML =
+      `<div class="fc-body"><div class="fc-name">${escapeHtml(f.name)}</div>`+
+      `<div class="fc-meta">${Math.round(f.unitsPerEm)}upm · ital ${Math.round(f.italicAngle)}°</div></div>`+
+      (fonts.length > 1 ? `<button class="fc-x" title="remove this font">✕</button>` : "");
+    card.addEventListener("click", () => { if(i !== active) activateFont(i); });
+    const x = card.querySelector(".fc-x");
+    if(x) x.addEventListener("click", e => { e.stopPropagation(); removeFont(i); });
+    box.appendChild(card);
+  });
+}
+
+async function fontOp(url, index){
+  let j; try {
+    j = await (await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({index})})).json();
+  } catch(_){ j = {ok:false}; }
+  if(!j.ok || !j.state) return null;
+  Object.assign(META, j.state); setFontMeta(); renderFontCards();
+  ALLGLYPHS = null; ALLMAP = {};                     // the active font changed → fresh geometry
+  for(const k in lastPos) delete lastPos[k];
+  return j;
+}
+
+async function activateFont(i){
+  const status = $("#status"); status.className="pill"; status.textContent="switching font…";
+  if(await fontOp("/api/font/activate", i)) compute();   // keep SELECTED → same glyph, new master
+}
+
+async function removeFont(i){
+  if(await fontOp("/api/font/remove", i)){ if(!GLYPHS[SELECTED]){ SELECTED=null; HL_ANCHOR=null; } GLYPHS={}; compute(); }
 }
 
 function downloadText(text, filename){
