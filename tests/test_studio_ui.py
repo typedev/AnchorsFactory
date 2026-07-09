@@ -50,7 +50,7 @@ def page(studio_url):
         pg = browser.new_page(viewport={"width": 1400, "height": 900})
         pg.add_init_script("try{localStorage.clear()}catch(e){}")
         pg.goto(studio_url, wait_until="networkidle")
-        pg.wait_for_selector("#problems .row", timeout=8000)
+        pg.wait_for_selector(".thumb", timeout=8000)   # grid rendered → first compute done
         yield pg
         browser.close()
 
@@ -74,19 +74,18 @@ def test_invalid_rule_reports_in_output_without_500(page):
     assert "OUTPUT" in out.upper()                          # the panel has a header
 
 
-def test_output_panel_has_resizable_splitter(page):
-    # The Output panel exists with a working splitter (the missing-splitter gripe).
-    assert page.locator('.split[data-t="probh"]').count() == 1
-    before = page.eval_on_selector(
-        ".editor", "el => getComputedStyle(el).getPropertyValue('--probh')")
-    box = page.locator('.split[data-t="probh"]').bounding_box()
-    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
-    page.mouse.down()
-    page.mouse.move(box["x"] + box["width"] / 2, box["y"] - 60)   # drag up → taller
-    page.mouse.up()
-    after = page.eval_on_selector(
-        ".editor", "el => getComputedStyle(el).getPropertyValue('--probh')")
-    assert float(before[:-2]) < float(after[:-2])                 # panel grew
+def test_output_sleeps_when_clean_and_wakes_on_problems(page):
+    # Clean rules → the Output panel sleeps (collapsed, not "bad").
+    _set_rules(page, "H = top (box.center capHeight)")
+    assert "open" not in (page.get_attribute("#output", "class") or "")
+    # A broken rule → it auto-opens, reddens, and shows the problem.
+    ta = page.locator("#edBase textarea"); ta.click()
+    with page.expect_response(lambda r: "/api/compute" in r.url, timeout=8000):
+        ta.fill("H = @missing")
+    page.wait_for_timeout(300)
+    cls = page.get_attribute("#output", "class") or ""
+    assert "open" in cls and "bad" in cls
+    assert "undefined label @missing" in page.inner_text("#output")
 
 
 def _set_rules(page, text):

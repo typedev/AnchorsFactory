@@ -57,7 +57,7 @@ main{display:grid;grid-template-columns:var(--edw,380px) 6px minmax(0,1fr);min-h
 /* ---- editor pane: a stack of rule layers (custom over base) ---- */
 .editor{
   position:relative;display:grid;
-  grid-template-rows:var(--gch,104px) 6px minmax(60px,1fr) 6px var(--baseh,220px) 6px var(--probh,150px);
+  grid-template-rows:var(--gch,104px) 6px minmax(60px,1fr) 6px var(--baseh,220px) auto;
   min-height:0;background:var(--panel);border-right:1px solid var(--line);
 }
 .layer{display:flex;flex-direction:column;min-height:0;min-width:0}
@@ -70,7 +70,7 @@ main{display:grid;grid-template-columns:var(--edw,380px) 6px minmax(0,1fr);min-h
 .mini-btn{padding:3px 7px;font-size:11px}
 /* custom layer closed → base takes the whole column (panes keep their grid slots) */
 #addcustom{display:none}
-.editor.solo-base{grid-template-rows:var(--gch,104px) 6px 0 0 minmax(0,1fr) 6px var(--probh,150px)}
+.editor.solo-base{grid-template-rows:var(--gch,104px) 6px 0 0 minmax(0,1fr) auto}
 .editor.solo-base #lyCustom{overflow:hidden}
 .editor.solo-base .split[data-t="baseh"]{visibility:hidden;pointer-events:none}
 .editor.solo-base #addcustom{display:inline-block}
@@ -126,13 +126,22 @@ button.icon{padding:5px 8px;line-height:1;font-size:13px}
 .ac .item{padding:4px 10px;cursor:pointer;display:flex;justify-content:space-between;gap:14px;color:var(--text)}
 .ac .item .k{color:var(--muted);font-size:10px;align-self:center}
 .ac .item.sel{background:color-mix(in srgb,var(--anchor) 22%,transparent);color:var(--ink)}
-/* ---- output panel (problems / diagnostics) ---- */
-.output{display:flex;flex-direction:column;min-height:0;background:var(--panel)}
-.output-head{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--line);background:var(--panel)}
+/* ---- output panel (collapsible: sleeps when clean, wakes on problems) ---- */
+.output{display:flex;flex-direction:column;min-height:0;background:var(--panel);border-top:1px solid var(--line)}
+.output-bar{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--panel);cursor:pointer;user-select:none}
+.output-bar .out-dot{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
+.output-bar .out-chev{color:var(--muted);font-size:11px;transition:transform .15s}
+.output:not(.open) .out-chev{transform:rotate(-90deg)}
+.output:not(.open) .problems{display:none}
+.output.open .problems{border-top:1px solid var(--line)}
+.output.bad{background:color-mix(in srgb,var(--err) 8%,var(--panel))}
+.output.bad .output-bar{background:color-mix(in srgb,var(--err) 12%,var(--panel))}
+.output.bad .out-dot{background:var(--err)}
+.output.bad .ln-name{color:var(--err)}
 .out-count{font-family:var(--mono);font-size:9.5px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:1px 6px;min-width:14px;text-align:center}
 .out-count:empty{display:none}
 .out-count.bad{color:var(--err);border-color:color-mix(in srgb,var(--err) 45%,transparent)}
-.problems{flex:1;overflow:auto;font-family:var(--mono);font-size:11.5px;padding:0}
+.problems{max-height:180px;overflow:auto;font-family:var(--mono);font-size:11.5px;padding:0}
 .problems .row{padding:7px 12px;border-bottom:1px solid var(--line);display:flex;gap:8px}
 .problems .row.err{color:var(--err)}
 .problems .row.warn{color:var(--stem)}

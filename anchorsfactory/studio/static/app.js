@@ -34,6 +34,7 @@ async function boot(){
   setupFontDrop();
   setupSplitters();
   setupView();
+  $("#outbar").addEventListener("click", () => $("#output").classList.toggle("open"));
   compute();
 }
 
@@ -367,7 +368,6 @@ function setupSplitters(){
     edw:   {sel:"main",       axis:"x", sign: 1, min:280, def:400, max:()=>innerWidth*0.7},
     gch:   {sel:".editor",    axis:"y", sign: 1, min: 44, def:104, max:()=>$(".editor").clientHeight*0.5},
     baseh: {sel:".editor",    axis:"y", sign:-1, min: 80, def:220, max:()=>$(".editor").clientHeight*0.7},
-    probh: {sel:".editor",    axis:"y", sign:-1, min: 44, def:150, max:()=>$(".editor").clientHeight*0.6},
     gridh: {sel:".stage",     axis:"y", sign: 1, min: 90, def:200, max:()=>$(".stage").clientHeight*0.72},
     row:   {sel:".inspector", axis:"x", sign:-1, min:180, def:260, max:()=>460},
   };
@@ -517,6 +517,11 @@ function renderProblems(){
   const errs = probs.length + diags.filter(d=>d.severity==="error").length;
   const cnt = $("#outcount");
   if(cnt){ cnt.textContent = (probs.length+diags.length) || ""; cnt.classList.toggle("bad", errs>0); }
+  // Collapsible output: sleeps when clean, auto-wakes + reddens on real problems
+  // (mere notes keep it collapsed but bump the count badge).
+  const out = $("#output");
+  out.classList.toggle("bad", errs>0);
+  out.classList.toggle("open", errs>0);
   if(!probs.length && !diags.length){
     box.innerHTML = `<div class="row ok-row"><span class="tag">ok</span><span>no problems</span></div>`; return;
   }
