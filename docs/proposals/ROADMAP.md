@@ -14,7 +14,7 @@ lists its dependencies explicitly.
 | 1b | Component anchor inheritance (`!propagate`) | [rfc-propagate](rfc-propagate.md) | P1 | ✅ implemented |
 | 1c | Per-component frames (`compN.`) | [rfc-component-frames](rfc-component-frames.md) | P1 | ✅ implemented |
 | 1d | `@` arithmetic / edge insets | [rfc-edge-sampling](rfc-edge-sampling.md) | P2 | ✅ implemented |
-| 1e | Cursive preset (`entry`/`exit`) + nastaliq caveats in docs | — (docs + `rules/*.af`) | P2 | — |
+| 1e | Cursive preset (`entry`/`exit`) + nastaliq caveats in docs | — (docs + `rules/*.anchors`) | P2 | — |
 | 1f | Stem × ink-bottom idiom documentation (axis cycle guidance) | — (docs, studio hint) | P2 | — |
 | 1g | Script/Unicode-block selector `{script:…}` | — (needs a mini-RFC if picked up) | P3 | — |
 
@@ -44,7 +44,7 @@ stays per-glyph). Font sources are fetched by script into a gitignored cache;
 only curated SVGs are committed. Depends on: WS4 for the script cookbooks;
 nothing for the core chapters.
 
-### WS4 — Script starter presets → `rules/devanagari.af`, `rules/hebrew.af`, `rules/thai.af`
+### WS4 — Script starter presets → `rules/devanagari.anchors`, `rules/hebrew.anchors`, `rules/thai.anchors`
 
 Written in the *current* syntax (no dependency on WS1), numeric gaps exposed
 as `&variables` for per-font retuning via `!extends`. Each ships with a
@@ -56,7 +56,7 @@ and `!propagate`.
 
 | Idea | What it is | Why |
 |------|-----------|-----|
-| `anchorsfactory-learn` | Infer draft rules from an already-anchored font: the research battery run in reverse, emitting the best candidate + bias per anchor group as an `.af` skeleton | The single biggest adoption lever: every existing font becomes a starting ruleset; ~80 % of the code already exists as the research tooling |
+| `anchorsfactory-learn` | Infer draft rules from an already-anchored font: the research battery run in reverse, emitting the best candidate + bias per anchor group as an `.anchors` skeleton | The single biggest adoption lever: every existing font becomes a starting ruleset; ~80 % of the code already exists as the research tooling |
 | `--check` mode | Apply rules, diff against the font's existing anchors, exit non-zero over a drift threshold; machine-readable report | Turns AnchorsFactory into a CI guard for anchor regressions; formalizes the `dev/golden_diff.py` workflow |
 | Designspace awareness | Apply one family ruleset across all masters of a `.designspace`, with per-master `&var` override files; verify anchor sets are interpolation-compatible (same names everywhere) | The cross-master transfer test showed structure transfers while gaps drift — this is the productized version |
 | Feature-writer handoff docs | Document the full pipeline: AnchorsFactory anchors → fontmake/ufo2ft feature writers (mark/mkmk/abvm/blwm/curs) and GlyphConstruction | Users keep asking "then what?"; the naming conventions (`top_1`, `_top`, `entry/exit`) already align — say so explicitly |

@@ -18,8 +18,8 @@
   <div class="pill" id="status">idle</div>
 </header>
 <div id="drop"><div class="box">
-  <div class="big">drop a font or a .af</div>
-  <div class="small">a zipped UFO (.ufoz / .zip) or .ufo folder to debug — or a .af rules file to edit</div>
+  <div class="big">drop a font or a .anchors</div>
+  <div class="small">a zipped UFO (.ufoz / .zip) or .ufo folder to debug — or a .anchors rules file to edit</div>
 </div></div>
 <main>
   <section class="editor">
@@ -35,8 +35,8 @@
         <span class="ln-name">custom</span><span class="ln-badge">overrides</span>
         <div class="spacer" style="flex:1"></div>
         <button data-a="find" class="ghost mini-btn" title="find in rules (Ctrl+F)">find</button>
-        <button data-a="open" class="ghost mini-btn" title="open a .af into this layer">open</button>
-        <button data-a="dl-custom" class="ghost mini-btn" title="download this layer">⤓ .af</button>
+        <button data-a="open" class="ghost mini-btn" title="open a .anchors into this layer">open</button>
+        <button data-a="dl-custom" class="ghost mini-btn" title="download this layer">⤓ .anchors</button>
         <button data-a="close" class="ghost mini-btn" title="close this layer (work with base only)">✕</button>
       </div>
       <div class="layer-ed" id="edCustom"></div>
@@ -48,7 +48,7 @@
         <select id="preset" class="mini" title="base preset"></select>
         <div class="spacer" style="flex:1"></div>
         <button data-a="add-custom" id="addcustom" class="ghost mini-btn" title="add a custom layer on top">+ custom</button>
-        <button data-a="dl-base" class="ghost mini-btn" title="download this layer">⤓ .af</button>
+        <button data-a="dl-base" class="ghost mini-btn" title="download this layer">⤓ .anchors</button>
       </div>
       <div class="layer-ed" id="edBase"></div>
     </div>
@@ -60,7 +60,7 @@
       </div>
       <div class="problems" id="problems"></div>
     </section>
-    <input id="rulesfile" type="file" accept=".af,.dsl,.txt" hidden>
+    <input id="rulesfile" type="file" accept=".anchors,.af,.dsl,.txt" hidden>
   </section>
   <div class="split col" data-t="edw" title="drag to resize · double-click to reset"></div>
   <section class="stage">

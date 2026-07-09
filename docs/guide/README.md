@@ -26,8 +26,8 @@ can never drift from the implementation.
 
 ## Proof of pipeline
 
-The figure below is live output: a three-line `.af` rules file
-([examples/deva-top-bottom.af](examples/deva-top-bottom.af)) applied by
+The figure below is live output: a three-line `.anchors` rules file
+([examples/deva-top-bottom.anchors](examples/deva-top-bottom.anchors)) applied by
 `anchorsfactory` to the Devanagari consonant KA of
 [Anek Devanagari](https://github.com/EkType/Anek) (OFL), then rendered with
 the anchors and the headline guide annotated:
@@ -50,16 +50,16 @@ FONTS=docs/guide/tools/_fonts
 
 .venv/bin/python docs/guide/tools/make_examples.py rules \
     --font "$FONTS/Anek/sources/AnekDevanagari/Masters/AnekDevanagari-Medium.ufo" \
-    --glyph Ka.dv --rules docs/guide/examples/deva-top-bottom.af \
+    --glyph Ka.dv --rules docs/guide/examples/deva-top-bottom.anchors \
     --hguide top:headline --fit ink -o docs/guide/examples/deva-top-bottom.svg
 
 .venv/bin/python docs/guide/tools/make_examples.py rules \
     --font "$FONTS/thai/sources/NotoSansThai-Regular.ufo" \
-    --glyph koKai-thai --rules docs/guide/examples/thai-top-bottom.af \
+    --glyph koKai-thai --rules docs/guide/examples/thai-top-bottom.anchors \
     --hguide xHeight:xHeight --fit ink -o docs/guide/examples/thai-top-bottom.svg
 ```
 
-`make_examples.py` has two modes: `rules` (run a `.af` file through the engine
+`make_examples.py` has two modes: `rules` (run a `.anchors` file through the engine
 on an in-memory copy of the font and draw what it placed — nothing is saved
 back) and `render` (draw explicitly given `--anchor name:x:y` points, for
 didactic before/after figures). Run it with `--help` for the full options

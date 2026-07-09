@@ -11,7 +11,7 @@ anchorsfactory are available there)::
 
     .venv/bin/python docs/guide/tools/make_examples.py rules \
         --font path/to/Font.ufo --glyph Ka.dv \
-        --rules docs/guide/examples/deva-top-bottom.af \
+        --rules docs/guide/examples/deva-top-bottom.anchors \
         --hguide top:headline -o out.svg
 
 Two modes:
@@ -23,7 +23,7 @@ Two modes:
 ``rules``
     The script runs **the real engine** (``anchorsfactory.runner.load_document``
     + ``anchorsfactory.apply.apply_document``) on an in-memory copy of the
-    font and renders whatever anchors the given ``.af`` rules file produces
+    font and renders whatever anchors the given ``.anchors`` rules file produces
     for the glyph, annotated with the rule text.  Nothing is ever saved back
     to the font.  This keeps every guide illustration honest: the picture *is*
     the engine output.
@@ -437,7 +437,7 @@ def main(argv=None):
     p_rules = sub.add_parser("rules", parents=[common],
                              help="run anchorsfactory on the font and render the result")
     p_rules.add_argument("--rules", required=True,
-                         help=".af rules file (or bundled preset name)")
+                         help=".anchors rules file (or bundled preset name)")
     p_rules.add_argument("--caption", action="append", default=None,
                          help="override the rule-text caption; repeatable")
     p_rules.add_argument("--no-caption", action="store_true")

@@ -18,7 +18,7 @@ Studio ships with the package as the `anchorsfactory-studio` console script
 
 ```bash
 .venv/bin/anchorsfactory-studio MyFont.ufo                 # debug a font
-.venv/bin/anchorsfactory-studio MyFont.ufo -r my-rules.af  # open with your rules
+.venv/bin/anchorsfactory-studio MyFont.ufo -r my-rules.anchors  # open with your rules
 .venv/bin/anchorsfactory-studio                            # no font → built-in demo
 ```
 
@@ -31,14 +31,15 @@ opens it in a Playwright-driven Chromium window (needs the dev browser —
 
 ```bash
 make studio                              # demo font
-make studio ARGS="MyFont.ufo -r my.af"   # a UFO + your rules
+make studio ARGS="MyFont.ufo -r my.anchors"   # a UFO + your rules
 # or directly: python scripts/studio_dev.py [ufo] [-r rules] [--port N] [--headless]
 ```
 
 | option | meaning |
 |--------|---------|
 | `ufo` (positional, optional) | a `.ufo` to debug; omitted → a built-in synthetic demo font |
-| `-r`, `--rules NAME_OR_PATH` | the rule text to open with: a bundled preset name (`default`, `default-italics`) or a path to a `.af` file (default: `default`) |
+| `-r`, `--rules NAME_OR_PATH` | the rule text to open with: a bundled preset name (`default`, `default-italics`) or a path to a `.anchors` file (default: `default`) |
+| `--save PATH` | autosave the base-layer rules to `PATH` on every valid edit — a file-backed working copy that survives across sessions and browsers; reopen with `-r PATH` to resume (see [Autosaving to a file](#autosaving-to-a-file)) |
 | `--host HOST` | bind address (default `127.0.0.1`) |
 | `--port PORT` | port (default `8765`) |
 | `-v`, `--verbose` | log requests to the terminal |
@@ -77,16 +78,42 @@ view — toggle it to compare the preset's placement with your overrides.
 
 Getting rules in and out:
 
-- **open** loads a `.af` file into the custom layer; so does dropping a single
-  `.af`/`.dsl`/`.txt` file anywhere on the page.
-- **⤓ .af** on either layer downloads that layer's text as a file.
+- **open** loads a `.anchors` file into the custom layer; so does dropping a single
+  `.anchors` (or legacy `.af`/`.dsl`/`.txt`) file anywhere on the page.
+- **⤓ .anchors** on either layer downloads that layer's text as a file.
 - `-r/--rules` on the command line seeds the base layer on first visit.
 
 `!extends` works inside a layer, but only **bundled preset names** can be
 inherited (`!extends default`) — Studio has no access to your file paths, so
-`!extends ./other.af` is rejected with a clear error. To debug a rules file
+`!extends ./other.anchors` is rejected with a clear error. To debug a rules file
 that extends another file, open the base file in the base layer and the child
 in the custom layer: the stack gives you the same merge.
+
+### Autosaving to a file
+
+By default your edits persist only in the browser's `localStorage` — which is
+per-browser, so the same URL opened in a different browser (or Studio launched
+via `make studio`, which uses a fresh throwaway Chromium profile) starts from
+the preset again. For an iterative debugging session, back the rules with a file
+instead:
+
+```bash
+anchorsfactory-studio MyFont.ufo -r my.anchors --save my.anchors
+```
+
+With `--save PATH`, every time your edits parse and validate cleanly the **base
+layer** is written back to `PATH` (the custom override layer is not saved).
+Invalid, mid-edit states are never written, so the file always stays loadable —
+reopen with `-r PATH` and you resume exactly where you left off, in any browser.
+The header shows `· autosave → PATH` while it's active, and when a save path is
+set the file is authoritative for the base layer on load (it wins over any stale
+`localStorage`). Point `-r` and `--save` at the same file to edit it in place.
+
+For the common "start from the default preset and keep iterating" case there's a
+ready-made launcher — `make studio-save` (or `python scripts/studio_save.py`):
+it seeds the base from `default` on the first run, autosaves every valid edit to
+`dev/studio-rules.anchors`, and resumes from that file on later runs. Override the
+file with `ARGS="-f my.anchors"` and pass a font/flags the same way as `make studio`.
 
 ### The editors
 
@@ -169,7 +196,7 @@ watch the anchor move.
 **Build overrides on a preset.** Keep `default` in the base layer, open the
 custom layer, and write only the exceptions (`Q += …`, `germandbls = …`).
 Close the custom layer to see the preset's own placement, reopen to see yours
-win; when happy, **⤓ .af** the custom layer and add `!extends default` at the
+win; when happy, **⤓ .anchors** the custom layer and add `!extends default` at the
 top for use with the CLI.
 
 **Port rules to a new font.** Drop the new font onto a Studio that already has
@@ -187,7 +214,11 @@ exactly which glyphs and anchors degraded.
 - **`-r`/preset seems ignored on relaunch** — the browser restores your last
   session's rule text from `localStorage`, which takes precedence over the
   command-line seed. Re-select the preset in the base layer's dropdown to get
-  a fresh copy of it.
+  a fresh copy of it. (This is also why the same session looks different across
+  browsers, or between `anchorsfactory-studio` in your own Chrome and `make
+  studio`, which uses a fresh Chromium profile with an empty `localStorage`.)
+  Run with `--save PATH` to back the base layer with a file instead — the file
+  then wins over `localStorage` on load, so every launch resumes from disk.
 - **A glyph is missing from the grid** — the grid only lists glyphs some rule
   matched *and* that exist in the font. Check the selector (name, `U+…` range,
   glob, category) against the font's actual glyph names.

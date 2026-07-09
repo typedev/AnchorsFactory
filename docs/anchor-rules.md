@@ -502,5 +502,5 @@ The old `name:align:vert` triples map mechanically:
 Convert existing files automatically — the conversion is checked lossless:
 
 ```
-anchorsfactory-convert examples/default-anchors-list.txt -o my-rules.af
+anchorsfactory-convert examples/default-anchors-list.txt -o my-rules.anchors
 ```

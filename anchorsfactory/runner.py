@@ -48,7 +48,7 @@ def _load(ref: str, base_dir, seen: tuple) -> Document:
         path = ref if os.path.isabs(ref) else os.path.join(base_dir or "", ref)
         ident = os.path.abspath(path)
         this_dir = os.path.dirname(ident)
-        doc = parse_dsl_file(path) if path.endswith((".af", ".dsl")) else parse_file(path)
+        doc = parse_dsl_file(path) if path.endswith(presets._PATH_EXTS) else parse_file(path)
 
     if ident in seen:
         raise ValueError(f"!extends cycle at {ref}")

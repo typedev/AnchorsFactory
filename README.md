@@ -27,7 +27,7 @@ Requires Python 3.10+, `fontParts` and `fontTools`.
 anchorsfactory MyFont.ufo --rules default
 
 # your own rules, overwrite in place, with a backup of existing anchors
-anchorsfactory MyFont.ufo --rules my-rules.af --in-place --backup-dir backups/
+anchorsfactory MyFont.ufo --rules my-rules.anchors --in-place --backup-dir backups/
 
 # a whole folder of UFOs
 anchorsfactory masters/ --rules default
@@ -87,7 +87,7 @@ Bundled rulesets `default` and `default-italics` are usable by name in
 new syntax — verified lossless:
 
 ```bash
-anchorsfactory-convert examples/default-anchors-list.txt -o my-rules.af
+anchorsfactory-convert examples/default-anchors-list.txt -o my-rules.anchors
 ```
 
 ## Library API
@@ -99,7 +99,7 @@ process_ufo("MyFont.ufo", "default")          # high-level: open, apply, save
 
 from fontParts.world import OpenFont
 font = OpenFont("MyFont.ufo")
-apply_document(font, load_document("my-rules.af"))
+apply_document(font, load_document("my-rules.anchors"))
 font.save()
 ```
 

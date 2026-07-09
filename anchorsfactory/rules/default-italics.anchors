@@ -1,8 +1,8 @@
 # AnchorsFactory — default anchor rules (italic)
 #
-# Same structure as default.af, tuned for italics: top anchors centre on the
+# Same structure as default.anchors, tuned for italics: top anchors centre on the
 # slanted ink (outline.center@top), lowercase x-height letters use @baseLC, and
-# marks attach at x-height (@_loTop / @_loTopInk). See default.af / docs/anchor-rules.md.
+# marks attach at x-height (@_loTop / @_loTopInk). See default.anchors / docs/anchor-rules.md.
 
 # ============================================================
 #  VARIABLES — reusable measurements; change here, applies everywhere

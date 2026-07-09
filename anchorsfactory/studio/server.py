@@ -2,8 +2,9 @@
 single-page UI and two JSON endpoints (``/api/state``, ``/api/compute``).
 
 The font is opened once and kept in memory; rule text is sent from the browser
-on every edit, so the server is otherwise stateless. No font bytes ever leave
-the machine.
+on every edit, so the server is otherwise stateless — unless ``--save PATH`` is
+given, in which case each valid edit's base layer is written back to PATH. No
+font bytes ever leave the machine.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import threading
 from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
+from pathlib import Path
 
 from ..presets import is_preset, list_presets, preset_text
 from .demo import build_demo_font, font_metrics
@@ -36,6 +38,17 @@ def _seed_rules(rules: str) -> str:
         return fh.read()
 
 
+def _base_layer_text(rules) -> str:
+    """The base (bottom) layer's source from a compute payload — a layer stack
+    ``[{name,text}, ...]`` bottom→top, or a bare rules string (single layer)."""
+    if isinstance(rules, str):
+        return rules
+    if rules:
+        first = rules[0]
+        return first.get("text", "") if isinstance(first, dict) else str(first)
+    return ""
+
+
 def _font_state(font, name: str) -> dict:
     """The font-dependent slice of the client state."""
     return {
@@ -53,18 +66,35 @@ class Studio:
     reads it and a drop-upload swaps it, so both take the lock.
     """
 
-    def __init__(self, font, rules_text: str, font_name: str):
+    def __init__(self, font, rules_text: str, font_name: str, save_path=None):
         self.font = font
         self.rules_text = rules_text
         self.lock = threading.Lock()
         self._tmpdir = None                    # temp dir of an uploaded font, if any
         self._allglyphs = None                 # cached all-glyph geometry (font-scoped)
+        # When set (--save PATH), the base layer is written back here on every
+        # valid compute, so edits survive across sessions and browsers.
+        self.save_path = Path(save_path) if save_path else None
         self.state = {
             **_font_state(font, font_name),
             "presets": list_presets(),
             "presetTexts": {name: preset_text(name) for name in list_presets()},
             "rules": rules_text,
+            "save": str(self.save_path) if self.save_path else None,
         }
+
+    def autosave(self, base_text: str) -> None:
+        """Persist the base-layer rules to ``save_path`` (a no-op if unset).
+
+        Only called for rules that resolved cleanly, so the file always stays
+        loadable via ``-r <path>``. A write failure is logged, not fatal — a
+        debugging session shouldn't die because the disk hiccuped."""
+        if not self.save_path:
+            return
+        try:
+            self.save_path.write_text(base_text, encoding="utf-8")
+        except OSError as exc:
+            log.warning("could not autosave rules to %s: %s", self.save_path, exc)
 
     def set_font(self, font, name: str, tmpdir=None):
         """Swap in a freshly loaded font, returning the previous temp dir (if any)
@@ -163,6 +193,10 @@ class _Handler(BaseHTTPRequestHandler):
         rules = body.get("layers") if isinstance(body.get("layers"), list) else body.get("rules", "")
         with self.studio.lock:
             view = build_view(self.studio.font, rules)
+        # Autosave the base (bottom) layer only, and only when the rules are
+        # valid — so the saved file is always reloadable.
+        if view.get("ok"):
+            self.studio.autosave(_base_layer_text(rules))
         self._send_json(view)
 
     def _load_font(self):
@@ -208,7 +242,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("ufo", nargs="?",
                    help="a .ufo to debug; omitted → built-in demo font")
     p.add_argument("-r", "--rules", default="default",
-                   help="preset name or .af path to open with (default: 'default')")
+                   help="preset name or .anchors path to open with (default: 'default')")
+    p.add_argument("--save", metavar="PATH",
+                   help="autosave the (valid) base-layer rules to PATH on every edit; "
+                        "reopen with -r PATH to resume")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("-v", "--verbose", action="store_true")
@@ -229,7 +266,7 @@ def main(argv=None) -> int:
     else:
         font = build_demo_font()
         name = "demo"
-    serve(Studio(font, rules_text, name), args.host, args.port)
+    serve(Studio(font, rules_text, name, save_path=args.save), args.host, args.port)
     return 0
 
 

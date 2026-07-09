@@ -48,7 +48,7 @@ anchorsfactory-studio = "anchorsfactory.studio.server:main"
 packages = ["anchorsfactory", "anchorsfactory.rules", "anchorsfactory.studio"]
 
 [tool.setuptools.package-data]
-"anchorsfactory.rules" = ["*.af"]
+"anchorsfactory.rules" = ["*.anchors"]
 "anchorsfactory.studio" = ["static/*"]
 
 [tool.pytest.ini_options]

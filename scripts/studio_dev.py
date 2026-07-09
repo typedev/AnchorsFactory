@@ -9,10 +9,10 @@ shipped package never depends on them.
 
     python scripts/studio_dev.py                 # demo font, default rules
     python scripts/studio_dev.py MyFont.ufo      # debug a UFO
-    python scripts/studio_dev.py -r my.af --port 8770
+    python scripts/studio_dev.py -r my.anchors --port 8770
     python scripts/studio_dev.py --headless      # no window (smoke check)
 
-Or via make:  make studio  ARGS="MyFont.ufo -r my.af"
+Or via make:  make studio  ARGS="MyFont.ufo -r my.anchors"
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ def _build_studio(args):
     else:
         font = build_demo_font()
         name = "demo"
-    return Studio(font, rules_text, name), name
+    return Studio(font, rules_text, name, save_path=args.save), name
 
 
 def main(argv=None) -> int:
@@ -45,7 +45,10 @@ def main(argv=None) -> int:
         prog="studio_dev", description="Launch Studio and open it in a browser window.")
     ap.add_argument("ufo", nargs="?", help="a .ufo to debug; omitted → built-in demo font")
     ap.add_argument("-r", "--rules", default="default",
-                    help="preset name or .af path to open with (default: 'default')")
+                    help="preset name or .anchors path to open with (default: 'default')")
+    ap.add_argument("--save", metavar="PATH",
+                    help="autosave the (valid) base-layer rules to PATH on every edit; "
+                         "reopen with -r PATH to resume")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--headless", action="store_true",

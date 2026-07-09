@@ -34,7 +34,9 @@ async function boot(){
 }
 
 function setFontMeta(){
-  $("#fontmeta").textContent = `${META.font}  ${META.unitsPerEm}upm  ital ${META.italicAngle}°`;
+  let s = `${META.font}  ${META.unitsPerEm}upm  ital ${META.italicAngle}°`;
+  if(META.save) s += `  · autosave → ${META.save}`;
+  $("#fontmeta").textContent = s;
 }
 
 /* ===================================================================== *
@@ -61,7 +63,9 @@ function setupEditors(){
   try { saved = JSON.parse(localStorage.getItem("af.rules") || "null"); } catch(_){}
   if(saved){
     $("#preset").value = saved.preset || META.presets[0] || "";
-    baseEd.setValue(saved.base ?? META.rules);
+    // With --save on, the file (META.rules) is authoritative for the base, so a
+    // reopened session resumes from disk in any browser (not a stale localStorage).
+    baseEd.setValue(META.save ? META.rules : (saved.base ?? META.rules));
     customEd.setValue(saved.custom ?? "");
     customOpen = !!saved.customOpen;
   } else {
@@ -81,8 +85,8 @@ function setupEditors(){
       const a = btn.dataset.a;
       if(a === "find"){ activeEd = customEd; openFind(); }
       else if(a === "open"){ $("#rulesfile").click(); }
-      else if(a === "dl-custom") downloadText(customEd.getValue(), "custom.af");
-      else if(a === "dl-base") downloadText(baseEd.getValue(), "base.af");
+      else if(a === "dl-custom") downloadText(customEd.getValue(), "custom.anchors");
+      else if(a === "dl-base") downloadText(baseEd.getValue(), "base.anchors");
       else if(a === "add-custom"){ setCustomOpen(true); customEd.focus(); compute(); }
       else if(a === "close"){ setCustomOpen(false); if(activeEd === customEd) activeEd = baseEd; compute(); }
     });
@@ -362,7 +366,7 @@ function setupSplitters(){
 }
 
 /* ===================================================================== *
- *  Font loading: drag a font/.af, or pick a file
+ *  Font loading: drag a font/.anchors, or pick a file
  * ===================================================================== */
 function setupFontDrop(){
   const overlay = $("#drop");
@@ -377,7 +381,7 @@ function setupFontDrop(){
     if(!roots.length) return;
     const collected=[];
     for(const r of roots) await walkEntry(r, "", collected);
-    if(collected.length === 1 && /\.(af|dsl|txt)$/i.test(collected[0].path)){   // a rules file → custom layer
+    if(collected.length === 1 && /\.(anchors|af|dsl|txt)$/i.test(collected[0].path)){   // a rules file → custom layer
       setCustomOpen(true); customEd.setValue(await collected[0].file.text()); persist(); SELECTED = null; HL_ANCHOR = null; compute(); return;
     }
     await sendFont(roots[0].name, collected);

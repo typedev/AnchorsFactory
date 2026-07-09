@@ -1,5 +1,5 @@
 include LICENSE
 include README.md
-recursive-include anchorsfactory/rules *.af
+recursive-include anchorsfactory/rules *.anchors
 recursive-include anchorsfactory/studio/static *
 recursive-include docs *.md

@@ -87,7 +87,7 @@ each layer is testable and the DSL surface is decoupled from the engine.
   (`*_anchored.ufo`, never overwrites unless `--in-place`). `cli.py` — the
   `anchorsfactory` command; loads+validates rules once, then per-font.
 - `convert.py` — legacy → new DSL, with a lossless round-trip check.
-- `presets.py` + `rules/*.af` — bundled `default`/`default-italics`, read via
+- `presets.py` + `rules/*.anchors` — bundled `default`/`default-italics`, read via
   `importlib.resources`, referenced by bare name in `--rules`/`!extends`.
 
 ## Rule language

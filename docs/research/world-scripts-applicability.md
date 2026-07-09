@@ -196,7 +196,7 @@ with weight** (clearances grow as ink thickens: −247→−265, +23→+37). Str
 candidate+bias transfer passes for 11/40 and 12/22 axis rules, but the
 winning candidate is almost always the same. This is exactly the scenario the
 existing mechanism covers: a family file plus a three-line master file of
-`!extends family.af` and re-tuned `&gap` variables.
+`!extends family.anchors` and re-tuned `&gap` variables.
 
 ## Engine notes {#engine-notes}
 

@@ -10,7 +10,11 @@ from __future__ import annotations
 from importlib.resources import files
 
 _RULES = "anchorsfactory.rules"
-_EXT = ".af"
+_EXT = ".anchors"
+# Extensions that mark a `--rules`/`!extends` reference as a *file path* (DSL),
+# not a bare preset name. `.anchors` is canonical; `.af`/`.dsl` stay recognised
+# so pre-existing rule files keep working.
+_PATH_EXTS = (".anchors", ".af", ".dsl")
 
 
 def list_presets() -> list[str]:
@@ -24,7 +28,7 @@ def list_presets() -> list[str]:
 
 def is_preset(name: str) -> bool:
     """A bare name (no path separator / extension) that names a bundled preset."""
-    if "/" in name or "\\" in name or name.endswith((".af", ".dsl")):
+    if "/" in name or "\\" in name or name.endswith(_PATH_EXTS):
         return False
     return (files(_RULES) / f"{name}{_EXT}").is_file()
 

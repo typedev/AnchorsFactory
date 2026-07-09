@@ -19,8 +19,9 @@ def test_presets_available():
 
 def test_is_preset_vs_path():
     assert presets.is_preset("default")
-    assert not presets.is_preset("default.af")     # has extension -> a path
-    assert not presets.is_preset("a/b")            # has separator -> a path
+    assert not presets.is_preset("default.anchors")  # canonical extension -> a path
+    assert not presets.is_preset("default.af")       # legacy extension -> a path
+    assert not presets.is_preset("a/b")              # has separator -> a path
 
 
 def test_preset_text_parses():
@@ -30,7 +31,7 @@ def test_preset_text_parses():
 
 # --- !extends resolution & merge ------------------------------------------- #
 def test_extends_preset_then_override(tmp_path):
-    f = tmp_path / "my.af"
+    f = tmp_path / "my.anchors"
     f.write_text(
         "!extends default\n"
         "U+0413 += extra (box.center 0)\n"     # Г: defaults + an extra anchor
@@ -42,9 +43,9 @@ def test_extends_preset_then_override(tmp_path):
 
 
 def test_extends_relative_path(tmp_path):
-    (tmp_path / "base.af").write_text("@ = top (box.center $H)\nU+0041 = @\n")
-    child = tmp_path / "child.af"
-    child.write_text("!extends base.af\nU+0041 += hook (outline.right 0)\n")
+    (tmp_path / "base.anchors").write_text("@ = top (box.center $H)\nU+0041 = @\n")
+    child = tmp_path / "child.anchors"
+    child.write_text("!extends base.anchors\nU+0041 += hook (outline.right 0)\n")
     doc = load_document(str(child))
     assert [s.name for s in accumulate(doc, "A", [0x0041])] == ["top", "hook"]
 
