@@ -21,6 +21,7 @@ from importlib.resources import files
 from pathlib import Path
 
 from ..presets import is_preset, list_presets, preset_text
+from .compose import build_composites
 from .demo import build_demo_font, font_metrics
 from .render import all_glyph_geometry, build_view
 from .upload import load_uploaded_font
@@ -28,6 +29,15 @@ from .upload import load_uploaded_font
 log = logging.getLogger("anchorsfactory.studio")
 
 _STATIC = files("anchorsfactory.studio").joinpath("static")
+
+# Seed for the GC-constructions editor: a couple of composites the demo font can
+# assemble, so the "composites" tab has something to show on first open.
+_DEFAULT_GC = (
+    "# GlyphConstruction — assemble composites from the anchors above.\n"
+    "#   composite = base + mark@anchor\n"
+    "aacute = a + acute@top\n"
+    "odieresis = o + dieresis@top\n"
+)
 
 
 def _seed_rules(rules: str) -> str:
@@ -80,6 +90,7 @@ class Studio:
             "presets": list_presets(),
             "presetTexts": {name: preset_text(name) for name in list_presets()},
             "rules": rules_text,
+            "gc": _DEFAULT_GC,
             "save": str(self.save_path) if self.save_path else None,
         }
 
@@ -191,8 +202,16 @@ class _Handler(BaseHTTPRequestHandler):
             return
         # a layer stack (bottom → top) or, for back-compat, a single rules string
         rules = body.get("layers") if isinstance(body.get("layers"), list) else body.get("rules", "")
+        gc_text = body.get("gc", "")
         with self.studio.lock:
             view = build_view(self.studio.font, rules)
+            # GlyphConstruction preview: assemble composites from the anchors just
+            # computed (on a copy of the font — see compose.build_composites).
+            if view.get("ok") and isinstance(rules, list) and gc_text.strip():
+                comp = build_composites(self.studio.font, rules, gc_text)
+                view["composites"] = comp["composites"]
+                if comp["problems"]:
+                    view["problems"] = view.get("problems", []) + comp["problems"]
         # Autosave the base (bottom) layer only, and only when the rules are
         # valid — so the saved file is always reloadable.
         if view.get("ok"):

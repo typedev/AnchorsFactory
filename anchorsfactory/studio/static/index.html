@@ -30,6 +30,16 @@
       <button id="findnext" class="ghost icon" title="next (Enter)">↓</button>
       <button id="findclose" class="ghost icon" title="close (Esc)">✕</button>
     </div>
+    <div class="layer" id="lyGC">
+      <div class="layer-head">
+        <span class="ln-name">gc constructions</span><span class="ln-badge">glyphConstruction</span>
+        <div class="spacer" style="flex:1"></div>
+        <button data-a="find-gc" class="ghost mini-btn" title="find (Ctrl+F)">find</button>
+        <button data-a="dl-gc" class="ghost mini-btn" title="download constructions">⤓ .glyphConstruction</button>
+      </div>
+      <div class="layer-ed" id="edGC"></div>
+    </div>
+    <div class="split row" data-t="gch" title="drag to resize · double-click to reset"></div>
     <div class="layer" id="lyCustom">
       <div class="layer-head">
         <span class="ln-name">custom</span><span class="ln-badge">overrides</span>
@@ -69,6 +79,7 @@
         <div class="tabs" id="gridtabs">
           <button class="tab sel" data-tab="affected" title="glyphs at least one rule matched">affected</button>
           <button class="tab" data-tab="all" title="every glyph in the font">all glyphs</button>
+          <button class="tab" data-tab="composites" title="composites GlyphConstruction assembled from the placed anchors">composites</button>
         </div>
         <label class="hideaff" id="hideaff" hidden><input type="checkbox" id="hideaffcb"> hide affected</label>
         <span class="gridcount" id="count">0</span>

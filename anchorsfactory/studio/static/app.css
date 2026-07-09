@@ -57,19 +57,20 @@ main{display:grid;grid-template-columns:var(--edw,380px) 6px minmax(0,1fr);min-h
 /* ---- editor pane: a stack of rule layers (custom over base) ---- */
 .editor{
   position:relative;display:grid;
-  grid-template-rows:minmax(60px,1fr) 6px var(--baseh,220px) 6px var(--probh,150px);
+  grid-template-rows:var(--gch,104px) 6px minmax(60px,1fr) 6px var(--baseh,220px) 6px var(--probh,150px);
   min-height:0;background:var(--panel);border-right:1px solid var(--line);
 }
 .layer{display:flex;flex-direction:column;min-height:0;min-width:0}
 .layer-head{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--line);background:var(--panel)}
 .ln-name{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
 #lyCustom .ln-name{color:var(--anchor)}
+#lyGC .ln-name{color:var(--gref)}
 .ln-badge{font-family:var(--mono);font-size:9.5px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:1px 6px}
 .layer-ed{flex:1;min-height:0;position:relative}
 .mini-btn{padding:3px 7px;font-size:11px}
 /* custom layer closed → base takes the whole column (panes keep their grid slots) */
 #addcustom{display:none}
-.editor.solo-base{grid-template-rows:0 0 minmax(0,1fr) 6px var(--probh,150px)}
+.editor.solo-base{grid-template-rows:var(--gch,104px) 6px 0 0 minmax(0,1fr) 6px var(--probh,150px)}
 .editor.solo-base #lyCustom{overflow:hidden}
 .editor.solo-base .split[data-t="baseh"]{visibility:hidden;pointer-events:none}
 .editor.solo-base #addcustom{display:inline-block}
@@ -223,6 +224,16 @@ button.icon{padding:5px 8px;line-height:1;font-size:13px}
 .anchor-g.hl text{font-weight:700}
 .anchor-g{transition:transform .34s cubic-bezier(.4,0,.2,1)}
 @media (prefers-reduced-motion:reduce){.anchor-g{transition:none}}
+/* ---- GC composite preview: component outlines + anchor-join markers ---- */
+.comp-mark{fill:color-mix(in srgb,var(--anchor) 22%,transparent);stroke:var(--anchor);stroke-width:1;vector-effect:non-scaling-stroke}
+.join-g circle{fill:none;stroke:var(--scan);stroke-width:1.6;vector-effect:non-scaling-stroke}
+.join-g .dot{fill:var(--scan);stroke:none}
+.join-g text{fill:var(--scan);font-family:var(--mono);font-size:12px}
+.comp-problems{color:var(--err);font-family:var(--mono);font-size:11px;margin-bottom:12px;line-height:1.5}
+.comp-row{font-family:var(--mono);font-size:11.5px;color:var(--text);padding:7px 0;border-bottom:1px solid var(--line)}
+.comp-row .b{color:var(--ink)}
+.comp-row .j{color:var(--scan)}
+.thumb .cap .warn{color:var(--err)}
 /* ---- responsive: stack the editor over the stage on narrow windows ---- */
 @media (max-width:840px){
   header{flex-wrap:wrap;gap:10px 14px}

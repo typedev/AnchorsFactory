@@ -4,11 +4,12 @@ const REDUCED = matchMedia("(prefers-reduced-motion:reduce)").matches;
 const LH = 20, PAD = 14;                     // editor line-height / padding (match app.css)
 let META = null, VIEW = {glyphs:{}, layers:[]}, SELECTED = null, GLYPH_FILTER = "", HL_ANCHOR = null;
 let GLYPHS = {};                       // last valid glyph view (frozen while rules are invalid)
-let GRID_TAB = "affected";             // "affected" | "all"
+let GRID_TAB = "affected";             // "affected" | "all" | "composites"
 let HIDE_AFFECTED = false;             // on the "all" tab: show only unaffected glyphs
 let ALLGLYPHS = null;                  // [{name,order,advance,bounds,path}] for the "all" tab (lazy)
 let ALLMAP = {};                       // name -> all-glyph geometry entry
-let baseEd = null, customEd = null, activeEd = null, customOpen = false;
+let COMPOSITES = {};                   // name -> GlyphConstruction-assembled composite (for the "composites" tab)
+let baseEd = null, customEd = null, gcEd = null, activeEd = null, customOpen = false;
 const lastPos = {};                          // glyph -> {anchor -> {x,y}} for tweening
 
 const $ = s => document.querySelector(s);
@@ -53,11 +54,20 @@ const persist = debounce(() => {
 // Custom layer is collapsible: closed → work with the base only.
 function setCustomOpen(open){ customOpen = open; $(".editor").classList.toggle("solo-base", !open); persist(); }
 
+const persistGC = debounce(() => {
+  try { localStorage.setItem("af.gc", gcEd.getValue()); } catch(_){}
+}, 400);
+
 function setupEditors(){
   const onChange = () => { persist(); scheduleCompute(); };
   baseEd = makeEditor($("#edBase"), onChange, () => activeEd = baseEd);
   customEd = makeEditor($("#edCustom"), onChange, () => activeEd = customEd);
+  gcEd = makeEditor($("#edGC"), () => { persistGC(); scheduleCompute(); }, () => activeEd = gcEd);
   activeEd = customEd;
+
+  // GC constructions persist under their own key; seed from the server default.
+  let savedGC = null; try { savedGC = localStorage.getItem("af.gc"); } catch(_){}
+  gcEd.setValue(savedGC != null ? savedGC : (META.gc || ""));
 
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem("af.rules") || "null"); } catch(_){}
@@ -84,9 +94,11 @@ function setupEditors(){
     btn.addEventListener("click", () => {
       const a = btn.dataset.a;
       if(a === "find"){ activeEd = customEd; openFind(); }
+      else if(a === "find-gc"){ activeEd = gcEd; openFind(); }
       else if(a === "open"){ $("#rulesfile").click(); }
       else if(a === "dl-custom") downloadText(customEd.getValue(), "custom.anchors");
       else if(a === "dl-base") downloadText(baseEd.getValue(), "base.anchors");
+      else if(a === "dl-gc") downloadText(gcEd.getValue(), "constructions.glyphConstruction");
       else if(a === "add-custom"){ setCustomOpen(true); customEd.focus(); compute(); }
       else if(a === "close"){ setCustomOpen(false); if(activeEd === customEd) activeEd = baseEd; compute(); }
     });
@@ -133,6 +145,11 @@ async function selectTab(tab){
   GRID_TAB = tab; persistGrid(); syncGridChrome();
   if(tab === "all" && ALLGLYPHS === null) await fetchAllGlyphs();
   renderGrid();
+  // The selection may not exist in the new tab (a glyph name has no composite,
+  // or vice-versa) — refresh it and the inspector so the view isn't stale.
+  const list = glyphList();
+  if(!list.some(g => g.name === SELECTED)) SELECTED = (list[0] || {}).name || null;
+  renderInspector();
 }
 
 async function fetchAllGlyphs(){
@@ -340,6 +357,7 @@ function setupTheme(){
 function setupSplitters(){
   const defs = {
     edw:   {sel:"main",       axis:"x", sign: 1, min:280, def:400, max:()=>innerWidth*0.7},
+    gch:   {sel:".editor",    axis:"y", sign: 1, min: 44, def:104, max:()=>$(".editor").clientHeight*0.5},
     baseh: {sel:".editor",    axis:"y", sign:-1, min: 80, def:220, max:()=>$(".editor").clientHeight*0.7},
     probh: {sel:".editor",    axis:"y", sign:-1, min: 44, def:150, max:()=>$(".editor").clientHeight*0.6},
     gridh: {sel:".stage",     axis:"y", sign: 1, min: 90, def:200, max:()=>$(".stage").clientHeight*0.72},
@@ -437,8 +455,9 @@ async function compute(){
   const layers = customOpen
     ? [{name:"base", text: baseEd.getValue()}, {name:"custom", text: customEd.getValue()}]
     : [{name:"base", text: baseEd.getValue()}];
+  const gc = gcEd ? gcEd.getValue() : "";
   try {
-    const res = await fetch("/api/compute", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({layers})});
+    const res = await fetch("/api/compute", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({layers, gc})});
     VIEW = await res.json();
   } catch(err) {                                    // server 500 / dropped connection / bad JSON
     VIEW = {ok:false, problems:["studio server error — see terminal: "+String(err)], diagnostics:[], glyphs:{}, layers:[]};
@@ -452,9 +471,14 @@ async function compute(){
   const stage = document.querySelector(".stage");
   if(VIEW.ok){
     GLYPHS = VIEW.glyphs;
+    COMPOSITES = VIEW.composites || {};
     stage.classList.remove("stale");
     renderGrid();
-    if(!glyphData(SELECTED)) SELECTED = (sortedGlyphs()[0] || {}).name || null;
+    if(GRID_TAB === "composites"){
+      if(!COMPOSITES[SELECTED]) SELECTED = (compositeList()[0] || {}).name || null;
+    } else if(!glyphData(SELECTED)){
+      SELECTED = (sortedGlyphs()[0] || {}).name || null;
+    }
     renderInspector();
   } else {
     stage.classList.add("stale");                   // show it's frozen, not live
@@ -509,9 +533,14 @@ function sortedGlyphs(){
 // the ones already in the affected set.
 function glyphList(){
   if(GRID_TAB === "affected") return sortedGlyphs();
+  if(GRID_TAB === "composites") return compositeList();
   let all = (ALLGLYPHS || []).map(g => GLYPHS[g.name] || {...g, anchors: []});
   if(HIDE_AFFECTED) all = all.filter(g => !GLYPHS[g.name]);
   return all.sort(_bySort);
+}
+
+function compositeList(){
+  return Object.values(COMPOSITES).sort((a,b)=> a.name<b.name?-1:a.name>b.name?1:0);
 }
 
 // A glyph's data for the inspector: computed (with anchors/overlays) if affected,
@@ -534,7 +563,9 @@ function ensureObserver(){
       const holder = e.target.querySelector(".holder");
       if(e.target._glyph && holder && !holder.firstChild){
         holder.classList.remove("ph");
-        holder.appendChild(drawGlyph(e.target._glyph, {small:true}));
+        holder.appendChild(e.target._composite
+          ? drawComposite(e.target._glyph, {small:true})
+          : drawGlyph(e.target._glyph, {small:true}));
       }
     }
   }, {root: $(".gridwrap"), rootMargin: "250px"});
@@ -542,7 +573,9 @@ function ensureObserver(){
 }
 
 function setGridCount(shown, total, filtered){
-  const label = GRID_TAB === "affected" ? "affected" : (HIDE_AFFECTED ? "unaffected" : "all");
+  const label = GRID_TAB === "affected" ? "affected"
+              : GRID_TAB === "composites" ? "composites"
+              : (HIDE_AFFECTED ? "unaffected" : "all");
   $("#count").textContent = `${label} · ` + (filtered ? `${shown}/${total}` : total);
 }
 
@@ -554,11 +587,17 @@ function renderGrid(){
   const f = GLYPH_FILTER.toLowerCase();
   const shown = f ? all.filter(g => g.name.toLowerCase().includes(f)) : all;
   setGridCount(shown.length, all.length, !!f);
+  const isComp = GRID_TAB === "composites";
   for(const g of shown){
     const card = document.createElement("div"); card.className = "thumb" + (g.name===SELECTED?" sel":"");
-    card._glyph = g;
+    card._glyph = g; card._composite = isComp;
     const holder = document.createElement("div"); holder.className = "holder ph"; card.appendChild(holder);
-    card.insertAdjacentHTML("beforeend", `<div class="cap"><b>${escapeHtml(g.name)}</b><span>${g.anchors.length}</span></div>`);
+    const capRight = isComp
+      ? ((g.problems && g.problems.length)
+          ? `<span class="warn" title="${escapeHtml(g.problems.join('; '))}">⚠</span>`
+          : `<span>${g.components.length}</span>`)
+      : `<span>${g.anchors.length}</span>`;
+    card.insertAdjacentHTML("beforeend", `<div class="cap"><b>${escapeHtml(g.name)}</b>${capRight}</div>`);
     card.addEventListener("click", ()=>{ SELECTED=g.name; HL_ANCHOR=null; renderGrid(); renderInspector(); });
     grid.appendChild(card);
     obs.observe(card);
@@ -619,8 +658,57 @@ function drawGlyph(g, {small=false}={}){
   return svg;
 }
 
+// A GlyphConstruction-assembled composite: each component outline drawn under its
+// own transform (base solid, marks tinted), plus a ring at each anchor-join — the
+// point where a mark's `_anchor` snapped onto the base's `anchor`.
+function drawComposite(c, {small=false}={}){
+  const pad = small?60:110;
+  const ex = extent({advance:c.advance||0, bounds:c.bounds, anchors:[]});
+  const x0=ex.x0-pad, W=(ex.x1-ex.x0)+2*pad, minY=-(ex.y1+pad), H=(ex.y1-ex.y0)+2*pad;
+  const svg = el("svg", {viewBox:`${x0} ${minY} ${W} ${H}`, preserveAspectRatio:"xMidYMid meet"});
+  if(!small){
+    const order=[["descender","descender"],["baseline","baseline"],["xHeight","x-height"],["capHeight","cap-height"],["ascender","ascender"]];
+    for(const [key,lbl] of order){ const h = META.metrics[key]; if(h===undefined) continue;
+      svg.appendChild(el("line",{class:"metric", x1:x0, y1:-h, x2:x0+W, y2:-h}));
+      const t=el("text",{class:"metric-lbl", x:x0+6, y:-h-4}); t.textContent=lbl; svg.appendChild(t); }
+  }
+  const flip = el("g",{transform:"matrix(1 0 0 -1 0 0)"});
+  (c.components||[]).forEach((comp, i) => {
+    const grp = el("g",{transform:`matrix(${comp.transform.join(" ")})`});
+    grp.appendChild(el("path",{class: i===0 ? "ink" : "comp-mark", d: comp.path}));
+    flip.appendChild(grp);
+  });
+  svg.appendChild(flip);
+  if(!small){
+    for(const j of (c.joins||[])){
+      const grp = el("g",{class:"join-g"});
+      grp.appendChild(el("circle",{cx:j.x, cy:-j.y, r:14}));
+      grp.appendChild(el("circle",{class:"dot", cx:j.x, cy:-j.y, r:4}));
+      const t=el("text",{x:j.x+12, y:-j.y-10}); t.textContent=j.anchor; grp.appendChild(t);
+      svg.appendChild(grp);
+    }
+  }
+  return svg;
+}
+
+function renderCompositeInspector(canvas, read){
+  const c = SELECTED && COMPOSITES[SELECTED];
+  if(!c){ canvas.innerHTML='<div class="empty">no composite selected</div>'; read.innerHTML=""; return; }
+  canvas.innerHTML=""; canvas.appendChild(drawComposite(c,{small:false}));
+  let html = `<h3>${escapeHtml(c.name)}</h3><div class="sub">adv ${Math.round(c.advance)} · `+
+    `${c.components.length} component${c.components.length!==1?"s":""}</div>`;
+  if(c.problems && c.problems.length)
+    html += `<div class="comp-problems">`+ c.problems.map(p=>"⚠ "+escapeHtml(p)).join("<br>") +`</div>`;
+  html += c.components.map((comp,i)=>
+    `<div class="comp-row"><span class="b">${escapeHtml(comp.base)}</span>${i===0?' <span class="j">base</span>':''}</div>`).join("");
+  html += (c.joins||[]).map(j=>
+    `<div class="comp-row">↦ <span class="j">${escapeHtml(j.anchor)}</span> at ${Math.round(j.x)}, ${Math.round(j.y)}</div>`).join("");
+  read.innerHTML = html;
+}
+
 function renderInspector(){
   const canvas=$("#canvas"), read=$("#readout");
+  if(GRID_TAB === "composites"){ renderCompositeInspector(canvas, read); return; }
   const g = SELECTED && glyphData(SELECTED);
   if(!g){ canvas.innerHTML='<div class="empty">no glyph selected</div>'; read.innerHTML=""; return; }
   canvas.innerHTML=""; canvas.appendChild(drawGlyph(g,{small:false}));
