@@ -103,7 +103,7 @@ function addAnchorLayer(name, text, {activate = false} = {}){
 
 function setupEditors(){
   // Construction (GlyphConstruction) editor — single, no tabs.
-  gcEd = makeEditor($("#edGC"), () => { persistGC(); scheduleCompute(); }, () => activeEd = gcEd);
+  gcEd = makeEditor($("#edGC"), () => { persistGC(); scheduleCompute(); }, () => activeEd = gcEd, highlightGC);
   let savedGC = null; try { savedGC = localStorage.getItem("af.gc"); } catch(_){}
   gcEd.setValue(savedGC != null ? savedGC : (META.gc || ""));
 
@@ -247,7 +247,35 @@ function highlightLine(line){
   return out || "&nbsp;";
 }
 
-function makeEditor(host, onChange, onFocus){
+// GlyphConstruction syntax (a different language from the anchor DSL):
+//   name = base + mark@anchor [| 0xNN] [^metrics]   ·   $var / {var}   ·   ?skip-if-exists
+function highlightGC(line){
+  let out = "";
+  const hash = line.indexOf("#");
+  let code = line, tail = "";
+  if(hash >= 0){ code = line.slice(0, hash); tail = line.slice(hash); }
+  const re = /(\$\w+|\{\w+\})|(@[\w.]+)|(\?)|(\||\^)|(0x[0-9A-Fa-f]+|\d+)|([A-Za-z_][\w.]*)|(=|\+)/g;
+  let m, last = 0;
+  const put = (cls, txt) => { out += cls ? `<span class="t-${cls}">${escapeHtml(txt)}</span>` : escapeHtml(txt); };
+  while((m = re.exec(code))){
+    if(m.index > last) put(null, code.slice(last, m.index));
+    const t = m[0];
+    if(m[1]) put("var", t);                        // $var / {var}
+    else if(m[2]) put("label", t);                 // @anchor
+    else if(m[3]) put("dir", t);                    // ? — skip if the glyph exists
+    else if(m[4]) put("op", t);                     // | unicode · ^ metrics
+    else if(m[5]) put(t.startsWith("0x") ? "uni" : "num", t);
+    else if(m[6]) put(null, t);                     // a glyph name → default ink
+    else if(m[7]) put("op", t);                     // = · +
+    else put(null, t);
+    last = re.lastIndex;
+  }
+  if(last < code.length) put(null, code.slice(last));
+  if(tail) put("comment", tail);
+  return out || "&nbsp;";
+}
+
+function makeEditor(host, onChange, onFocus, highlight = highlightLine){
   host.innerHTML =
     '<div class="ed"><div class="ed-gutter"><div class="gnums"></div></div>'+
     '<div class="ed-body"><pre class="ed-hl" aria-hidden="true"></pre>'+
@@ -267,7 +295,7 @@ function makeEditor(host, onChange, onFocus){
 
   function refresh(){
     const lines = ta.value.split("\n");
-    hl.innerHTML = lines.map((l,i) => `<div class="ln${errLines.has(i+1)?" err":""}">${highlightLine(l)}</div>`).join("");
+    hl.innerHTML = lines.map((l,i) => `<div class="ln${errLines.has(i+1)?" err":""}">${highlight(l)}</div>`).join("");
     gnums.innerHTML = lines.map((_,i) => `<div class="gl${errLines.has(i+1)?" err":""}">${i+1}</div>`).join("");
     sync();
   }
