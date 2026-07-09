@@ -636,8 +636,11 @@ function stableViewBox(midX, canvasEl){
   const m = META.metrics;
   const asc = (m.ascender != null ? m.ascender : Math.round(META.unitsPerEm*0.8));
   const desc = (m.descender != null ? m.descender : -Math.round(META.unitsPerEm*0.2));
-  const padY = (asc - desc) * 0.16;
-  const yc = (asc + desc)/2, hy = (asc - desc) + 2*padY;
+  // Asymmetric headroom: extra room on top so a mark stacked above the ascender
+  // (an accented composite) and the anchor labels aren't clipped by the top edge.
+  const span = asc - desc;
+  const yTop = asc + span * 0.34, yBot = desc - span * 0.14;
+  const yc = (yTop + yBot)/2, hy = yTop - yBot;
   const cw = (canvasEl && canvasEl.clientWidth) || 600;
   const ch = (canvasEl && canvasEl.clientHeight) || 600;
   const wx = hy * (cw/ch);
