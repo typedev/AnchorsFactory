@@ -401,6 +401,7 @@ function setupSplitters(){
   const defs = {
     edw:   {sel:"main",       axis:"x", sign: 1, min:280, def:400, max:()=>innerWidth*0.7},
     consh: {sel:".editor",    axis:"y", sign:-1, min: 80, def:180, max:()=>$(".editor").clientHeight*0.6},
+    outh:  {sel:".editor",    axis:"y", sign:-1, min: 44, def:150, max:()=>$(".editor").clientHeight*0.6},
     gridh: {sel:".stage",     axis:"y", sign: 1, min: 90, def:200, max:()=>$(".stage").clientHeight*0.72},
     row:   {sel:".inspector", axis:"x", sign:-1, min:180, def:260, max:()=>460},
   };

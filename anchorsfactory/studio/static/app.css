@@ -57,9 +57,13 @@ main{display:grid;grid-template-columns:var(--edw,380px) 6px minmax(0,1fr);min-h
 /* ---- editor column: ANCHORS (tabbed layers) / CONSTRUCTION / OUTPUT ---- */
 .editor{
   position:relative;display:grid;
-  grid-template-rows:minmax(80px,1fr) 6px var(--consh,180px) auto;   /* anchors / split / construction / output */
+  /* anchors / split / construction / split / output (output resizable when open) */
+  grid-template-rows:minmax(80px,1fr) 6px var(--consh,180px) 6px var(--outh,150px);
   min-height:0;background:var(--panel);border-right:1px solid var(--line);
 }
+/* output asleep → it shrinks to just its bar and its splitter is hidden */
+.editor:has(.output:not(.open)){grid-template-rows:minmax(80px,1fr) 6px var(--consh,180px) 0 auto}
+.editor:has(.output:not(.open)) .split[data-t="outh"]{visibility:hidden;pointer-events:none}
 .pane{display:flex;flex-direction:column;min-height:0;min-width:0}
 .pane-head{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--line);background:var(--panel)}
 .ln-name{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
@@ -145,7 +149,7 @@ button.icon{padding:5px 8px;line-height:1;font-size:13px}
 .out-count{font-family:var(--mono);font-size:9.5px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:1px 6px;min-width:14px;text-align:center}
 .out-count:empty{display:none}
 .out-count.bad{color:var(--err);border-color:color-mix(in srgb,var(--err) 45%,transparent)}
-.problems{max-height:180px;overflow:auto;font-family:var(--mono);font-size:11.5px;padding:0}
+.problems{flex:1;min-height:0;overflow:auto;font-family:var(--mono);font-size:11.5px;padding:0}
 .problems .row{padding:7px 12px;border-bottom:1px solid var(--line);display:flex;gap:8px}
 .problems .row.err{color:var(--err)}
 .problems .row.warn{color:var(--stem)}
