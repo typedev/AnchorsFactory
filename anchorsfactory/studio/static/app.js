@@ -9,7 +9,9 @@ let SHOW_UNUSED = false;               // "anchored" tab: also reveal (dimmed) g
 let ALLGLYPHS = null;                  // [{name,order,advance,bounds,path}] for the "all" tab (lazy)
 let ALLMAP = {};                       // name -> all-glyph geometry entry
 let COMPOSITES = {};                   // name -> GlyphConstruction-assembled composite (for the "composites" tab)
-let baseEd = null, customEd = null, gcEd = null, activeEd = null, customOpen = false;
+let anchorLayers = [];                 // [{name, host, ed}] bottom→top; [0] is the "default" layer
+let activeLayer = 0;                   // which anchor layer the tab strip is editing
+let gcEd = null, activeEd = null;
 let RENDER_MODE = "fill";              // inspector outline style: "fill" | "outline" (grid is always filled)
 let ZOOM = 1;                          // inspector preview zoom (grid thumbnails ignore it)
 const lastPos = {};                          // glyph -> {anchor -> {x,y}} for tweening
@@ -19,8 +21,8 @@ const el = (n, a={}) => { const e=document.createElementNS(SVGNS,n); for(const k
 const round = v => Math.round(v*10)/10;
 const escapeHtml = s => String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const debounce = (fn, ms) => { let t; return (...a)=>{clearTimeout(t); t=setTimeout(()=>fn(...a), ms);}; };
-const allRulesText = () => (baseEd ? baseEd.getValue() : "") + "\n" + (customEd ? customEd.getValue() : "");
-const editorForLayer = i => (i === 0 ? baseEd : customEd);
+const allRulesText = () => anchorLayers.map(l => l.ed.getValue()).join("\n");
+const editorForLayer = i => (anchorLayers[i] ? anchorLayers[i].ed : null);
 
 async function boot(){
   META = await (await fetch("/api/state")).json();
@@ -45,71 +47,103 @@ function setFontMeta(){
 }
 
 /* ===================================================================== *
- *  Rule layers: a base preset (editable) + a custom layer on top.
- *  Effective rules = base then custom (custom overrides).
+ *  Anchor rules: tabbed *layers* that merge bottom→top ([0] = "default").
+ *  The active tab is only which layer you edit; compute always sends them all.
  * ===================================================================== */
 const persist = debounce(() => {
   try {
-    localStorage.setItem("af.rules", JSON.stringify(
-      {preset: $("#preset").value, base: baseEd.getValue(), custom: customEd.getValue(), customOpen}));
+    localStorage.setItem("af.rules", JSON.stringify({
+      preset: $("#preset").value,
+      layers: anchorLayers.map(l => ({name: l.name, text: l.ed.getValue()})),
+      active: activeLayer,
+    }));
   } catch(_){}
 }, 400);
-
-// Custom layer is collapsible: closed → work with the base only.
-function setCustomOpen(open){ customOpen = open; $(".editor").classList.toggle("solo-base", !open); persist(); }
 
 const persistGC = debounce(() => {
   try { localStorage.setItem("af.gc", gcEd.getValue()); } catch(_){}
 }, 400);
 
-function setupEditors(){
-  const onChange = () => { persist(); scheduleCompute(); };
-  baseEd = makeEditor($("#edBase"), onChange, () => activeEd = baseEd);
-  customEd = makeEditor($("#edCustom"), onChange, () => activeEd = customEd);
-  gcEd = makeEditor($("#edGC"), () => { persistGC(); scheduleCompute(); }, () => activeEd = gcEd);
-  activeEd = customEd;
+function renderAnchorTabs(){
+  const strip = $("#anchorTabs"); strip.innerHTML = "";
+  anchorLayers.forEach((l, idx) => {
+    const b = document.createElement("button");
+    b.className = "ltab" + (idx === activeLayer ? " sel" : "");
+    b.textContent = l.name;
+    b.title = idx === 0 ? "default layer (bottom of the merge)" : `layer: ${l.name}`;
+    b.addEventListener("click", () => setActiveLayer(idx));
+    strip.appendChild(b);
+  });
+  const add = document.createElement("button");
+  add.className = "ltab add"; add.textContent = "+ file";
+  add.title = "load another .anchors file as a layer on top";
+  add.addEventListener("click", () => $("#rulesfile").click());
+  strip.appendChild(add);
+}
 
-  // GC constructions persist under their own key; seed from the server default.
+function setActiveLayer(i){
+  activeLayer = Math.max(0, Math.min(anchorLayers.length - 1, i));
+  anchorLayers.forEach((l, idx) => l.host.classList.toggle("active", idx === activeLayer));
+  activeEd = anchorLayers[activeLayer].ed;
+  renderAnchorTabs();
+}
+
+function addAnchorLayer(name, text, {activate = false} = {}){
+  const host = document.createElement("div");
+  host.className = "lhost";
+  $("#anchorEditors").appendChild(host);
+  const ed = makeEditor(host, () => { persist(); scheduleCompute(); }, () => { activeEd = ed; });
+  ed.setValue(text || "");
+  const idx = anchorLayers.push({name, host, ed}) - 1;
+  if(activate) setActiveLayer(idx); else renderAnchorTabs();
+  return idx;
+}
+
+function setupEditors(){
+  // Construction (GlyphConstruction) editor — single, no tabs.
+  gcEd = makeEditor($("#edGC"), () => { persistGC(); scheduleCompute(); }, () => activeEd = gcEd);
   let savedGC = null; try { savedGC = localStorage.getItem("af.gc"); } catch(_){}
   gcEd.setValue(savedGC != null ? savedGC : (META.gc || ""));
 
-  let saved = null;
-  try { saved = JSON.parse(localStorage.getItem("af.rules") || "null"); } catch(_){}
-  if(saved){
-    $("#preset").value = saved.preset || META.presets[0] || "";
-    // With --save on, the file (META.rules) is authoritative for the base, so a
-    // reopened session resumes from disk in any browser (not a stale localStorage).
-    baseEd.setValue(META.save ? META.rules : (saved.base ?? META.rules));
-    customEd.setValue(saved.custom ?? "");
-    customOpen = !!saved.customOpen;
+  // Anchor layers — restore the saved stack, or seed one "default" layer from the preset.
+  let saved = null; try { saved = JSON.parse(localStorage.getItem("af.rules") || "null"); } catch(_){}
+  if(saved && Array.isArray(saved.layers) && saved.layers.length){
+    $("#preset").value = saved.preset || presetOf(META.rules) || META.presets[0] || "";
+    saved.layers.forEach((l, idx) => addAnchorLayer(
+      l.name || (idx === 0 ? "default" : `layer ${idx}`),
+      // with --save on, the default (bottom) layer is authoritative from disk
+      (idx === 0 && META.save) ? META.rules : (l.text || "")));
+    setActiveLayer(Number.isInteger(saved.active) ? saved.active : 0);
   } else {
     $("#preset").value = presetOf(META.rules) || META.presets[0] || "";
-    baseEd.setValue(META.rules);
-    customEd.setValue("# custom rules — layered over the base below, and win\n");
-    customOpen = false;                            // start with just the base
+    addAnchorLayer("default", META.rules);
+    setActiveLayer(0);
   }
-  $(".editor").classList.toggle("solo-base", !customOpen);
 
+  // Preset dropdown re-seeds the default (bottom) layer.
   $("#preset").addEventListener("change", e => {
     const t = META.presetTexts[e.target.value];
-    if(t !== undefined){ baseEd.setValue(t); persist(); compute(); }
+    if(t !== undefined && anchorLayers[0]){ anchorLayers[0].ed.setValue(t); persist(); compute(); }
   });
-  document.querySelectorAll(".layer-head [data-a]").forEach(btn => {
+
+  // Pane-head buttons (anchors + construction).
+  document.querySelectorAll(".pane-head [data-a]").forEach(btn => {
     btn.addEventListener("click", () => {
       const a = btn.dataset.a;
-      if(a === "find"){ activeEd = customEd; openFind(); }
+      if(a === "find"){ activeEd = anchorLayers[activeLayer].ed; openFind(); }
       else if(a === "find-gc"){ activeEd = gcEd; openFind(); }
-      else if(a === "open"){ $("#rulesfile").click(); }
-      else if(a === "dl-custom") downloadText(customEd.getValue(), "custom.anchors");
-      else if(a === "dl-base") downloadText(baseEd.getValue(), "base.anchors");
+      else if(a === "dl-anchor"){ const l = anchorLayers[activeLayer]; downloadText(l.ed.getValue(), (l.name || "anchors") + ".anchors"); }
       else if(a === "dl-gc") downloadText(gcEd.getValue(), "constructions.glyphConstruction");
-      else if(a === "add-custom"){ setCustomOpen(true); customEd.focus(); compute(); }
-      else if(a === "close"){ setCustomOpen(false); if(activeEd === customEd) activeEd = baseEd; compute(); }
     });
   });
+
+  // + file / open → append a .anchors file as a new layer on top.
   $("#rulesfile").addEventListener("change", async e => {
     const f = e.target.files[0];
-    if(f){ setCustomOpen(true); customEd.setValue(await f.text()); persist(); SELECTED = null; HL_ANCHOR = null; compute(); }
+    if(f){
+      addAnchorLayer(f.name.replace(/\.(anchors|af|dsl|txt)$/i, ""), await f.text(), {activate: true});
+      persist(); SELECTED = null; HL_ANCHOR = null; compute();
+    }
     e.target.value = "";
   });
 }
@@ -366,8 +400,7 @@ function setupTheme(){
 function setupSplitters(){
   const defs = {
     edw:   {sel:"main",       axis:"x", sign: 1, min:280, def:400, max:()=>innerWidth*0.7},
-    gch:   {sel:".editor",    axis:"y", sign: 1, min: 44, def:104, max:()=>$(".editor").clientHeight*0.5},
-    baseh: {sel:".editor",    axis:"y", sign:-1, min: 80, def:220, max:()=>$(".editor").clientHeight*0.7},
+    consh: {sel:".editor",    axis:"y", sign:-1, min: 80, def:180, max:()=>$(".editor").clientHeight*0.6},
     gridh: {sel:".stage",     axis:"y", sign: 1, min: 90, def:200, max:()=>$(".stage").clientHeight*0.72},
     row:   {sel:".inspector", axis:"x", sign:-1, min:180, def:260, max:()=>460},
   };
@@ -407,8 +440,10 @@ function setupFontDrop(){
     if(!roots.length) return;
     const collected=[];
     for(const r of roots) await walkEntry(r, "", collected);
-    if(collected.length === 1 && /\.(anchors|af|dsl|txt)$/i.test(collected[0].path)){   // a rules file → custom layer
-      setCustomOpen(true); customEd.setValue(await collected[0].file.text()); persist(); SELECTED = null; HL_ANCHOR = null; compute(); return;
+    if(collected.length === 1 && /\.(anchors|af|dsl|txt)$/i.test(collected[0].path)){   // a rules file → a new anchor layer
+      const nm = collected[0].path.replace(/.*\//, "").replace(/\.(anchors|af|dsl|txt)$/i, "");
+      addAnchorLayer(nm, await collected[0].file.text(), {activate: true});
+      persist(); SELECTED = null; HL_ANCHOR = null; compute(); return;
     }
     await sendFont(roots[0].name, collected);
   });
@@ -460,9 +495,7 @@ function downloadText(text, filename){
  * ===================================================================== */
 async function compute(){
   const status = $("#status"); status.className = "pill"; status.textContent = "computing…";
-  const layers = customOpen
-    ? [{name:"base", text: baseEd.getValue()}, {name:"custom", text: customEd.getValue()}]
-    : [{name:"base", text: baseEd.getValue()}];
+  const layers = anchorLayers.map(l => ({name: l.name, text: l.ed.getValue()}));
   const gc = gcEd ? gcEd.getValue() : "";
   try {
     const res = await fetch("/api/compute", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({layers, gc})});
@@ -497,18 +530,18 @@ async function compute(){
                                : `${VIEW.problems.length} problem${VIEW.problems.length>1?"s":""}`;
 }
 
-// "base: line 3: ..." / "custom: line 3: ..." / "line 3: ..." → {layer index, line}
+// "<layer>: line 3: ..." / "line 3: ..." → {layer index, line} (layer by name)
 function problemLoc(p){
-  let m = /^(base|custom): line (\d+):/.exec(p);
-  if(m) return { layer: m[1]==="base" ? 0 : 1, line: +m[2] };
+  let m = /^([^:]+): line (\d+):/.exec(p);
+  if(m){ const idx = anchorLayers.findIndex(l => l.name === m[1]); if(idx >= 0) return {layer: idx, line: +m[2]}; }
   m = /^line (\d+):/.exec(p);
-  return m ? { layer: 1, line: +m[1] } : null;
+  return m ? {layer: 0, line: +m[1]} : null;
 }
 
 function markErrorLines(){
-  const sets = [new Set(), new Set()];
-  for(const p of VIEW.problems||[]){ const loc = problemLoc(p); if(loc) sets[loc.layer].add(loc.line); }
-  baseEd.markErrors(sets[0]); customEd.markErrors(sets[1]);
+  const sets = anchorLayers.map(() => new Set());
+  for(const p of VIEW.problems||[]){ const loc = problemLoc(p); if(loc && sets[loc.layer]) sets[loc.layer].add(loc.line); }
+  anchorLayers.forEach((l, idx) => l.ed.markErrors(sets[idx]));
 }
 
 function renderProblems(){

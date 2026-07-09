@@ -62,7 +62,7 @@ def test_invalid_rule_reports_in_output_without_500(page):
     page.on("response",
             lambda r: statuses.append(r.status) if "/api/compute" in r.url else None)
 
-    ta = page.locator("#edBase textarea")
+    ta = page.locator("#anchorEditors .lhost.active textarea")
     ta.click()
     with page.expect_response(lambda r: "/api/compute" in r.url, timeout=8000):
         ta.fill("H = @missing")
@@ -79,7 +79,7 @@ def test_output_sleeps_when_clean_and_wakes_on_problems(page):
     _set_rules(page, "H = top (box.center capHeight)")
     assert "open" not in (page.get_attribute("#output", "class") or "")
     # A broken rule → it auto-opens, reddens, and shows the problem.
-    ta = page.locator("#edBase textarea"); ta.click()
+    ta = page.locator("#anchorEditors .lhost.active textarea"); ta.click()
     with page.expect_response(lambda r: "/api/compute" in r.url, timeout=8000):
         ta.fill("H = @missing")
     page.wait_for_timeout(300)
@@ -89,7 +89,7 @@ def test_output_sleeps_when_clean_and_wakes_on_problems(page):
 
 
 def _set_rules(page, text):
-    ta = page.locator("#edBase textarea"); ta.click()
+    ta = page.locator("#anchorEditors .lhost.active textarea"); ta.click()
     with page.expect_response(lambda r: "/api/compute" in r.url, timeout=8000):
         ta.fill(text)
     page.wait_for_timeout(250)

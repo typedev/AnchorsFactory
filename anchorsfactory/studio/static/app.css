@@ -54,26 +54,30 @@ main{display:grid;grid-template-columns:var(--edw,380px) 6px minmax(0,1fr);min-h
 .split.col{cursor:col-resize} .split.col::after{inset:-3px -4px}
 .split.row{cursor:row-resize} .split.row::after{inset:-4px -3px}
 .split:hover,.split.drag{background:var(--anchor)}
-/* ---- editor pane: a stack of rule layers (custom over base) ---- */
+/* ---- editor column: ANCHORS (tabbed layers) / CONSTRUCTION / OUTPUT ---- */
 .editor{
   position:relative;display:grid;
-  grid-template-rows:var(--gch,104px) 6px minmax(60px,1fr) 6px var(--baseh,220px) auto;
+  grid-template-rows:minmax(80px,1fr) 6px var(--consh,180px) auto;   /* anchors / split / construction / output */
   min-height:0;background:var(--panel);border-right:1px solid var(--line);
 }
-.layer{display:flex;flex-direction:column;min-height:0;min-width:0}
-.layer-head{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--line);background:var(--panel)}
+.pane{display:flex;flex-direction:column;min-height:0;min-width:0}
+.pane-head{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--line);background:var(--panel)}
 .ln-name{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
-#lyCustom .ln-name{color:var(--anchor)}
-#lyGC .ln-name{color:var(--gref)}
+#paneAnchors .ln-name{color:var(--anchor)}
+.ln-name.gc{color:var(--gref)}
 .ln-badge{font-family:var(--mono);font-size:9.5px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:1px 6px}
-.layer-ed{flex:1;min-height:0;position:relative}
 .mini-btn{padding:3px 7px;font-size:11px}
-/* custom layer closed → base takes the whole column (panes keep their grid slots) */
-#addcustom{display:none}
-.editor.solo-base{grid-template-rows:var(--gch,104px) 6px 0 0 minmax(0,1fr) auto}
-.editor.solo-base #lyCustom{overflow:hidden}
-.editor.solo-base .split[data-t="baseh"]{visibility:hidden;pointer-events:none}
-.editor.solo-base #addcustom{display:inline-block}
+/* anchor-layer tabs (merge bottom→top; the active tab is what you edit) */
+.tabstrip{display:flex;gap:4px;padding:6px 10px 0;overflow-x:auto;flex:none}
+.ltab{font-family:var(--mono);font-size:11px;padding:3px 10px;border:1px solid var(--line);border-bottom:none;
+  border-radius:6px 6px 0 0;background:transparent;color:var(--muted);white-space:nowrap;cursor:pointer}
+.ltab:hover{color:var(--text)}
+.ltab.sel{color:var(--ink);background:var(--canvas);border-color:var(--line)}
+.ltab.add{border-style:dashed}
+.pane-body{flex:1;min-height:0;position:relative;border-top:1px solid var(--line)}
+.lhost{position:absolute;inset:0;display:none}
+.lhost.active{display:block}
+.layer-ed{flex:1;min-height:0;position:relative}   /* construction editor host */
 select,button{
   font-family:var(--mono);font-size:12px;color:var(--text);
   background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 9px;cursor:pointer;
