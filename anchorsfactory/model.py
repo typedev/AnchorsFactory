@@ -520,6 +520,38 @@ class Category:
 Selector = Union[GlyphName, Unicode, UnicodeRange, Glob, Category]
 
 
+@dataclass(frozen=True)
+class RuleSource:
+    """Where a rule came from, for editor provenance (issue #3).
+
+    ``origin`` is an id chosen by whoever built the document — a preset ident
+    (``preset:default``), an absolute file path, or a studio layer index — so a
+    UI can route a rule back to the right editor; ``None`` when unknown (the
+    legacy ``.txt`` parser tracks no lines). ``line`` is the 1-based line within
+    that origin. ``inherited`` marks a rule pulled in from a base via
+    ``!extends`` — informational only (the consumer decides whether inherited
+    rules are editable; it is not a read-only lock)."""
+    origin: Optional[str] = None
+    line: Optional[int] = None
+    inherited: bool = False
+
+
+@dataclass(frozen=True)
+class Rule:
+    """One selector application: ``op`` combines ``items`` with a glyph's
+    accumulator on every match of ``selector``.
+
+    ``source`` carries editor provenance (:class:`RuleSource`) and is excluded
+    from equality (``compare=False``) so serializer round-trips compare only
+    semantics (``selector``/``op``/``items``). ``items`` is a list of
+    :data:`Item`\\ s for ``REPLACE``/``ADD`` or names/labels to drop for
+    ``REMOVE`` (mirrors the former ``(selector, op, items)`` tuple)."""
+    selector: "Selector"
+    op: Op
+    items: list
+    source: Optional[RuleSource] = field(default=None, compare=False)
+
+
 @dataclass
 class Document:
     """A parsed rule file: reusable labels + ordered selector applications.
@@ -533,17 +565,12 @@ class Document:
     # YStrategy nodes that may themselves contain VarRefs. Resolved late, at
     # apply time, against the (possibly merged) table — last definition wins.
     variables: dict[str, object] = field(default_factory=dict)
-    rules: list[tuple[Selector, Op, list]] = field(default_factory=list)
+    rules: list[Rule] = field(default_factory=list)
     shift_x: int = 0                          # document-wide X offset (!shiftx)
     # ordered !suffixes directives, each (Op, kind, payload); resolve_suffixes()
     # replays them into a SuffixSpec. Empty = just the unsuffixed base glyph.
     suffix_ops: list = field(default_factory=list)
     extends: list[str] = field(default_factory=list)  # base rules to inherit (!extends)
-    # 1-based source line for each rule, parallel to `rules` — set by the DSL
-    # parser for editor / provenance tooling (which rule placed an anchor). Empty
-    # from the legacy parser and after !extends merges; consumers must treat it as
-    # optional (degrade to "no line" when a rule's index is out of range).
-    sources: list[int] = field(default_factory=list)
     # !propagate mode: "none" (default) | "composites" | "all". When not "none",
     # each covered glyph's accumulator is *seeded* with anchors inherited from its
     # components (see apply.propagate_seed) before the first rule runs.

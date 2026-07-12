@@ -215,11 +215,13 @@ def test_build_view_provenance_across_add(font):
     assert lines == {"top": 1, "hook": 2}
 
 
-def test_accumulate_provenance_indices(font):
+def test_accumulate_provenance_tags_rules(font):
     from anchorsfactory.apply import accumulate_provenance
     doc = parse_dsl(["a = top (box.center capHeight)", "a += tail (box.left 0)"])
     prov = accumulate_provenance(doc, "a", [0x61])
-    assert [(s.name, idx) for s, idx in prov] == [("top", 0), ("tail", 1)]
+    # each surviving spec is tagged with the Rule that placed it (carrying its source line)
+    assert [(s.name, rule.source.line) for s, rule in prov] == [("top", 1), ("tail", 2)]
+    assert [rule.selector for _, rule in prov] == [doc.rules[0].selector, doc.rules[1].selector]
 
 
 def test_build_view_orders_glyphs_by_font_glyphorder(font):

@@ -18,7 +18,7 @@ from ..dsl import DSLError, parse_dsl
 from ..geometry import explain
 from ..model import Document, resolve_suffixes
 from ..presets import is_preset
-from ..runner import load_document
+from ..runner import _merge, _restamp, load_document
 
 
 def glyph_to_svg_path(glyph) -> str:
@@ -63,10 +63,11 @@ def resolve_stack(layers) -> Document:
 
     Each layer is ``{"name": str, "text": str}``; later layers override earlier
     ones (the accumulation model), so the top layer wins. Each layer is resolved
-    independently (its own ``!extends`` against presets) and its source lines are
-    tagged with the layer's index, so every rule's provenance is ``(layer, line)``
-    — the studio maps that back to the right editor pane. A layer that fails to
-    parse raises, prefixed with its name.
+    independently (its own ``!extends`` against presets), then every rule in it is
+    re-stamped with the layer's index as its ``RuleSource.origin`` — the studio
+    maps that index back to the right editor pane (line stays each rule's own; a
+    preset-inherited rule keeps ``inherited=True``). A layer that fails to parse
+    raises, prefixed with its name.
     """
     merged = Document()
     for i, layer in enumerate(layers):
@@ -74,12 +75,11 @@ def resolve_stack(layers) -> Document:
             doc = resolve_document(layer.get("text", ""))
         except ValueError as exc:
             raise DSLError(f"{layer.get('name') or f'layer {i}'}: {exc}")
-        src = list(doc.sources) + [None] * (len(doc.rules) - len(doc.sources))
+        doc = _restamp(doc, origin=str(i))           # tag every rule with its layer index
         merged = Document(
             labels={**merged.labels, **doc.labels},
             variables={**merged.variables, **doc.variables},
             rules=merged.rules + doc.rules,
-            sources=merged.sources + [(i, s) for s in src],
             shift_x=doc.shift_x or merged.shift_x,
             suffix_ops=merged.suffix_ops + doc.suffix_ops,
             propagate=doc.propagate if doc.propagate != "none" else merged.propagate,
@@ -87,45 +87,30 @@ def resolve_stack(layers) -> Document:
     return merged
 
 
-def _layer(base: Document, child: Document, *, inherited: bool) -> Document:
-    """Layer *child* on *base* (mirrors ``runner._merge``) while keeping source
-    lines aligned with rules. ``inherited=True`` marks the child's rules as coming
-    from a preset, so they carry no editor line (click-to-rule only points at the
-    edited text)."""
-    if inherited:
-        child_src = [None] * len(child.rules)
-    else:
-        child_src = list(child.sources) + [None] * (len(child.rules) - len(child.sources))
-    return Document(
-        labels={**base.labels, **child.labels},
-        variables={**base.variables, **child.variables},
-        rules=base.rules + child.rules,
-        sources=base.sources + child_src,
-        shift_x=child.shift_x or base.shift_x,
-        suffix_ops=base.suffix_ops + child.suffix_ops,
-        propagate=child.propagate if child.propagate != "none" else base.propagate,
-    )
-
-
 def resolve_document(rules_text: str) -> Document:
     """Parse the edited rules and resolve any ``!extends <preset>`` so custom
     rules can inherit a bundled preset (e.g. ``!extends default`` then a few
-    overrides). Bases are merged first, the edited rules on top.
+    overrides). Bases are merged first (marked ``inherited`` by ``runner._merge``),
+    the edited rules on top.
 
     Only **bundled preset names** may be inherited here — the studio has no access
-    to the user's file paths — so a path reference raises a clear error. Edited
-    rules keep their source lines (for click-to-rule); inherited ones do not.
+    to the user's file paths — so a path reference raises a clear error. Inherited
+    rules keep their preset provenance but read as ``inherited=True`` (no jump into
+    the edited text); ``resolve_stack`` then overwrites ``origin`` with the layer
+    index.
     """
     doc = parse_dsl(rules_text.splitlines())
     if not doc.extends:
         return doc
-    base = Document()
     for ref in doc.extends:
         if not is_preset(ref):
             raise DSLError(f"!extends {ref!r}: only a bundled preset name can be "
                            f"inherited in studio (not a file path)")
-        base = _layer(base, load_document(ref), inherited=True)
-    return _layer(base, doc, inherited=False)
+    merged = Document()
+    for ref in doc.extends:                          # bases first (each marked inherited by _merge)...
+        merged = _merge(merged, load_document(ref))
+    return _merge(merged, doc)                        # ...edited rules on top
+
 
 
 def all_glyph_geometry(font) -> list[dict]:
@@ -188,7 +173,6 @@ def build_view(font, rules) -> dict:
 
     sfx = resolve_suffixes(doc.suffix_ops)
     font_names = {g.name for g in font} if sfx.all else None
-    sources = doc.sources                            # rule index -> (layer, line) or None
 
     order_pos: dict[str, int] = {}                   # glyph name -> position in the font's glyphOrder
     try:
@@ -225,9 +209,11 @@ def build_view(font, rules) -> dict:
                     continue
                 if isinstance(rule, Propagated):     # inherited from a component
                     layer, line = None, None
-                else:
-                    origin = sources[rule] if rule < len(sources) else None
-                    layer, line = origin if origin else (None, None)
+                else:                                # a Rule: origin = layer index (set by resolve_stack)
+                    src = rule.source
+                    layer = int(src.origin) if src and src.origin is not None else None
+                    # inherited (preset-extended) rules carry no editor line → no jump
+                    line = None if (src is None or src.inherited) else src.line
                 payload = _anchor_payload(font, target, eff, gname,
                                           diagnostics, doc.shift_x, layer, line)
                 if payload is not None:

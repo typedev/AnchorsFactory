@@ -51,9 +51,9 @@ def test_glyph_rule_mixes_inline_and_label():
         "@bot=bottom:centerpos:0",
         "L=top:left:$H,caron:right:$H,@bot",
     ])
-    sel, op, items = doc.rules[0]
-    assert sel == GlyphName("L")
-    assert items == [
+    rule = doc.rules[0]
+    assert rule.selector == GlyphName("L")
+    assert rule.items == [
         AnchorSpec("top", X(Frame.BOX, HAlign.LEFT), Y("H", VEdge.TOP)),
         AnchorSpec("caron", X(Frame.BOX, HAlign.RIGHT), Y("H", VEdge.TOP)),
         LabelRef("@bot"),                                  # kept as a ref (late-bound)
@@ -65,9 +65,9 @@ def test_unicode_selector_and_label_expansion():
         "@=top:centerpos:$H",
         "&0413=@,@",          # Г, label used twice
     ])
-    sel, op, items = doc.rules[0]
-    assert sel == Unicode(0x0413)
-    assert items == [LabelRef("@"), LabelRef("@")]   # refs, resolved at apply
+    rule = doc.rules[0]
+    assert rule.selector == Unicode(0x0413)
+    assert rule.items == [LabelRef("@"), LabelRef("@")]   # refs, resolved at apply
 
 
 def test_directives_and_comments():
@@ -80,7 +80,7 @@ def test_directives_and_comments():
     ])
     assert resolve_suffixes(doc.suffix_ops).items == ("", ".alt", ".sc")
     assert doc.shift_x == -15
-    assert doc.rules[0][0] == GlyphName("A")
+    assert doc.rules[0].selector == GlyphName("A")
 
 
 @pytest.mark.parametrize("line", [

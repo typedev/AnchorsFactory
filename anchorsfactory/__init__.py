@@ -12,6 +12,7 @@ from .apply import (
     validate_document, ComputeResult, ComputeDiagnostic,
 )
 from .geometry import resolve, explain
+from .model import Rule, RuleSource
 from .parser import parse_document, parse_file, ParseError
 from .dsl import parse_dsl, parse_dsl_file, DSLError
 from .convert import convert_file, render_document, verify_conversion
@@ -28,6 +29,8 @@ __all__ = [
     "explain",
     "accumulate",
     "accumulate_provenance",
+    "Rule",
+    "RuleSource",
     "validate_document",
     "parse_document",
     "parse_file",

@@ -11,13 +11,14 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import replace
 
 from fontParts.world import OpenFont
 
 from . import presets
 from .apply import apply_document
 from .dsl import parse_dsl, parse_dsl_file
-from .model import Document
+from .model import Document, RuleSource
 from .parser import parse_file
 
 log = logging.getLogger(__name__)
@@ -25,8 +26,22 @@ log = logging.getLogger(__name__)
 ANCHORED_SUFFIX = "_anchored.ufo"
 
 
+def _restamp(doc: Document, **changes) -> Document:
+    """Return *doc* with every rule's :class:`RuleSource` updated by *changes*
+    (a fresh ``RuleSource`` is created for rules that carry none)."""
+    rules = [replace(r, source=replace(r.source or RuleSource(), **changes))
+             for r in doc.rules]
+    return replace(doc, rules=rules)
+
+
 def _merge(base: Document, child: Document) -> Document:
-    """Layer *child* on top of *base*: child labels/variables win, rules concatenate."""
+    """Layer *child* on top of *base*: child labels/variables win, rules concatenate.
+
+    *base*'s rules are marked ``inherited=True`` — from *child*'s vantage point
+    they come from a base (via ``!extends``), so an editor can tell inherited
+    rules from the ones authored in the top document. *child*'s rules keep their
+    own provenance (their ``inherited`` flag is left as-is)."""
+    base = _restamp(base, inherited=True)
     return Document(
         labels={**base.labels, **child.labels},
         variables={**base.variables, **child.variables},
@@ -49,6 +64,11 @@ def _load(ref: str, base_dir, seen: tuple) -> Document:
         ident = os.path.abspath(path)
         this_dir = os.path.dirname(ident)
         doc = parse_dsl_file(path) if path.endswith(presets._PATH_EXTS) else parse_file(path)
+
+    # Tag this document's own rules with where they came from, so an editor can
+    # route a rule back to its file/preset (and `_merge` flips base rules to
+    # inherited from there).
+    doc = _restamp(doc, origin=ident)
 
     if ident in seen:
         raise ValueError(f"!extends cycle at {ref}")

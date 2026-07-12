@@ -57,6 +57,31 @@ def test_extends_cycle_detected(tmp_path):
         load_document(str(tmp_path / "a.af"))
 
 
+# --- rule provenance survives !extends (issue #3, Part 1) ------------------ #
+def test_provenance_survives_extends(tmp_path):
+    f = tmp_path / "my.anchors"
+    f.write_text("!extends default\nU+0413 += extra (box.center 0)\n")
+    doc = load_document(str(f))
+    own = [r for r in doc.rules if not r.source.inherited]
+    inherited = [r for r in doc.rules if r.source.inherited]
+    # the one authored rule: origin = this file's abspath, line = 2, not inherited
+    assert len(own) == 1
+    assert own[0].source.origin == str(f.resolve()) and own[0].source.line == 2
+    # every default-preset rule survived, marked inherited, keeping its preset origin+line
+    assert inherited, "expected inherited rules from the default preset"
+    assert all(r.source.origin == "preset:default" for r in inherited)
+    assert all(r.source.line is not None for r in inherited)
+
+
+def test_merge_marks_base_inherited_keeps_child():
+    base = parse_dsl(["@ = top (box.center $H)", "U+0041 = @"])
+    child = parse_dsl(["U+0042 = @"])
+    merged = _merge(base, child)
+    # base rules flip to inherited; the child's rule stays authored
+    assert [r.source.inherited for r in merged.rules] == [True, False]
+    assert [r.source.line for r in merged.rules] == [2, 1]   # base line 2, child line 1
+
+
 def test_merge_child_label_wins():
     base = parse_dsl(["@ = top (box.center $H)", "U+0041 = @"])
     child = parse_dsl(["@ = bottom (box.center 0)"])     # redefine the label

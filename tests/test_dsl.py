@@ -199,18 +199,18 @@ def test_y_tokens(tok, y):
 ])
 def test_selectors(tok, sel):
     doc = parse_dsl(["@a = x (box.center 0)", f"{tok} = @a"])
-    assert doc.rules[0][0] == sel
+    assert doc.rules[0].selector == sel
 
 
 # --- comma-separated selector list (one rule per selector) ----------------- #
 def test_selector_list_expands_to_one_rule_each():
     doc = parse_dsl(["C, O, S += top (box.center $H), bottom (box.center 0)"])
-    sels = [r[0] for r in doc.rules]
+    sels = [r.selector for r in doc.rules]
     assert sels == [GlyphName("C"), GlyphName("O"), GlyphName("S")]
     # every listed glyph gets the same op and items
-    for _, op, items in doc.rules:
-        assert op is Op.ADD
-        assert [s.name for s in items] == ["top", "bottom"]
+    for r in doc.rules:
+        assert r.op is Op.ADD
+        assert [s.name for s in r.items] == ["top", "bottom"]
     # and each resolves to those anchors
     for g in ("C", "O", "S"):
         assert [s.name for s in accumulate(doc, g, [])] == ["top", "bottom"]
@@ -218,12 +218,12 @@ def test_selector_list_expands_to_one_rule_each():
 
 def test_selector_list_mixes_selector_kinds():
     doc = parse_dsl(["@a = x (box.center 0)", "A, U+0421, *.sc = @a"])
-    assert [r[0] for r in doc.rules] == [GlyphName("A"), Unicode(0x0421), Glob("*.sc")]
+    assert [r.selector for r in doc.rules] == [GlyphName("A"), Unicode(0x0421), Glob("*.sc")]
 
 
 def test_selector_list_ignores_blank_and_trailing_commas():
     doc = parse_dsl(["@a = x (box.center 0)", "C , , O, = @a"])
-    assert [r[0] for r in doc.rules] == [GlyphName("C"), GlyphName("O")]
+    assert [r.selector for r in doc.rules] == [GlyphName("C"), GlyphName("O")]
 
 
 def test_empty_left_hand_side_errors():
@@ -284,9 +284,9 @@ def test_labels_mix_and_directives():
     ])
     assert resolve_suffixes(doc.suffix_ops).items == ("", ".alt", ".sc")
     assert doc.shift_x == -15
-    sel, op, items = doc.rules[0]
-    assert sel == GlyphName("L") and op is Op.REPLACE
-    assert items == [LabelRef("@bot"), AnchorSpec("top", X(Frame.BOX, HAlign.LEFT), Y("H"))]
+    rule = doc.rules[0]
+    assert rule.selector == GlyphName("L") and rule.op is Op.REPLACE
+    assert rule.items == [LabelRef("@bot"), AnchorSpec("top", X(Frame.BOX, HAlign.LEFT), Y("H"))]
     assert [s.name for s in accumulate(doc, "L", [])] == ["bottom", "top"]   # resolved
 
 

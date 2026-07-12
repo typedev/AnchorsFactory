@@ -21,7 +21,7 @@ from __future__ import annotations
 from .model import (
     Frame, HAlign, VEdge, Frac,
     X, Abs, Y, AnchorSpec, LabelRef,
-    GlyphName, Unicode, Op, Document,
+    GlyphName, Unicode, Op, Document, Rule, RuleSource,
 )
 
 
@@ -155,7 +155,8 @@ def parse_document(lines) -> Document:
     # Phase 2: keep label references as LabelRefs (resolved late, at apply time);
     # validate they exist now since legacy files are self-contained.
     for selector, items, n in raw_rows:
-        rules.append((selector, Op.REPLACE, _to_items(items, n, labels)))
+        rules.append(Rule(selector, Op.REPLACE, _to_items(items, n, labels),
+                          RuleSource(line=n)))
 
     suffix_ops = [(Op.REPLACE, "list", tuple(sfx_list))] if sfx_list else []
     return Document(labels=labels, rules=rules, shift_x=shift_x, suffix_ops=suffix_ops)

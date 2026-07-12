@@ -18,7 +18,7 @@ from anchorsfactory.apply import (
 )
 from anchorsfactory.model import (
     AnchorSpec, XAbs, YAbs, X, Frame, HAlign, FontMetric,
-    GlyphName, Glob, Op, Document,
+    GlyphName, Glob, Op, Document, Rule,
 )
 
 
@@ -93,15 +93,15 @@ def _written(font):
 def _doc():
     # `a`: two `top` specs in one REPLACE (last wins), then a `+= top` overriding
     # again, plus a distinct `bottom`. `b*`: a single centred top.
-    a_rule = (GlyphName("a"), Op.REPLACE, [
+    a_rule = Rule(GlyphName("a"), Op.REPLACE, [
         AnchorSpec("top", XAbs(100.4), YAbs(700)),
         AnchorSpec("top", XAbs(200.6), YAbs(710)),     # same name → dedup target
         AnchorSpec("bottom", XAbs(100), YAbs(0)),
     ])
-    a_add = (GlyphName("a"), Op.ADD, [
+    a_add = Rule(GlyphName("a"), Op.ADD, [
         AnchorSpec("top", X(Frame.ADVANCE, HAlign.CENTER), YAbs(720)),  # width-dependent X
     ])
-    b_rule = (Glob("b*"), Op.REPLACE, [
+    b_rule = Rule(Glob("b*"), Op.REPLACE, [
         AnchorSpec("center", X(Frame.ADVANCE, HAlign.CENTER), YAbs(250)),
     ])
     return Document(rules=[a_rule, a_add, b_rule], shift_x=10,
@@ -182,7 +182,7 @@ def _all_font():
 
 
 def _all_doc(suffix_ops):
-    rule = (GlyphName("a"), Op.REPLACE, [AnchorSpec("top", XAbs(100), YAbs(700))])
+    rule = Rule(GlyphName("a"), Op.REPLACE, [AnchorSpec("top", XAbs(100), YAbs(700))])
     return Document(rules=[rule], suffix_ops=suffix_ops)
 
 
@@ -207,8 +207,8 @@ def _error_font():
 
 def _error_doc():
     # `a` resolves (absolute coords); `boom` needs glyph.bounds → raises.
-    good = (GlyphName("a"), Op.REPLACE, [AnchorSpec("top", XAbs(100), YAbs(700))])
-    bad = (GlyphName("boom"), Op.REPLACE, [
+    good = Rule(GlyphName("a"), Op.REPLACE, [AnchorSpec("top", XAbs(100), YAbs(700))])
+    bad = Rule(GlyphName("boom"), Op.REPLACE, [
         AnchorSpec("mark", X(Frame.ADVANCE, HAlign.CENTER), YAbs(500)),
     ])
     return Document(rules=[good, bad])
@@ -253,7 +253,7 @@ def _warn_doc():
     # capHeight is absent from the fake font.info -> resolve_y falls back to 0,
     # a *soft* degradation: the anchor is placed but flagged.
     return Document(rules=[
-        (GlyphName("a"), Op.REPLACE, [AnchorSpec("top", XAbs(100), FontMetric("capHeight"))]),
+        Rule(GlyphName("a"), Op.REPLACE, [AnchorSpec("top", XAbs(100), FontMetric("capHeight"))]),
     ])
 
 

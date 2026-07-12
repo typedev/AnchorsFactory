@@ -17,7 +17,7 @@ import re
 from .model import (
     Frame, Axis, HAlign, VEdge, Run, Frac, FONT_METRICS,
     Pos, Centroid, Abs, Y, FontMetric, Sum, Neg, EdgeOffset, AnchorSpec, AnchorRef, LabelRef, VarRef,
-    GlyphName, Unicode, UnicodeRange, Glob, Category, Op, Document,
+    GlyphName, Unicode, UnicodeRange, Glob, Category, Op, Document, Rule, RuleSource,
 )
 
 
@@ -344,7 +344,6 @@ def parse_dsl(lines) -> Document:
     labels: dict[str, list[AnchorSpec]] = {}
     variables: dict[str, object] = {}
     rules: list = []
-    sources: list[int] = []                    # source line per rule (parallel to rules)
     shift_x = 0
     suffix_ops: list = []
     extends: list[str] = []
@@ -444,12 +443,12 @@ def parse_dsl(lines) -> Document:
             selectors = _split_items(lhs)        # `C, O, S` → one rule per selector
             if not selectors:
                 raise DSLError(f"line {n}: empty left-hand side")
-            for sel_tok in selectors:
-                rules.append((_parse_selector(sel_tok), op, items))
-                sources.append(n)              # every selector on this line shares line n
+            for sel_tok in selectors:            # `C, O, S` → one rule per selector, all on line n
+                rules.append(Rule(_parse_selector(sel_tok), op, items,
+                                  RuleSource(line=n)))
 
     return Document(labels=labels, variables=variables, rules=rules,
-                    sources=sources, shift_x=shift_x, suffix_ops=suffix_ops,
+                    shift_x=shift_x, suffix_ops=suffix_ops,
                     extends=extends, propagate=propagate)
 
 

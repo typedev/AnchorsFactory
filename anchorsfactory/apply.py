@@ -207,7 +207,8 @@ def validate_document(doc: Document) -> list[str]:
         for it in items:
             if isinstance(it, LabelRef) and it.name not in doc.labels:
                 problems.append(f"label {lname}: undefined label {it.name}")
-    for sel, op, items in doc.rules:
+    for rule in doc.rules:
+        sel, items = rule.selector, rule.items
         for it in items:
             if isinstance(it, LabelRef) and it.name not in doc.labels:
                 problems.append(f"rule {sel}: undefined label {it.name}")
@@ -221,7 +222,8 @@ def validate_document(doc: Document) -> list[str]:
     # anchors that name a variable directly). Skipped if labels are already
     # broken, since expanding them would just re-raise what we reported above.
     if not problems:
-        for sel, op, items in doc.rules:
+        for rule in doc.rules:
+            sel, op, items = rule.selector, rule.op, rule.items
             if op is Op.REMOVE:
                 continue
             try:
@@ -247,7 +249,8 @@ def accumulate(doc: Document, name: str, unicodes, *, seed=()) -> list:
     wipes it, ``+=`` extends it, ``-=`` drops from it, all for free.
     """
     acc: list = list(seed)
-    for selector, op, items in doc.rules:
+    for rule in doc.rules:
+        selector, op, items = rule.selector, rule.op, rule.items
         if not _matches(selector, name, unicodes):
             continue
         if op is Op.REMOVE:
@@ -262,31 +265,33 @@ def accumulate(doc: Document, name: str, unicodes, *, seed=()) -> list:
 
 
 def accumulate_provenance(doc: Document, name: str, unicodes, *, seed=()) -> list:
-    """Like :func:`accumulate`, but tag each surviving spec with the index of the
-    rule that placed it.
+    """Like :func:`accumulate`, but tag each surviving spec with the rule that
+    placed it.
 
-    Returns a list of ``(AnchorSpec, rule_index)`` in final order — where
-    ``rule_index`` indexes ``doc.rules`` (and, when the DSL parser set it,
-    ``doc.sources`` for the source line). This is the provenance backbone for the
-    studio ("which rule produced this anchor"); the plain :func:`accumulate` is
+    Returns a list of ``(AnchorSpec, Rule)`` in final order — each
+    :class:`~anchorsfactory.model.Rule` carries its ``.source``
+    (:class:`~anchorsfactory.model.RuleSource`: origin/line/inherited), so an
+    editor can map an anchor back to the rule that produced it. This is the
+    provenance backbone for interactive tools; the plain :func:`accumulate` is
     unchanged for the batch/apply path.
 
     *seed* is a list of ``(AnchorSpec, provenance)`` pairs seeding the accumulator
     (propagated component anchors); their provenance is a :class:`Propagated`
-    marker rather than an ``int`` rule index, which the studio renders specially.
+    marker rather than a ``Rule``, which consumers render specially.
     """
-    acc: list = list(seed)                     # (spec, rule_index | Propagated)
-    for i, (selector, op, items) in enumerate(doc.rules):
+    acc: list = list(seed)                     # (spec, Rule | Propagated)
+    for rule in doc.rules:
+        selector, op, items = rule.selector, rule.op, rule.items
         if not _matches(selector, name, unicodes):
             continue
         if op is Op.REMOVE:
             drop = _remove_targets(items, doc.labels)
-            acc = [(s, idx) for (s, idx) in acc if s.name not in drop]
+            acc = [(s, prov) for (s, prov) in acc if s.name not in drop]
         else:
             specs = _resolve_items(items, doc.labels)
             if doc.variables:
                 specs = [_resolve_vars_in_spec(s, doc.variables) for s in specs]
-            tagged = [(s, i) for s in specs]
+            tagged = [(s, rule) for s in specs]
             acc = tagged if op is Op.REPLACE else acc + tagged
     return acc
 

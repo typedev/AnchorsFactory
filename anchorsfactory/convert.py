@@ -45,8 +45,9 @@ def render_document(doc) -> str:
         lines.append("")
 
     lines.append("# rules")
-    for sel, op, specs in doc.rules:
-        lines.append(f"{render_selector(sel)} {op.value} " + ", ".join(str(s) for s in specs))
+    for rule in doc.rules:
+        lines.append(f"{render_selector(rule.selector)} {rule.op.value} "
+                     + ", ".join(str(s) for s in rule.items))
     return "\n".join(lines) + "\n"
 
 
