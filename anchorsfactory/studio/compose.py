@@ -1,15 +1,11 @@
-"""Assemble composite glyphs with GlyphConstruction from AnchorsFactory anchors.
+"""Studio adapter: serialize GlyphConstruction composites to the browser's JSON.
 
-The Studio's compute is read-only — it returns anchor coordinates as JSON but
-never writes them onto the font. GlyphConstruction, however, positions marks by
-reading ``glyph.anchors``. So to preview a composite we: apply the computed
-anchors onto a throwaway **copy** of the font (never the shared one), run
-GlyphConstruction against it, and return each assembled glyph's outline plus the
-anchor-join points and any problems (a missing/misnamed anchor is exactly the
-signal the user is debugging).
-
-This is the adapter layer the vendored engine's README calls for — it imports
-from ``_vendor`` but never edits it.
+The assembly itself lives in the library core (:mod:`anchorsfactory.composites`),
+which is renderer-neutral and returns live ``ConstructionGlyph`` objects plus each
+construction's source line. This adapter owns the *web* specifics: it applies the
+computed anchors onto a throwaway **copy** of the font (GlyphConstruction reads
+``glyph.anchors``), then draws each composite's components to SVG paths and
+records the anchor-join points — the shape ``app.js`` renders.
 """
 
 from __future__ import annotations
@@ -17,21 +13,15 @@ from __future__ import annotations
 import contextlib
 import io
 import logging
-import re
-import unicodedata
 
 from fontTools.misc.transform import Transform
 from fontTools.pens.recordingPen import DecomposingRecordingPen
 from fontTools.pens.svgPathPen import SVGPathPen
 
 from ..apply import apply_document, validate_document
+from ..composites import (_anchor_pos, build_composites as _build_composites,
+                          uncovered_precomposed)
 from .render import resolve_stack
-from ._vendor.glyphConstruction import (
-    GlyphConstructionBuilder,
-    ParseGlyphConstructionListFromString,
-)
-
-_IDENT = re.compile(r"[A-Za-z_][\w.]*")
 
 
 @contextlib.contextmanager
@@ -50,41 +40,17 @@ def _quiet():
         af_log.setLevel(prev)
 
 
-def _ident(s: str) -> str:
-    m = _IDENT.match(s.strip())
-    return m.group(0) if m else s.strip()
-
-
-def _parse_construction(text: str):
-    """Extract ``(name, base, [(mark, anchor|None), ...])`` from a construction.
-
-    Conservative — enough for ``name = base + mark@anchor + …`` (the v1 surface);
-    trailing unicode (``| …``), metric/attr (``^ …``) and note (``# …``) clauses
-    are ignored. Returns ``None`` if there's no ``=``."""
-    recipe = text.split("|", 1)[0].split("^", 1)[0].split("#", 1)[0]
-    if "=" not in recipe:
-        return None
-    left, right = recipe.split("=", 1)
-    name = _ident(left.strip().lstrip("?"))
-    parts = [p.strip() for p in right.split("+") if p.strip()]
-    if not parts:
-        return name, None, []
-    base = _ident(parts[0])
-    marks = []
-    for p in parts[1:]:
-        if "@" in p:
-            g, anchor = p.split("@", 1)
-            marks.append((_ident(g), _ident(anchor)))
-        else:
-            marks.append((_ident(p), None))
-    return name, base, marks
-
-
-def _anchor_pos(glyph, name):
-    for a in glyph.anchors:
-        if a.name == name:
-            return (a.x, a.y)
-    return None
+def _glyph_path(work, gname: str) -> str:
+    if gname not in work:
+        return ""
+    try:
+        rec = DecomposingRecordingPen(work)
+        work[gname].draw(rec)
+        pen = SVGPathPen(None)
+        rec.replay(pen)
+        return pen.getCommands()
+    except Exception:                          # e.g. a dangling sub-component
+        return ""
 
 
 def _components_bounds(work, comps):
@@ -111,100 +77,55 @@ def _components_bounds(work, comps):
     return [round(min(xs), 2), round(min(ys), 2), round(max(xs), 2), round(max(ys), 2)]
 
 
-def _composite_payload(constr: str, work) -> dict | None:
-    """Build one construction against *work*, or ``None`` if it has no name.
-
-    Resilient by design: a missing component glyph (or any GC hiccup) becomes a
-    recorded *problem*, never an exception — so one bad line can't sink the whole
-    batch, and the valid composites still render."""
-    dest = GlyphConstructionBuilder(constr, work)
-    if not dest.name:
-        return None
-
-    parsed = _parse_construction(constr)
-    _, base, marks = parsed if parsed else (dest.name, None, [])
-
-    problems: list[str] = []
-    if base is not None and base not in work:
-        problems.append(f"base glyph {base!r} not found")
-    for mark, anchor in marks:
-        if mark not in work:
-            problems.append(f"component {mark!r} not found")
-            continue
-        if anchor is not None:
-            if base in work and _anchor_pos(work[base], anchor) is None:
-                problems.append(f"anchor {anchor!r} not found on base {base!r}")
-            if _anchor_pos(work[mark], "_" + anchor) is None:
-                problems.append(f"mark anchor {'_' + anchor!r} not found on {mark!r}")
-
-    raw = list(dest.components)
-    # Render only components that actually exist — missing ones are flagged above,
-    # and drawing them would raise MissingComponentError.
+def _serialize(composite, work) -> dict:
+    """One library :class:`~anchorsfactory.composites.Composite` → the browser's
+    JSON payload (components as SVG paths + transforms, anchor joins, bounds,
+    problems, and the construction's source ``line`` for click-to-rule)."""
+    cg = composite.glyph
+    if cg is None:                                  # hard build failure — flag it
+        return {"name": composite.name, "advance": 0, "bounds": None,
+                "components": [], "joins": [], "problems": list(composite.problems),
+                "line": composite.source_line}
+    raw = list(cg.components)
+    # Render only components that actually exist — missing ones are flagged in
+    # problems, and drawing them would raise MissingComponentError.
     components = [{"base": g, "transform": [round(v, 3) for v in t],
                    "path": _glyph_path(work, g)}
                   for g, t in raw if g in work]
-
     # Join points: where each mark's _anchor snapped onto the base's anchor, in
     # composite space (base component transform applied).
     joins = []
     base_t = Transform(*raw[0][1]) if raw else Transform()
-    if base in work:
-        for _mark, anchor in marks:
+    if composite.base in work:
+        for _mark, anchor in composite.marks:
             if anchor is None:
                 continue
-            pos = _anchor_pos(work[base], anchor)
+            pos = _anchor_pos(work[composite.base], anchor)
             if pos is not None:
                 jx, jy = base_t.transformPoint(pos)
                 joins.append({"x": round(jx, 2), "y": round(jy, 2), "anchor": anchor})
-
     return {
-        "name": dest.name,
-        "advance": float(dest.width),
+        "name": cg.name,
+        "advance": float(cg.width),
         "bounds": _components_bounds(work, raw),
         "components": components,
         "joins": joins,
-        "problems": problems,
+        "problems": list(composite.problems),
+        "line": composite.source_line,
     }
 
 
-def _glyph_path(work, gname: str) -> str:
-    if gname not in work:
-        return ""
-    try:
-        rec = DecomposingRecordingPen(work)
-        work[gname].draw(rec)
-        pen = SVGPathPen(None)
-        rec.replay(pen)
-        return pen.getCommands()
-    except Exception:                          # e.g. a dangling sub-component
-        return ""
-
-
-def _uncovered(font, built) -> list:
-    """Precomposed glyphs the font *has* but that no construction builds — a
-    coverage gap. A glyph counts if its codepoint has a **canonical** Unicode
-    decomposition (i.e. it's a precomposed accented/composite character) and its
-    name isn't among the built composites."""
-    out = []
-    for g in font:
-        if g.name in built:
-            continue
-        for u in (getattr(g, "unicodes", None) or ()):
-            d = unicodedata.decomposition(chr(u))
-            if d and not d.startswith("<"):        # canonical (pre)composition, not <compat>
-                out.append(g.name)
-                break
-    return out
-
-
-def build_composites(font, layers, gc_text: str) -> dict:
-    """Assemble the composites *gc_text* describes from the anchors *layers* place.
+def build_composite_view(font, layers, gc_text: str) -> dict:
+    """Assemble the composites *gc_text* describes from the anchors *layers* place,
+    serialized for the browser.
 
     *font* is the shared Studio font — it is **copied**, never mutated. Returns
-    ``{ok, problems, composites: {name: payload}}``; on an invalid rule document
-    it returns ``ok=False`` with the document problems and no composites."""
+    ``{ok, problems, composites: {name: payload}, uncovered}``; on an invalid rule
+    document it returns ``ok=False`` with the document problems and no composites.
+    """
     if not gc_text or not gc_text.strip():
-        return {"ok": True, "problems": [], "composites": {}, "uncovered": _uncovered(font, set())}
+        return {"ok": True, "problems": [], "composites": {},
+                "uncovered": uncovered_precomposed(font, set())}
 
     doc = resolve_stack(layers)
     problems = validate_document(doc)
@@ -217,21 +138,8 @@ def build_composites(font, layers, gc_text: str) -> dict:
     composites: dict[str, dict] = {}
     with _quiet():
         apply_document(work, doc)
-        # font=None → don't let GC filter out already-existing glyph names (the
-        # demo ships an `aacute`); the anchored copy is fed only to the builder.
-        constructions = ParseGlyphConstructionListFromString(gc_text, None)
-        for constr in constructions:
-            try:
-                payload = _composite_payload(constr, work)
-            except Exception as exc:             # never let one line sink the batch
-                parsed = _parse_construction(constr)
-                nm = parsed[0] if parsed else constr
-                composites[nm] = {"name": nm, "advance": 0, "bounds": None,
-                                  "components": [], "joins": [],
-                                  "problems": [f"could not build: {exc}"]}
-                continue
-            if payload is not None:
-                composites[payload["name"]] = payload
+        for name, composite in _build_composites(work, gc_text).items():
+            composites[name] = _serialize(composite, work)
 
     return {"ok": True, "problems": [], "composites": composites,
-            "uncovered": _uncovered(font, set(composites))}
+            "uncovered": uncovered_precomposed(font, set(composites))}

@@ -23,6 +23,12 @@ from .dsl import parse_dsl, parse_dsl_file, DSLError
 from .convert import convert_file, render_document, verify_conversion
 from .presets import list_presets, preset_text, is_preset
 from .runner import process_ufo, load_document, merge_documents
+from .composites import (
+    build_composites, parse_constructions, parse_construction,
+    composites_in_glyph_order, uncovered_precomposed,
+    Composite, Construction, ConstructionGlyph,
+    GlyphConstructionBuilder, ParseGlyphConstructionListFromString, GlyphBuilderError,
+)
 
 __all__ = [
     "__version__",
@@ -62,4 +68,15 @@ __all__ = [
     "is_preset",
     "process_ufo",
     "load_document",
+    "build_composites",
+    "parse_constructions",
+    "parse_construction",
+    "composites_in_glyph_order",
+    "uncovered_precomposed",
+    "Composite",
+    "Construction",
+    "ConstructionGlyph",
+    "GlyphConstructionBuilder",
+    "ParseGlyphConstructionListFromString",
+    "GlyphBuilderError",
 ]

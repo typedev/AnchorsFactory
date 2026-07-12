@@ -937,6 +937,9 @@ function renderCompositeInspector(canvas, read){
   canvas.appendChild(drawComposite(c,{small:false, canvasEl:canvas}));
   let html = `<h3>${escapeHtml(c.name)}</h3><div class="sub">adv ${Math.round(c.advance)} · `+
     `${c.components.length} component${c.components.length!==1?"s":""}</div>`;
+  // click-to-rule: jump the Construction editor to the line that builds this composite
+  if(c.line!=null)
+    html += `<div class="rule" data-gcline="${c.line}">→ construction L${c.line}</div>`;
   if(c.problems && c.problems.length)
     html += `<div class="comp-problems">`+ c.problems.map(p=>"⚠ "+escapeHtml(p)).join("<br>") +`</div>`;
   html += c.components.map((comp,i)=>
@@ -944,6 +947,8 @@ function renderCompositeInspector(canvas, read){
   html += (c.joins||[]).map(j=>
     `<div class="comp-row">↦ <span class="j">${escapeHtml(j.anchor)}</span> at ${Math.round(j.x)}, ${Math.round(j.y)}</div>`).join("");
   read.innerHTML = html;
+  const jump = read.querySelector(".rule[data-gcline]");
+  if(jump && gcEd) jump.addEventListener("click", ()=>{ activeEd = gcEd; gcEd.gotoLine(+jump.dataset.gcline); });
 }
 
 function renderInspector(){

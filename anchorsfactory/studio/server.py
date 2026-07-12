@@ -21,7 +21,7 @@ from importlib.resources import files
 from pathlib import Path
 
 from ..presets import is_preset, list_presets, preset_text
-from .compose import build_composites
+from .compose import build_composite_view
 from .demo import build_demo_font, font_metrics
 from .render import all_glyph_geometry, build_view
 from .upload import load_uploaded_font
@@ -84,7 +84,7 @@ class Studio:
     index into it; the *active* font drives compute and the grid. ``lock``
     serialises the shared fonts across the threaded server (compute reads,
     add/activate/remove mutate), so every access takes it. ``font`` is a property
-    onto the active entry so ``_compute``/``build_composites``/``all_glyphs`` need
+    onto the active entry so ``_compute``/``build_composite_view``/``all_glyphs`` need
     no change.
     """
 
@@ -249,9 +249,9 @@ class _Handler(BaseHTTPRequestHandler):
         with self.studio.lock:
             view = build_view(self.studio.font, rules)
             # GlyphConstruction preview: assemble composites from the anchors just
-            # computed (on a copy of the font — see compose.build_composites).
+            # computed (on a copy of the font — see compose.build_composite_view).
             if view.get("ok") and isinstance(rules, list) and gc_text.strip():
-                comp = build_composites(self.studio.font, rules, gc_text)
+                comp = build_composite_view(self.studio.font, rules, gc_text)
                 view["composites"] = comp["composites"]
                 view["uncovered"] = comp.get("uncovered", [])
                 if comp["problems"]:

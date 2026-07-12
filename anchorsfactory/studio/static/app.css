@@ -224,8 +224,8 @@ button.icon{padding:5px 8px;line-height:1;font-size:13px}
 .anchor-card .tag-prop{color:var(--muted);font-weight:400;font-size:9px;text-transform:uppercase;letter-spacing:.06em;border:1px solid var(--line);border-radius:999px;padding:1px 6px}
 .anchor-card .co{color:var(--ink);margin-top:3px}
 .anchor-card .kd{color:var(--muted);margin-top:4px;font-size:10.5px}
-.anchor-card .rule{color:var(--muted);margin-top:5px;font-size:10.5px;cursor:pointer;text-decoration:underline dotted}
-.anchor-card .rule:hover{color:var(--scan)}
+.anchor-card .rule,.readout .rule{color:var(--muted);margin-top:5px;font-size:10.5px;cursor:pointer;text-decoration:underline dotted}
+.anchor-card .rule:hover,.readout .rule:hover{color:var(--scan)}
 .anchor-card .wn{color:var(--stem);margin-top:5px;font-size:10.5px;line-height:1.4}
 .legend{display:flex;flex-wrap:wrap;gap:12px;padding:8px 14px;border-top:1px solid var(--line);font-family:var(--mono);font-size:10.5px;color:var(--muted);background:var(--panel)}
 .legend span{display:inline-flex;align-items:center;gap:5px}

@@ -15,7 +15,7 @@ pytest.importorskip("fontParts.world")
 from anchorsfactory.apply import apply_document
 from anchorsfactory.runner import load_document
 from anchorsfactory.studio.demo import build_demo_font
-from anchorsfactory.studio._vendor.glyphConstruction import (
+from anchorsfactory.composites import (
     GlyphConstructionBuilder,
     ParseGlyphConstructionListFromString,
 )
