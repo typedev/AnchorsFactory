@@ -732,7 +732,11 @@ function renderGrid(){
             : `<span>${g.components.length}</span>`)
         : `<span>${g.anchors.length}</span>`;
     card.insertAdjacentHTML("beforeend", `<div class="cap"><b>${escapeHtml(g.name)}</b>${capRight}</div>`);
-    card.addEventListener("click", ()=>{ SELECTED=g.name; HL_ANCHOR=null; renderGrid(); renderInspector(); });
+    card.addEventListener("click", ()=>{
+      SELECTED=g.name; HL_ANCHOR=null; renderGrid(); renderInspector();
+      // composites: clicking the cell also jumps the Construction editor to the rule
+      if(GRID_TAB==="composites" && g.line!=null && gcEd){ activeEd=gcEd; gcEd.gotoLine(g.line); }
+    });
     grid.appendChild(card);
     obs.observe(card);
   }
