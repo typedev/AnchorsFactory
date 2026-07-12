@@ -103,7 +103,7 @@ function addAnchorLayer(name, text, {activate = false} = {}){
 
 function setupEditors(){
   // Construction (GlyphConstruction) editor — single, no tabs.
-  gcEd = makeEditor($("#edGC"), () => { persistGC(); scheduleCompute(); }, () => activeEd = gcEd, highlightGC);
+  gcEd = makeEditor($("#edGC"), () => { persistGC(); scheduleCompute(); }, () => activeEd = gcEd, highlightGC, GC_COMPLETE);
   let savedGC = null; try { savedGC = localStorage.getItem("af.gc"); } catch(_){}
   gcEd.setValue(savedGC != null ? savedGC : (META.gc || ""));
 
@@ -219,6 +219,51 @@ const DIRECTIVES = new Set(["!extends","!suffixes","!shiftx","!propagate"]);
 const BARE = [...KW, ...METRICS];
 let CHAR_W = 0;
 
+// ---- completion providers (one per editor language) ------------------------
+// Each returns [{v, k}] for a context {word, head, seg}: `head` is the token
+// before the last dot (a frame / $glyph / compN), `seg` the part being typed.
+const FRAMES = ["box","outline","width"], ALIGNS = ["left","center","right"],
+      EDGES = ["bottom","middle","top"], RUNS = ["first","last"];
+const _mk = (arr, k) => arr.map(v => ({v, k}));
+
+// distinct anchor names across the current view (base anchors omit the `_`).
+function anchorNames(baseOnly){
+  const s = new Set();
+  for(const g of Object.values(GLYPHS)) for(const a of (g.anchors||[])){
+    if(baseOnly && a.name[0] === "_") continue;
+    s.add(a.name);
+  }
+  return [...s];
+}
+
+// The anchor DSL: keywords, @labels, &vars, %anchors, and after-a-dot positions.
+function ANCHOR_COMPLETE({word, head, seg}){
+  if(word[0] === "@"){ const s=new Set(); for(const x of allRulesText().matchAll(/@[\w.]+/g)) s.add(x[0]); return _mk([...s],"label"); }
+  if(word[0] === "&"){ const s=new Set(); for(const x of allRulesText().matchAll(/&\w+/g)) s.add(x[0]); return _mk([...s],"var"); }
+  if(word[0] === "%"){                                   // another anchor's position on this glyph
+    const g = SELECTED && GLYPHS[SELECTED];
+    const names = g ? (g.anchors||[]).map(a=>a.name) : anchorNames(false);
+    return _mk([...new Set(names)].map(n=>"%"+n),"anchor");
+  }
+  if(head != null){                                     // after a dot: position words for `head`
+    if(head[0] === "$") return _mk(EDGES,"edge");        // $Glyph.top / .middle / .bottom
+    if(/^comp(\d+|last)$/.test(head)) return _mk(FRAMES,"frame");
+    if(head === "outline") return [..._mk(RUNS,"run"), ..._mk([...ALIGNS,...EDGES],"align"), {v:"centroid",k:"kw"}];
+    if(["box","width","advance"].includes(head)) return _mk([...ALIGNS,...EDGES],"align");
+    return [];                                           // unknown head → no suggestions
+  }
+  return [..._mk(FRAMES,"frame"), ..._mk([...ALIGNS,...EDGES],"align"),
+          {v:"centroid",k:"kw"}, ..._mk(METRICS,"metric")];
+}
+
+// GlyphConstruction: @anchor names, otherwise glyph names.
+function GC_COMPLETE({word}){
+  if(word[0] === "@") return _mk(anchorNames(true).map(n=>"@"+n),"anchor");
+  const names = ALLGLYPHS ? ALLGLYPHS.map(g=>g.name)
+              : [...new Set([...Object.keys(GLYPHS), ...Object.keys(COMPOSITES||{})])];
+  return _mk(names,"glyph");
+}
+
 function highlightLine(line){
   let out = "";
   const hash = line.indexOf("#");
@@ -275,7 +320,7 @@ function highlightGC(line){
   return out || "&nbsp;";
 }
 
-function makeEditor(host, onChange, onFocus, highlight = highlightLine){
+function makeEditor(host, onChange, onFocus, highlight = highlightLine, complete = ANCHOR_COMPLETE){
   host.innerHTML =
     '<div class="ed"><div class="ed-gutter"><div class="gnums"></div></div>'+
     '<div class="ed-body"><pre class="ed-hl" aria-hidden="true"></pre>'+
@@ -304,20 +349,23 @@ function makeEditor(host, onChange, onFocus, highlight = highlightLine){
 
   function currentWord(){
     const pos = ta.selectionStart, upto = ta.value.slice(0, pos);
-    const m = /[@&$]?[\w.]*$/.exec(upto);
-    return { word: m ? m[0] : "", start: m ? pos - m[0].length : pos, pos };
-  }
-  function candidates(word){
-    if(word.startsWith("@")){ const s=new Set(); for(const x of allRulesText().matchAll(/@[\w.]+/g)) s.add(x[0]); return [...s].map(v=>({v,k:"label"})); }
-    if(word.startsWith("&")){ const s=new Set(); for(const x of allRulesText().matchAll(/&\w+/g)) s.add(x[0]); return [...s].map(v=>({v,k:"var"})); }
-    if(word.startsWith("$")) return [];
-    return BARE.map(v => ({v, k: METRIC_SET.has(v) ? "metric" : "kw"}));
+    const m = /[@&%$]?[\w.]*$/.exec(upto);
+    const word = m ? m[0] : "";
+    // split at the last dot: `outline.ce` → head "outline", seg "ce"; complete only seg
+    const dot = word.lastIndexOf(".");
+    const head = dot >= 0 ? word.slice(0, dot) : null;
+    const seg = dot >= 0 ? word.slice(dot + 1) : word;
+    const start = dot >= 0 ? pos - seg.length : pos - word.length;
+    return { word, head, seg, start, pos };
   }
   function acUpdate(){
-    const {word, start, pos} = currentWord();
-    if(word.length < 1 || pos !== ta.selectionStart) return acHide();
-    const lower = word.toLowerCase();
-    acItems = candidates(word).filter(c => c.v.toLowerCase().startsWith(lower) && c.v !== word).slice(0, 12);
+    const {word, head, seg, start, pos} = currentWord();
+    // require ≥1 char normally, but pop immediately right after a dot (empty seg ok)
+    if((head == null && seg.length < 1) || pos !== ta.selectionStart) return acHide();
+    const lower = seg.toLowerCase();
+    acItems = complete({word, head, seg})
+      .filter(c => c.v.toLowerCase().startsWith(head != null ? lower : word.toLowerCase()) && c.v !== word)
+      .slice(0, 12);
     if(!acItems.length) return acHide();
     acStart = start; acSel = 0;
     ac.innerHTML = acItems.map((c,i) => `<div class="item${i===0?" sel":""}" data-i="${i}"><span>${escapeHtml(c.v)}</span><span class="k">${c.k}</span></div>`).join("");
