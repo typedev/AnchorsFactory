@@ -55,6 +55,18 @@ def _merge(base: Document, child: Document) -> Document:
     )
 
 
+def merge_documents(base: Document, child: Document) -> Document:
+    """Layer *child* on top of *base* (child labels/variables/rules win), the
+    public form of the ``!extends`` merge.
+
+    *base*'s rules are marked ``inherited=True`` so an editor can tell inherited
+    rules from the ones authored in *child*; provenance (:class:`RuleSource`) is
+    preserved on both sides. Lets a consumer build a layered document without
+    reaching into private helpers.
+    """
+    return _merge(base, child)
+
+
 def _load(ref: str, base_dir, seen: tuple) -> Document:
     if presets.is_preset(ref):
         ident, this_dir = f"preset:{ref}", None

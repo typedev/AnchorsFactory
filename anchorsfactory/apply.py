@@ -178,7 +178,13 @@ def _check_var_node(node, variables, seen):
             _check_var_node(term, variables, seen)
 
 
-def _matches(selector, name: str, unicodes) -> bool:
+def selector_matches(selector, name: str, unicodes) -> bool:
+    """Does *selector* match a glyph named *name* with codepoints *unicodes*?
+
+    Pure over ``(name, unicodes)`` — no fontParts. This is the matching primitive
+    behind :func:`accumulate`; interactive tools use it (via
+    :func:`anchorsfactory.query.glyphs_for_selector`) for the reverse direction —
+    a rule's selector → the glyphs it hits."""
     if isinstance(selector, GlyphName):
         return name == selector.name
     if isinstance(selector, Unicode):
@@ -190,6 +196,9 @@ def _matches(selector, name: str, unicodes) -> bool:
     if isinstance(selector, Category):
         return any(unicodedata.category(chr(u)).startswith(selector.value) for u in unicodes)
     raise TypeError(f"unknown selector {selector!r}")
+
+
+_matches = selector_matches            # internal alias (kept for the engine's call sites)
 
 
 def validate_document(doc: Document) -> list[str]:
@@ -589,6 +598,100 @@ def compute_document(font, doc: Document, *, replace=True, round_coords=True,
             if anchors:
                 placed[gname] = anchors
     return placed
+
+
+@dataclass(frozen=True)
+class PlacedAnchor:
+    """One placed anchor with its provenance — a row of :func:`explain_document`.
+
+    ``source`` is the :class:`~anchorsfactory.model.RuleSource` of the rule that
+    won this anchor (``None`` for a propagated/component anchor);
+    ``propagated_from`` names the component a ``!propagate`` seed came from;
+    ``derived_from`` lists the ``%anchor`` names this one references; ``warnings``
+    holds any soft-degradation reasons for this anchor.
+    """
+    name: str
+    x: float
+    y: float
+    source: object | None = None          # RuleSource | None
+    propagated_from: str | None = None
+    derived_from: tuple | None = None
+    warnings: tuple = ()
+
+
+class ExplainResult(dict):
+    """``{target_glyph: [PlacedAnchor, ...]}`` plus a ``diagnostics`` list — the
+    provenance-carrying sibling of :class:`ComputeResult`."""
+
+    def __init__(self, *args, diagnostics=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.diagnostics: list[ComputeDiagnostic] = (
+            diagnostics if diagnostics is not None else []
+        )
+
+
+def explain_document(font, doc: Document, *, replace=True, round_coords=True,
+                     names=None) -> ExplainResult:
+    """Like :func:`compute_document`, but every placed anchor carries provenance.
+
+    Returns an :class:`ExplainResult` — ``{target_glyph: [PlacedAnchor, ...]}``
+    plus ``.diagnostics`` — the ergonomic entry point for an interactive editor:
+    the same placement :func:`compute_document` computes, with each anchor mapped
+    back to the rule that produced it (:class:`PlacedAnchor.source`), its
+    ``%``-references, and any ``!propagate`` origin. Never raises on a resolve
+    failure (it runs ``on_error='collect'``); skipped anchors show up only in
+    ``.diagnostics``.
+    """
+    keep = None if names is None else set(names)
+    sfx_spec = resolve_suffixes(doc.suffix_ops)
+    font_names = {g.name for g in font} if sfx_spec.all else None
+    memo: dict[str, dict] = {}
+    out = ExplainResult()
+    for glyph in font:
+        seed = [(s, Propagated(src))
+                for s, src in propagate_seed(font, glyph, doc, memo,
+                                             round_coords=round_coords)]
+        prov = accumulate_provenance(doc, glyph.name, list(glyph.unicodes), seed=seed)
+        if not prov:
+            continue
+        # dedup keeps the last spec per name → its rule/refs win the provenance
+        prov_by_name: dict[str, object] = {}
+        derived_by_name: dict[str, tuple] = {}
+        for spec, marker in prov:
+            prov_by_name[spec.name] = marker
+            refs = _anchor_refs(spec.x) | _anchor_refs(spec.y)
+            derived_by_name[spec.name] = tuple(sorted(refs)) if refs else None
+        specs = [s for s, _ in prov]
+        for sfx in sfx_spec.expand(glyph.name, font_names):
+            gname = glyph.name + sfx
+            if gname not in font:
+                continue
+            if keep is not None and gname not in keep:
+                continue
+            diags: list[ComputeDiagnostic] = []
+            anchors = _resolve_specs(font, font[gname], specs, doc, dedup=replace,
+                                     round_coords=round_coords, on_error="collect",
+                                     diagnostics=diags)
+            if not anchors:
+                out.diagnostics.extend(diags)
+                continue
+            warn_by_name: dict[str, list] = {}
+            for d in diags:
+                warn_by_name.setdefault(d.anchor, []).append(d.reason)
+            rows = []
+            for aname, x, y in anchors:
+                marker = prov_by_name.get(aname)
+                propagated = isinstance(marker, Propagated)
+                rows.append(PlacedAnchor(
+                    name=aname, x=x, y=y,
+                    source=None if propagated or marker is None else marker.source,
+                    propagated_from=marker.component if propagated else None,
+                    derived_from=derived_by_name.get(aname),
+                    warnings=tuple(warn_by_name.get(aname, ())),
+                ))
+            out[gname] = rows
+            out.diagnostics.extend(diags)
+    return out
 
 
 def apply_document(font, doc: Document, *, clear=True, replace=True,
