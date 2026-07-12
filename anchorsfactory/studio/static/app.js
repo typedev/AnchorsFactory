@@ -738,18 +738,39 @@ function renderGrid(){
   }
 }
 
-function extent(g){
-  const m = META.metrics;
-  let x0=Math.min(0, g.bounds?g.bounds[0]:0), x1=Math.max(g.advance, g.bounds?g.bounds[2]:g.advance);
-  let y0=Math.min(m.descender??-200, g.bounds?g.bounds[1]:0), y1=Math.max(m.ascender??META.unitsPerEm, g.bounds?g.bounds[3]:0);
-  for(const a of g.anchors){ x0=Math.min(x0,a.x); x1=Math.max(x1,a.x); y0=Math.min(y0,a.y); y1=Math.max(y1,a.y); }
-  return {x0,x1,y0,y1};
-}
-
 // Horizontal ink centre of a glyph/composite (falls back to the advance midpoint).
 function inkMidX(g){
   if(g.bounds) return (g.bounds[0]+g.bounds[2])/2;
   return (g.advance || META.unitsPerEm/2)/2;
+}
+
+// Grid cell geometry (mirrors `.thumb` / `.thumb svg` in app.css): every
+// thumbnail viewport is this fixed pixel size, so a shared viewBox → a shared scale.
+const THUMB_W = 80, THUMB_H = 88;
+// Fraction of the (metric-based) window the glyph fills — <1 leaves breathing room.
+// The glyph's on-screen size is ∝ THUMB_H * THUMB_FILL, so when the cell grows we
+// drop FILL to keep the glyph the same size (88*0.84 ≈ the old 82*0.90 = 73.8px):
+// bigger, roomier cells, same-size glyph.
+const THUMB_FILL = 0.84;
+
+// A *fixed*, em-based viewBox for grid thumbnails — the thumbnail analogue of
+// stableViewBox. The vertical window is the font's metric span (descender→ascender
+// + headroom for stacked marks), identical for every cell, so the baseline lands
+// at the same screen Y and glyphs don't jump between a bottom-accent and a
+// top-accent neighbour. W/H are constant across cells, so — with the fixed cell
+// viewport — every glyph shares one scale, and because the span is the font's em
+// that scale is UPM-relative (consistent across fonts of different UPM). Only the
+// horizontal centre follows each glyph's ink.
+function thumbViewBox(midX){
+  const m = META.metrics;
+  const asc = (m.ascender != null ? m.ascender : Math.round(META.unitsPerEm*0.8));
+  const desc = (m.descender != null ? m.descender : -Math.round(META.unitsPerEm*0.2));
+  const span = asc - desc;
+  const yTop = asc + span*0.26, yBot = desc - span*0.08;   // headroom for stacked marks / descenders
+  const yc = (yTop + yBot)/2, hy = yTop - yBot;
+  const H = hy / THUMB_FILL;                                // enlarge the window → glyphs fill THUMB_FILL of it
+  const W = H * (THUMB_W/THUMB_H);                          // match the cell's aspect (no letterbox)
+  return {x0: midX - W/2, y0: -(yc + H/2), W, H};          // screen coords (Y points down), centred on yc
 }
 
 // A *fixed* viewBox for the inspector: the vertical window is metric-based
@@ -815,9 +836,8 @@ function setupView(){
 
 function drawGlyph(g, {small=false, canvasEl=null}={}){
   let x0, minY, W, H;
-  if(small){                                   // thumbnail: fit this glyph, generous headroom
-    const pad = 150, ex = extent(g);
-    x0 = ex.x0-pad; W = (ex.x1-ex.x0)+2*pad; minY = -(ex.y1+pad); H = (ex.y1-ex.y0)+2*pad;
+  if(small){                                   // thumbnail: fixed em-based window (shared scale + baseline)
+    const vb = thumbViewBox(inkMidX(g)); x0=vb.x0; minY=vb.y0; W=vb.W; H=vb.H;
   } else {                                      // inspector: fixed metric window (stable) + zoom
     const vb = stableViewBox(inkMidX(g), canvasEl); x0=vb.x0; minY=vb.y0; W=vb.W; H=vb.H;
   }
@@ -870,8 +890,7 @@ function drawGlyph(g, {small=false, canvasEl=null}={}){
 function drawComposite(c, {small=false, canvasEl=null}={}){
   let x0, minY, W, H;
   if(small){
-    const pad = 150, ex = extent({advance:c.advance||0, bounds:c.bounds, anchors:[]});
-    x0 = ex.x0-pad; W = (ex.x1-ex.x0)+2*pad; minY = -(ex.y1+pad); H = (ex.y1-ex.y0)+2*pad;
+    const vb = thumbViewBox(inkMidX({bounds:c.bounds, advance:c.advance})); x0=vb.x0; minY=vb.y0; W=vb.W; H=vb.H;
   } else {
     const vb = stableViewBox(inkMidX({bounds:c.bounds, advance:c.advance}), canvasEl); x0=vb.x0; minY=vb.y0; W=vb.W; H=vb.H;
   }

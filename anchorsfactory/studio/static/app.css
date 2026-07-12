@@ -171,16 +171,16 @@ button.icon{padding:5px 8px;line-height:1;font-size:13px}
 .gridhead .hideaff{display:flex;align-items:center;gap:5px;text-transform:none;letter-spacing:normal;cursor:pointer;color:var(--muted);font-size:11px}
 .gridhead .hideaff[hidden]{display:none}
 .gridhead .gridcount{font-family:var(--mono);text-transform:none;letter-spacing:normal;color:var(--muted);font-size:11px}
-.glyphgrid{display:flex;flex-wrap:wrap;gap:10px;padding:4px 14px 16px}
+.glyphgrid{display:flex;flex-wrap:wrap;gap:4px;padding:4px 14px 16px}
 .thumb{
-  width:74px;border:1px solid var(--line);border-radius:8px;overflow:hidden;
+  width:80px;border:1px solid var(--line);border-radius:8px;overflow:hidden;
   background:var(--panel2);cursor:pointer;transition:border-color .15s;
 }
 .thumb:hover{border-color:var(--muted)}
-.thumb .holder{min-height:82px}          /* reserve height before the lazy SVG is drawn */
+.thumb .holder{min-height:88px}          /* reserve height before the lazy SVG is drawn */
 .thumb.sel{border-color:var(--anchor);box-shadow:0 0 0 1px color-mix(in srgb,var(--anchor) 45%,transparent)}
 .thumb.unused{opacity:.4}                 /* on "anchored + unused": glyphs no rule touched */
-.thumb svg{display:block;width:100%;height:82px;background:
+.thumb svg{display:block;width:100%;height:88px;background:
   linear-gradient(var(--line) 1px,transparent 1px) 0 0/100% 16px,
   linear-gradient(90deg,var(--line) 1px,transparent 1px) 0 0/16px 100%,var(--canvas)}
 .thumb .cap{font-family:var(--mono);font-size:10.5px;padding:3px 6px;color:var(--muted);display:flex;justify-content:space-between}
