@@ -27,6 +27,9 @@ from ._vendor.glyphconstruction import (       # noqa: F401  (re-exported)
     GlyphBuilderError,
     GlyphConstructionBuilder,
     ParseGlyphConstructionListFromString,
+    ParseVariables,
+    glyphCommentSuffixSplit,
+    shouldCheckGlyphExists,
 )
 
 _IDENT = re.compile(r"[A-Za-z_][\w.]*")
@@ -76,25 +79,52 @@ class Construction:
     name: str | None
 
 
+def _emitted_line_numbers(gc_text: str) -> list[int]:
+    """Source line number for each entry the vendored parser emits, index-aligned
+    with :func:`ParseGlyphConstructionListFromString`.
+
+    The parser keeps a slot (as ``""``) for **blank** lines and for ``$var``
+    definitions (which :func:`ParseVariables` blanks out in place, preserving
+    newlines) — it only *drops* comment lines and *leading* blanks. So we must
+    mirror that exact bookkeeping, not a plain "non-comment, non-blank" filter:
+    otherwise every construction after the first blank/var line gets the wrong
+    line (the old bug). We don't replicate the parser's trailing-blank trim —
+    those slots fall past the end of the (shorter) emitted list and are never
+    indexed.
+    """
+    txt, _vars = ParseVariables(gc_text)                  # $var defs -> "" (newlines kept)
+    kept: list[int] = []
+    for i, raw in enumerate(txt.split("\n"), 1):
+        line = raw.strip()
+        if line:
+            if line[0] == glyphCommentSuffixSplit:        # a comment: parser drops it
+                continue
+            if line[0] == shouldCheckGlyphExists:         # '?' — font=None here, so only strip it
+                line = line[1:]
+        if not line and not kept:                         # parser drops leading blank/var lines
+            continue
+        kept.append(i)
+    return kept
+
+
 def parse_constructions(gc_text: str) -> list[Construction]:
     """Parse *gc_text* into constructions, each tagged with its source line.
 
-    The vendored parser drops comment/blank lines and returns one entry per
-    remaining *significant* line — a construction string, or ``""`` where a
-    ``$var`` definition was consumed. We pair the entries, in order, with those
-    significant line numbers and drop the empty (variable) slots; a construction
-    whose line can't be located keeps ``line=None``.
+    The vendored parser returns one entry per line it keeps — a construction
+    string, or ``""`` for a blank / consumed-``$var`` slot. We pair the entries,
+    in order, with the source line numbers the parser kept (see
+    :func:`_emitted_line_numbers`) and drop the empty slots; a construction whose
+    line can't be located keeps ``line=None``.
     """
     constructions = ParseGlyphConstructionListFromString(gc_text, None)
-    significant = [i for i, raw in enumerate(gc_text.splitlines(), 1)
-                   if raw.split("#", 1)[0].strip()]        # non-comment, non-blank
+    lines = _emitted_line_numbers(gc_text)
     out: list[Construction] = []
     for idx, text in enumerate(constructions):
-        if not text.strip():                              # a consumed $var slot, not a construction
+        if not text.strip():                              # a blank/var slot, not a construction
             continue
         parsed = parse_construction(text)
         out.append(Construction(text=text,
-                                line=significant[idx] if idx < len(significant) else None,
+                                line=lines[idx] if idx < len(lines) else None,
                                 name=parsed[0] if parsed else None))
     return out
 

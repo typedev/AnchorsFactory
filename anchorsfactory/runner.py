@@ -94,11 +94,18 @@ def _load(ref: str, base_dir, seen: tuple) -> Document:
     return _merge(merged, doc)          # ...then this file on top
 
 
-def load_document(rules: str) -> Document:
+def load_document(rules: str, base_dir: str | None = None) -> Document:
     """Resolve a rules reference (preset name or file path) to a Document,
     inheriting any ``!extends`` bases. Legacy ``.txt`` files have no inheritance.
+
+    *base_dir* anchors a relative *rules* path and relative top-level ``!extends``
+    refs; each base then anchors its **own** nested relative ``!extends`` to its
+    own directory (the chain is threaded through). Absolute paths and preset
+    names ignore it. Defaults to the process cwd (``None``). A host editing rules
+    in a buffer should pass the rules file's directory so relative refs resolve
+    as they would on disk.
     """
-    return _load(rules, base_dir=None, seen=())
+    return _load(rules, base_dir=base_dir, seen=())
 
 
 def dump_existing_anchors(font) -> str:

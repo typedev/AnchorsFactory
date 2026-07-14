@@ -33,6 +33,35 @@ def test_parse_constructions_tracks_source_line():
     assert by_name["odieresis"] == 5
 
 
+def test_parse_constructions_line_after_interior_blank():
+    # Regression: the engine keeps blank lines as "" slots but an older filter
+    # dropped them, so every construction past the first blank got the wrong
+    # line (or None). A blank line between families must not shift the numbering.
+    gc = (
+        "Aacute = A + acute@top\n"       # 1
+        "Agrave = A + grave@top\n"       # 2
+        "# c\n"                          # 3 (comment)
+        "\n"                             # 4 (blank)
+        "Adieresis = A + dieresis@top\n" # 5
+    )
+    by_name = {c.name: c.line for c in parse_constructions(gc)}
+    assert by_name == {"Aacute": 1, "Agrave": 2, "Adieresis": 5}
+
+
+def test_parse_constructions_line_with_leading_var_and_blanks():
+    # A $var-blanked line and a genuine blank at the very top are dropped by the
+    # engine (leading empties), so the first real construction is line 3, not 1.
+    gc = (
+        "\n"                             # 1 (leading blank)
+        "$top = top\n"                   # 2 (variable definition)
+        "Aacute = A + acute@{top}\n"     # 3
+        "\n"                             # 4 (interior blank)
+        "Bhook = B + hook@{top}\n"       # 5
+    )
+    by_name = {c.name: c.line for c in parse_constructions(gc)}
+    assert by_name == {"Aacute": 3, "Bhook": 5}
+
+
 def _anchored_font():
     font = build_demo_font()
     apply_document(font, load_document("default"))     # composites read glyph.anchors

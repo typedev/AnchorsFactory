@@ -45,12 +45,12 @@ anchorsfactory-convert = "anchorsfactory.convert:main"
 anchorsfactory-studio = "anchorsfactory.studio.server:main"
 
 [tool.setuptools]
-packages = ["anchorsfactory", "anchorsfactory.rules", "anchorsfactory.studio", "anchorsfactory.studio._vendor"]
+packages = ["anchorsfactory", "anchorsfactory.rules", "anchorsfactory.studio", "anchorsfactory._vendor"]
 
 [tool.setuptools.package-data]
 "anchorsfactory.rules" = ["*.anchors"]
 "anchorsfactory.studio" = ["static/*"]
-"anchorsfactory.studio._vendor" = ["LICENSE", "*.md"]
+"anchorsfactory._vendor" = ["LICENSE", "*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
