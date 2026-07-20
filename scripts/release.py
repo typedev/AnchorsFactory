@@ -265,6 +265,7 @@ def main() -> None:
         # egg-info's file list in preference to `packages` in pyproject.toml, so
         # a stale one from an earlier editable install silently puts modules back
         # into the wheel. That shipped the Studio in 0.5.0.
+        dist_dir = ROOT / "dist"
         clean_build_artifacts()
         run(["uv", "build"])
         dist_files = sorted(
