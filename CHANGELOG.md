@@ -11,6 +11,8 @@ changed" without inferring it from a version number.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-07-20
+
 ### Fixed
 
 - **0.5.0's wheel shipped the Studio** despite `packages` excluding it. A stale
