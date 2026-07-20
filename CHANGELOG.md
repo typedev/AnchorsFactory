@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 Curate entries under *Unreleased* as you work; `make release` promotes that
 section to the new version (with today's date) and uses it as the release notes.
 
+Changes to the **rule sets** in `examples/rules/` get their own
+*Rule sets* section, separate from the engine's. They are data, not code, and
+downstream copies them: a consumer needs to see "the content of `default`
+changed" without inferring it from a version number.
+
 ## [Unreleased]
 
 ### Changed (breaking)
@@ -29,8 +34,17 @@ section to the new version (with today's date) and uses it as the release notes.
     `set_search_paths()`, `add_search_path()`. `is_preset(name)` now means
     "resolves on the path", not "is bundled". An unresolvable name raises a
     `KeyError` naming every directory searched.
+  - `resolve_ref(ref, base_dir=…, search_paths=…)` answers which file a
+    reference loads from — the same decision `load_document` makes internally,
+    so a host that lets a user *edit* an inherited set writes back to the file
+    the engine actually read instead of re-deriving the search order.
+  - `RuleSetNotFound` (a `KeyError` subclass) for a name nothing answers, kept
+    distinct from `FileNotFoundError` (mistyped path) and `DSLError` (bad rule
+    text): three different things to tell a user.
   - A rule inherited via a name now carries the base **file's path** as its
-    `RuleSource.origin` (was `preset:<name>`) — an origin an editor can open.
+    `RuleSource.origin` (was `preset:<name>`) — the exact string `resolve_ref`
+    returns, so the two compare directly. Documents are never cached, so a set
+    edited mid-session is re-read on the next load.
   - `is_name()` treats any extension as a path, so a bare legacy `old.txt`
     reference still loads as a file.
 
@@ -101,11 +115,38 @@ section to the new version (with today's date) and uses it as the release notes.
 - **Playwright** added as a dev dependency for an end-to-end studio UI test
   (`make browsers` downloads the headless chromium; the test skips without it).
 
-### Changed
+### Rule sets (`examples/rules/`)
 
-- The bundled **`devanagari`** preset now derives `bottom2` from `bottom` with a
-  `%bottom` reference (the stacking level tracks the base anchor); placement is
-  identical (69% smoke accuracy unchanged), the intent is explicit.
+Content changes, listed apart from the engine's because downstream copies these
+files. All of them predate the move out of the package (they landed on master in
+`59d7fd6`/`946c450`/`0f496d0`) and are collected here.
+
+- **`default` is now generated from the Unicode database** and covers **Latin
+  core only** — Basic Latin, Latin-1 Supplement, Latin Extended-A. Every
+  composite comes from a canonical decomposition and every base carries exactly
+  the anchors its composites ask for. **Cyrillic is gone from it**; the previous
+  hand-maintained set (Latin + Cyrillic + foundry-specific component marks)
+  is kept verbatim as `legacy-default.anchors`.
+- **Glyphs are addressed by codepoint** (`U+00C1`) wherever a name would be a
+  guess, so a set no longer assumes a naming scheme; ASCII letters stay spelled
+  out. Marks are ruled three ways at once — combining codepoint, spacing twin,
+  and the legacy names (`acutecomb`, plus the cap-height set `Acute` /
+  `acute.case`).
+- **`default.glyphsConstruction`** added — the pipeline's second half alongside
+  the anchors, generated from the same decompositions.
+- **`default-italics` is now an overlay**: `!extends default` plus the eight
+  rules a slanted *drawing* changes (the shear itself is automatic since the
+  `box.*` fix below). The previous 111-line standalone copy is kept as
+  `legacy-default-italics.anchors`.
+- **`latin-ext-b.*` and `latin-ext-additional.*`** added (Latin Extended-B; Latin
+  Extended Additional — Vietnamese and the dot-below accents). Each covers its
+  own block only and layers over `default`.
+- **`devanagari`** derives `bottom2` from `bottom` with a `%bottom` reference
+  (the stacking level tracks the base anchor); placement is identical (69% smoke
+  accuracy unchanged), the intent is explicit.
+
+The generated sets (`default`, `latin-ext-*`) come from a maintainer-side script
+(`dev/gen_latin_rules.py`); do not hand-edit them, layer your own rules on top.
 
 ## [0.4.1] - 2026-06-24
 

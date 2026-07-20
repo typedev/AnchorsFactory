@@ -102,6 +102,14 @@ can `!extends default` its neighbour with no configuration at all. In Python,
 `load_document(ref, base_dir=…, search_paths=[…])`; process-wide,
 `anchorsfactory.set_search_paths([…])`.
 
+`resolve_ref(ref, base_dir=…, search_paths=…)` answers *which file* a reference
+loads from — the same decision `load_document` makes, and the same string that
+lands in `RuleSource.origin`, so a host that lets a user edit an inherited set
+writes back to the file the engine actually read. A name nothing answers raises
+`RuleSetNotFound` (a `KeyError`), kept distinct from the `FileNotFoundError` of
+a mistyped path and the `DSLError` of bad rule text — three different things to
+tell a user. Nothing is cached: a reload sees an edit made mid-session.
+
 `default` and `default-italics` are the samples to start from. The italic one is
 an **overlay**: the shear itself is automatic, so it only restates what a slanted
 *drawing* changes — eight rules on top of `default` rather than a second copy of

@@ -50,6 +50,59 @@ def test_load_document_reports_an_unresolvable_name(tmp_path):
     assert "not bundled" in str(e.value)
 
 
+# --- resolve_ref: what a host needs to open the file the engine read -------- #
+def test_resolve_ref_returns_the_file_load_document_used(tmp_path):
+    """A host that lets a user edit an inherited set must write to the very file
+    the engine read — so the resolved path and the rule provenance must agree."""
+    from anchorsfactory import resolve_ref
+
+    child = tmp_path / "child.anchors"
+    child.write_text("!extends default\nU+0041 += extra (box.center 0)\n")
+    path = resolve_ref("default", search_paths=SEARCH_PATHS)
+    assert path == str((RULES_DIR / "default.anchors").resolve())
+
+    doc = load_document(str(child), search_paths=SEARCH_PATHS)
+    inherited = {r.source.origin for r in doc.rules if r.source.inherited}
+    assert inherited == {path}                      # origin == resolve_ref, comparable
+
+
+def test_resolve_ref_handles_both_classes_of_ref(tmp_path):
+    from anchorsfactory import resolve_ref
+
+    f = tmp_path / "mine.anchors"
+    f.write_text("U+0041 = top (box.center 0)\n")
+    assert resolve_ref("mine.anchors", base_dir=str(tmp_path)) == str(f.resolve())
+    assert resolve_ref(str(f)) == str(f.resolve())
+    assert resolve_ref("nosuchset", search_paths=SEARCH_PATHS) is None
+    assert resolve_ref("nosuch.anchors", base_dir=str(tmp_path)) is None
+
+
+def test_three_failures_are_three_types(tmp_path):
+    """A missing set, a missing file and bad rule text must be distinguishable —
+    a host routes them to different places (configure / fix path / fix text)."""
+    from anchorsfactory import RuleSetNotFound
+    from anchorsfactory.dsl import DSLError
+
+    with pytest.raises(RuleSetNotFound):                      # configuration
+        load_document("nosuchset", base_dir=str(tmp_path), search_paths=[])
+    with pytest.raises(FileNotFoundError):                    # mistyped path
+        load_document(str(tmp_path / "nope.anchors"))
+    bad = tmp_path / "bad.anchors"
+    bad.write_text("A = top (this is not valid\n")
+    with pytest.raises(DSLError):                             # bad rule text
+        load_document(str(bad))
+    assert not issubclass(RuleSetNotFound, DSLError)          # never conflated
+
+
+def test_load_document_does_not_cache(tmp_path):
+    """Rule files are editable during a session — a reload must see the edit."""
+    f = tmp_path / "live.anchors"
+    f.write_text("U+0041 = first (box.center 0)\n")
+    assert [s.name for s in accumulate(load_document(str(f)), "A", [0x0041])] == ["first"]
+    f.write_text("U+0041 = second (box.center 0)\n")
+    assert [s.name for s in accumulate(load_document(str(f)), "A", [0x0041])] == ["second"]
+
+
 # --- !extends resolution & merge ------------------------------------------- #
 def test_extends_name_then_override(tmp_path):
     f = tmp_path / "my.anchors"

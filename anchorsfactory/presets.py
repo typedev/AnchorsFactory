@@ -37,6 +37,21 @@ _ENV_VAR = "ANCHORSFACTORY_RULES_PATH"
 _search_paths: tuple[str, ...] | None = None
 
 
+class RuleSetNotFound(KeyError):
+    """A bare rule-set name that nothing on the search path answers.
+
+    Distinct on purpose from the errors a *found* file raises — a missing set is
+    a configuration problem (point a search path at your rules), while a
+    :class:`~anchorsfactory.dsl.DSLError` is a problem in the rule text and a
+    ``FileNotFoundError`` a mistyped path. A host can route the three to
+    different places in its UI. Subclasses ``KeyError`` for backward
+    compatibility.
+    """
+
+    def __str__(self):                       # KeyError repr()s its arg — unhelpful here
+        return self.args[0] if self.args else ""
+
+
 def search_paths() -> tuple[str, ...]:
     """The process-wide directories searched for a rule set named by bare name.
 
@@ -123,11 +138,11 @@ def list_presets(search_paths=None, base_dir=None) -> list[str]:
     return sorted(out)
 
 
-def _missing(name: str, ext: str, search_paths_arg, base_dir) -> KeyError:
+def _missing(name: str, ext: str, search_paths_arg, base_dir) -> RuleSetNotFound:
     dirs = _candidate_dirs(search_paths_arg, base_dir)
     where = ", ".join(dirs) if dirs else "(no rule search paths configured)"
     found = ", ".join(list_presets(search_paths_arg, base_dir)) or "none"
-    return KeyError(
+    return RuleSetNotFound(
         f"no rule set {name!r} ({name}{ext}) on the search path; searched: {where}; "
         f"found there: {found}. Rule sets are not bundled with the package — pass a "
         f"path, set ${_ENV_VAR}, or configure search_paths."

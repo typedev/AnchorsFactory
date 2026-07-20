@@ -28,8 +28,9 @@ from .vocabulary import (
 )
 from .convert import convert_file, render_document, verify_conversion
 from .presets import (list_presets, preset_text, is_preset, is_name,
-                      search_paths, set_search_paths, add_search_path)
-from .runner import process_ufo, load_document, merge_documents
+                      search_paths, set_search_paths, add_search_path,
+                      RuleSetNotFound)
+from .runner import process_ufo, load_document, merge_documents, resolve_ref
 from .composites import (
     build_composites, parse_constructions, parse_construction,
     composites_in_glyph_order, uncovered_precomposed,
@@ -95,8 +96,10 @@ __all__ = [
     "search_paths",
     "set_search_paths",
     "add_search_path",
+    "RuleSetNotFound",
     "process_ufo",
     "load_document",
+    "resolve_ref",
     "build_composites",
     "parse_constructions",
     "parse_construction",

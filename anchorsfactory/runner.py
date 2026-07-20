@@ -67,25 +67,42 @@ def merge_documents(base: Document, child: Document) -> Document:
     return _merge(base, child)
 
 
-def _load(ref: str, base_dir, seen: tuple, search_paths=None) -> Document:
+def _abs(ref: str, base_dir) -> str:
+    path = ref if os.path.isabs(ref) else os.path.join(base_dir or "", ref)
+    return os.path.abspath(path)
+
+
+def resolve_ref(ref: str, *, base_dir=None, search_paths=None) -> str | None:
+    """The file *ref* would load from, or ``None`` if nothing answers it.
+
+    The public form of the decision :func:`load_document` makes internally — a
+    host that lets a user *edit* an inherited rule set needs the very path the
+    engine read, not a re-implementation of the search order. It is also what
+    lands in ``RuleSource.origin``, so the two can be compared directly.
+
+    A ref with a path separator or an extension is a **path**, resolved against
+    *base_dir*; a bare name is looked up on the search path (see
+    :mod:`anchorsfactory.presets`). Returns an absolute path; the file exists.
+    """
     named = presets.resolve(ref, search_paths=search_paths, base_dir=base_dir)
     if named is not None:
-        # A bare name resolved on the search path. Its own directory becomes the
-        # base for anything *it* references, so a rule set can sit anywhere and
-        # still reach its neighbours.
-        ident = os.path.abspath(named)
-        this_dir = os.path.dirname(ident)
-        doc = parse_dsl_file(named)
-    elif presets.is_name(ref) and not os.path.isfile(
-            ref if os.path.isabs(ref) else os.path.join(base_dir or "", ref)):
-        # A name that resolves to nothing, and no such file either: say where we
-        # looked rather than failing later on a confusing open().
+        return os.path.abspath(named)
+    path = _abs(ref, base_dir)              # a path ref, or a name with no set behind it
+    return path if os.path.isfile(path) else None
+
+
+def _load(ref: str, base_dir, seen: tuple, search_paths=None) -> Document:
+    path = resolve_ref(ref, base_dir=base_dir, search_paths=search_paths)
+    if path is None and presets.is_name(ref):
+        # A name nothing answers: say where we looked, and raise the type that
+        # tells a host "configuration", not "bad rule text" / "bad path".
         raise presets._missing(ref, presets._EXT, search_paths, base_dir)
-    else:
-        path = ref if os.path.isabs(ref) else os.path.join(base_dir or "", ref)
-        ident = os.path.abspath(path)
-        this_dir = os.path.dirname(ident)
-        doc = parse_dsl_file(path) if path.endswith(presets._PATH_EXTS) else parse_file(path)
+    if path is None:                        # a path ref that isn't there — let open() say so
+        path = _abs(ref, base_dir)
+    # The resolved file's own directory becomes the base for anything *it*
+    # references, so a set can sit anywhere and still reach its neighbours.
+    ident, this_dir = path, os.path.dirname(path)
+    doc = parse_dsl_file(path) if path.endswith(presets._PATH_EXTS) else parse_file(path)
 
     # Tag this document's own rules with where they came from, so an editor can
     # route a rule back to its file/preset (and `_merge` flips base rules to
