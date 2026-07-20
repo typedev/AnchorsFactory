@@ -11,6 +11,8 @@ changed" without inferring it from a version number.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-20
+
 ### Changed (breaking)
 
 - **No rule sets ship with the package.** Rules are data, and bundling them was
