@@ -11,6 +11,19 @@ changed" without inferring it from a version number.
 
 ## [Unreleased]
 
+### Fixed
+
+- **0.5.0's wheel shipped the Studio** despite `packages` excluding it. A stale
+  `anchorsfactory.egg-info/` in the working tree — left by an editable install
+  from when the Studio *was* a listed package — takes precedence over
+  `pyproject.toml` for setuptools, so the release build put it back. `make build`
+  was safe (it runs `clean` first); the release script cleared only `dist/`, and
+  that is the path that published. It now clears `build/` and `*.egg-info` too,
+  **and inspects the built wheel before uploading**: a rule set or a studio
+  module in it aborts the release. The build config was already correct for
+  0.5.0 and the artifact still came out wrong, so the artifact is what gets
+  checked. Nothing else differs between 0.5.0 and 0.5.1.
+
 ## [0.5.0] - 2026-07-20
 
 ### Changed (breaking)

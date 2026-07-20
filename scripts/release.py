@@ -166,6 +166,48 @@ def promote_unreleased(version: str, date: str) -> str:
     return body
 
 
+class WheelContentsError(Exception):
+    """The built wheel carries a file the distribution must not contain."""
+
+
+def clean_build_artifacts() -> None:
+    """Remove everything a previous build (or editable install) left behind."""
+    for path in [ROOT / "dist", ROOT / "build", *ROOT.glob("*.egg-info")]:
+        if path.exists():
+            print(f"  removing {path.name}/")
+            shutil.rmtree(path)
+
+
+#: What the distribution must NOT contain. Rule sets are data the host owns and
+#: the Studio is a repository-only tool (see pyproject's `packages`); both have
+#: been put back into the wheel by accident once already.
+FORBIDDEN_IN_WHEEL = (
+    ("rule set", lambda name: name.endswith((".anchors", ".glyphsConstruction"))),
+    ("studio module", lambda name: name.startswith("anchorsfactory/studio/")),
+)
+
+
+def verify_wheel(path: str) -> None:
+    """Fail the release if the built wheel carries something it shouldn't.
+
+    The build config alone is not enough of a guarantee — it was correct for
+    0.5.0 and the wheel still shipped the Studio, because a stale egg-info
+    overrode it. So the artifact itself is inspected, right before upload.
+    """
+    import zipfile
+
+    with zipfile.ZipFile(path) as zf:
+        names = zf.namelist()
+    for label, matches in FORBIDDEN_IN_WHEEL:
+        found = sorted(n for n in names if matches(n))
+        if found:
+            raise WheelContentsError(
+                f"{Path(path).name} contains {len(found)} {label} file(s), "
+                f"e.g. {found[0]} — the wheel is the engine, the CLI and the "
+                f"vendored GlyphConstruction only.")
+    print(f"  {Path(path).name}: no rule sets, no studio ✓")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Bump, build, publish, tag, push.")
     ap.add_argument("--test", action="store_true", help="upload to TestPyPI")
@@ -218,10 +260,12 @@ def main() -> None:
     try:
         print("\nBuilding artifacts ...")
         # Start from an empty dist/ so we only ever publish what we just built
-        # (uv build does not clear stale or pre-existing artifacts itself).
-        dist_dir = ROOT / "dist"
-        if dist_dir.exists():
-            shutil.rmtree(dist_dir)
+        # (uv build does not clear stale or pre-existing artifacts itself), and
+        # from no build/ or *.egg-info either: setuptools reuses an existing
+        # egg-info's file list in preference to `packages` in pyproject.toml, so
+        # a stale one from an earlier editable install silently puts modules back
+        # into the wheel. That shipped the Studio in 0.5.0.
+        clean_build_artifacts()
         run(["uv", "build"])
         dist_files = sorted(
             str(p)
@@ -232,9 +276,13 @@ def main() -> None:
             raise subprocess.CalledProcessError(1, "uv build")
         print("\nChecking artifacts ...")
         run(["uvx", "twine", "check", *dist_files])
-    except subprocess.CalledProcessError:
+        for f in dist_files:
+            if f.endswith(".whl"):
+                verify_wheel(f)
+    except (subprocess.CalledProcessError, WheelContentsError) as exc:
         run(["git", "checkout", "--", str(PYPROJECT), str(CHANGELOG)])
-        die("Build/check failed — working tree restored, nothing published.")
+        detail = f"\n  {exc}" if isinstance(exc, WheelContentsError) else ""
+        die(f"Build/check failed — working tree restored, nothing published.{detail}")
 
     try:
         print(f"\nUploading to {target} ...")
