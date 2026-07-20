@@ -138,6 +138,45 @@ def test_selecting_unaffected_glyph_inspects_it(page):
     assert page.locator("#canvas svg").count() == 1            # outline drawn
 
 
+def _completions(page, text):
+    """Type *text* into the active editor and read back the completion menu."""
+    ta = page.locator("#anchorEditors .lhost.active textarea")
+    ta.click()
+    ta.fill("")
+    ta.type(text, delay=10)
+    page.wait_for_timeout(200)
+    menu = page.query_selector("#anchorEditors .lhost.active .ac")
+    if not menu or menu.get_attribute("hidden") is not None:
+        return []
+    return [i.query_selector("span").inner_text() for i in menu.query_selector_all(".item")]
+
+
+def test_completion_is_axis_specific_and_matches_the_parser(page):
+    # X slot: horizontal alignments only — all six words used to come back,
+    # because the editor had no idea which slot the caret was in.
+    assert _completions(page, "H = top (box.") == ["left", "center", "right"]
+    # Y slot: vertical edges only.
+    assert _completions(page, "H = top (0 box.") == ["bottom", "middle", "top"]
+    # `outline` additionally offers its ink spans and the centroid.
+    outline = _completions(page, "H = top (0 outline.")
+    assert {"first", "last", "centroid", "top"} <= set(outline)
+
+
+def test_completion_offers_no_word_the_parser_rejects(page):
+    # `advance` is the IR's name for the frame; the DSL word is `width`, and the
+    # editor used to offer both (and to treat `advance.` as a valid frame).
+    assert _completions(page, "H = top (w") == ["width"]
+    assert "advance" not in _completions(page, "H = top (a")
+    assert _completions(page, "H = top (advance.") == []
+    # `width` is X-only in the IR, so it must vanish from the Y slot's menu.
+    assert _completions(page, "H = top (0 width.") == []
+    # font metrics are a Y-slot term only — offering them on X was the same bug
+    assert "ascender" not in _completions(page, "H = top (a")
+    assert "ascender" in _completions(page, "H = top (0 a")
+    # and the metric list is the library's, so nothing is quietly missing from it
+    assert "unitsPerEm" in _completions(page, "H = top (0 unitsPerE")
+
+
 def test_sidebar_lists_fonts_above_the_readout(page):
     # The right column carries the loaded-font card(s) over the anchor readout.
     assert page.locator("#fontcards .fontcard").count() >= 1

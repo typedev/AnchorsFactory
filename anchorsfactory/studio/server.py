@@ -20,6 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
 
+from .. import vocabulary
 from ..presets import (construction_text, has_construction, is_preset,
                        list_presets, preset_text)
 from .compose import build_composite_view
@@ -106,6 +107,9 @@ class Studio:
             "presetTexts": {name: preset_text(name) for name in list_presets()},
             "rules": rules_text,
             "gc": gc_text or _DEFAULT_GC,
+            # The DSL's surface words, straight from the library, so the editor's
+            # completion/highlight tables cannot drift from the parser.
+            "vocabulary": vocabulary.as_dict(),
             "save": str(self.save_path) if self.save_path else None,
         }
 

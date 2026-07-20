@@ -201,6 +201,34 @@ a `.diagnostics` list of `ComputeDiagnostic(glyph, anchor, reason, severity,
 rule)`. The default `on_error="raise"` is unchanged and keeps `.diagnostics`
 empty.
 
+### Editor support (`anchorsfactory.vocabulary`)
+
+Everything an editor needs to highlight and complete the rule language, taken
+from the same tables the parser is built from — so a client never hard-codes a
+word the parser might later reject.
+
+```python
+from anchorsfactory.vocabulary import (
+    FRAMES, X_ALIGNS, Y_EDGES, RUNS, METRICS, CENTROID,
+    DIRECTIVES, PROPAGATE_VALUES, SUFFIX_KEYWORDS, OPERATORS, SIGILS,
+    completions_after_dot, completions_for_slot, as_dict,
+)
+
+completions_after_dot("box", axis="y")     # ("bottom", "middle", "top")
+completions_after_dot("width", axis="y")   # () — the advance frame is X-only
+completions_for_slot("x")                  # what may open the X slot (no metrics)
+as_dict()                                  # the whole thing, JSON-serialisable
+```
+
+Both axes share one `frame.position` grammar but not one alignment table:
+`left/center/right` is X, `bottom/middle/top` is Y, and a font metric only opens
+a Y slot. Passing the slot the caret sits in therefore narrows a menu from six
+words to three; pass `axis=None` when the slot is unknown and both come back.
+
+Note it is deliberately not the IR: `Frame.ADVANCE` is a node name, the word a
+user types is `width`. A client completing straight off `anchorsfactory.model`
+gets the former and offers a token the parser rejects.
+
 ## Development
 
 ```bash

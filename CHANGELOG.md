@@ -8,6 +8,29 @@ section to the new version (with today's date) and uses it as the release notes.
 
 ### Added
 
+- **`anchorsfactory.vocabulary`** — the rule language's surface words as public
+  data, for editors that highlight, complete or diagnose it: `FRAMES`,
+  `X_ALIGNS`, `Y_EDGES`, `RUNS`, `METRICS`, `CENTROID`, `DIRECTIVES`,
+  `PROPAGATE_VALUES`, `SUFFIX_KEYWORDS`, `OPERATORS`, `SIGILS`, plus
+  `completions_after_dot(head, axis)`, `completions_for_slot(axis)` and
+  `as_dict()` (JSON-serialisable, for non-Python clients). The tables are derived
+  from the IR enums and the **parser now reads them from here**, so the two
+  cannot drift; the axis-aware functions carry knowledge a client would otherwise
+  re-derive — `width` has no vertical form, a font metric opens a Y slot only,
+  `outline` also takes runs and the centroid. Requested by a downstream editor.
+  Note the module is deliberately not the IR: `Frame.ADVANCE` is a node name, the
+  word a user types is `width`.
+
+### Fixed
+
+- **Studio completion offered tokens the parser rejects** — its dictionary was a
+  hand-kept copy that had drifted: it listed `advance` (an IR name, never a DSL
+  frame) and treated `advance.` as a valid frame, while `unitsPerEm` was missing
+  from its metric list. It now builds every table from `anchorsfactory.vocabulary`,
+  and knows which slot of `name ( X Y )` the caret is in — so after `box.` it
+  offers three alignments instead of all six, and no longer suggests a font
+  metric in the X slot.
+
 - **`@`-edge offsets** — a signed offset after an own-edge sample line:
   `outline.center@top-10` samples 10 units below the bbox top (the fix for a
   scanline grazing a smooth peak), plus `@bottom+8` and, on Y, `@left-5` /

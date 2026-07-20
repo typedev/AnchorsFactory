@@ -19,16 +19,22 @@ from .model import (
     Pos, Centroid, Abs, Y, FontMetric, Sum, Neg, EdgeOffset, AnchorSpec, AnchorRef, LabelRef, VarRef,
     GlyphName, Unicode, UnicodeRange, Glob, Category, Op, Document, Rule, RuleSource,
 )
+from .vocabulary import (
+    AT_X_EDGES, AT_Y_SIDES, CENTROID, COMPONENT_PATTERN, DIRECTIVES,
+    PROPAGATE_VALUES, SUFFIX_KEYWORDS,
+)
 
 
 class DSLError(ValueError):
     """Raised on a malformed line, with line context."""
 
 
-_FRAME = {"width": Frame.ADVANCE, "box": Frame.BOX, "outline": Frame.OUTLINE}
-_HALIGN = {"left": HAlign.LEFT, "center": HAlign.CENTER, "right": HAlign.RIGHT}
-_RUN = {"first": Run.FIRST, "last": Run.LAST}
-_EDGE = {"top": VEdge.TOP, "middle": VEdge.MIDDLE, "bottom": VEdge.BOTTOM}
+# Surface word -> IR member. Built from the enums so the parser and
+# :mod:`anchorsfactory.vocabulary` (which an editor completes from) cannot drift.
+_FRAME = {f.value: f for f in Frame}
+_HALIGN = {a.value: a for a in HAlign}
+_RUN = {r.value: r for r in Run}
+_EDGE = {e.value: e for e in VEdge}
 
 _ANCHOR_RE = re.compile(r"^(\S+)\s*\(\s*(\S+)\s+(\S+)\s*\)$")
 _RULE_RE = re.compile(r"^(.*?)\s*(\+=|-=|=)\s*(.*)$")
@@ -39,7 +45,7 @@ _OPS = {"=": Op.REPLACE, "+=": Op.ADD, "-=": Op.REMOVE}
 # --------------------------------------------------------------------------- #
 #  Position tokens — one `frame.[run.]align[@at]` grammar for both axes
 # --------------------------------------------------------------------------- #
-_COMP_RE = re.compile(r"^comp(\d+|last)\.(.+)$")
+_COMP_RE = re.compile(rf"^{COMPONENT_PATTERN}(.+)$")
 
 
 def _strip_component(tok: str):
@@ -77,7 +83,7 @@ def _parse_align(tok: str, axis: Axis, whole: str):
     return table[tok]
 
 
-_EDGEOFF_RE = re.compile(r"^(top|bottom|left|right)([+-]\d+)$")
+_EDGEOFF_RE = re.compile(rf"^({'|'.join(AT_X_EDGES + AT_Y_SIDES)})([+-]\d+)$")
 
 
 def _parse_at(tok: str, axis: Axis):
@@ -86,14 +92,14 @@ def _parse_at(tok: str, axis: Axis):
     Y.at is a column)."""
     m = _EDGEOFF_RE.match(tok)
     if axis is Axis.X:                       # a height
-        if tok in ("top", "bottom"):
+        if tok in AT_X_EDGES:
             return _EDGE[tok]                # the glyph's own extreme
-        if m and m.group(1) in ("top", "bottom"):
+        if m and m.group(1) in AT_X_EDGES:
             return EdgeOffset(_EDGE[m.group(1)], int(m.group(2)))
         return _parse_slot(tok, Axis.Y)
-    if tok in ("left", "right"):             # axis Y → a column; own side
+    if tok in AT_Y_SIDES:                    # axis Y → a column; own side
         return _HALIGN[tok]
-    if m and m.group(1) in ("left", "right"):
+    if m and m.group(1) in AT_Y_SIDES:
         return EdgeOffset(_HALIGN[m.group(1)], int(m.group(2)))
     return _parse_slot(tok, Axis.X)
 
@@ -120,7 +126,7 @@ def _parse_pos(tok: str, axis: Axis):
     parts = base.split(".")
     frame = _FRAME[parts[0]]                  # caller guarantees parts[0] is a frame
     rest = parts[1:]
-    if rest == ["centroid"]:                  # the one global, axis-free position
+    if rest == [CENTROID]:                    # the one global, axis-free position
         if frame is not Frame.OUTLINE:
             raise DSLError(f"centroid only applies to outline, got {tok!r}")
         if sep:
@@ -317,22 +323,25 @@ def _parse_suffix_op(op_tok: str, value: str, n: int):
     `= all [except .a, .b]` / `= none` reset to dynamic / empty (replace only);
     `= / += / -= .a, .b` set / add / remove explicit suffixes.
     """
+    kw_all, kw_except, kw_none = SUFFIX_KEYWORDS
     op = _OPS[op_tok]
     v = value.strip()
     low = v.lower()
-    if low == "all" or low.startswith("all "):
+    if low == kw_all or low.startswith(kw_all + " "):
         if op is not Op.REPLACE:
-            raise DSLError(f"line {n}: '!suffixes {op_tok} all' is invalid — 'all' needs '='")
-        rest = v[3:].strip()
+            raise DSLError(f"line {n}: '!suffixes {op_tok} {kw_all}' is invalid "
+                           f"— '{kw_all}' needs '='")
+        rest = v[len(kw_all):].strip()
         deny = ()
         if rest:
-            if not rest.lower().startswith("except"):
-                raise DSLError(f"line {n}: expected 'all except <suffixes>', got {v!r}")
-            deny = tuple(_norm_sfx(s) for s in rest[6:].split(",") if s.strip())
+            if not rest.lower().startswith(kw_except):
+                raise DSLError(f"line {n}: expected '{kw_all} {kw_except} <suffixes>', got {v!r}")
+            deny = tuple(_norm_sfx(s) for s in rest[len(kw_except):].split(",") if s.strip())
         return (Op.REPLACE, "all", deny)
-    if low == "none":
+    if low == kw_none:
         if op is not Op.REPLACE:
-            raise DSLError(f"line {n}: '!suffixes {op_tok} none' is invalid — 'none' needs '='")
+            raise DSLError(f"line {n}: '!suffixes {op_tok} {kw_none}' is invalid "
+                           f"— '{kw_none}' needs '='")
         return (Op.REPLACE, "list", ())
     items = tuple(_norm_sfx(s) for s in v.split(",") if s.strip())
     if not items:
@@ -409,12 +418,13 @@ def parse_dsl(lines) -> Document:
             elif name == "propagate":
                 if op_tok != "=":
                     raise DSLError(f"line {n}: !propagate only supports '='")
-                if value not in ("none", "composites", "all"):
-                    raise DSLError(f"line {n}: !propagate takes none|composites|all, "
-                                   f"got {value!r}")
+                if value not in PROPAGATE_VALUES:
+                    raise DSLError(f"line {n}: !propagate takes "
+                                   f"{'|'.join(PROPAGATE_VALUES)}, got {value!r}")
                 propagate = value
             else:
-                raise DSLError(f"line {n}: unknown directive !{name}")
+                raise DSLError(f"line {n}: unknown directive !{name}; "
+                               f"one of {' '.join(sorted(DIRECTIVES))}")
             continue
 
         m = _RULE_RE.match(stmt)

@@ -20,6 +20,12 @@ from .query import (
 )
 from .parser import parse_document, parse_file, ParseError
 from .dsl import parse_dsl, parse_dsl_file, DSLError
+from .vocabulary import (
+    FRAMES, X_ALIGNS, Y_EDGES, RUNS, METRICS, CENTROID, FRACTIONAL_FRAMES,
+    DIRECTIVES, PROPAGATE_VALUES, SUFFIX_KEYWORDS, OPERATORS, SIGILS,
+    COMPONENT_PATTERN, AT_X_EDGES, AT_Y_SIDES,
+    aligns_for, completions_after_dot, completions_for_slot,
+)
 from .convert import convert_file, render_document, verify_conversion
 from .presets import list_presets, preset_text, is_preset
 from .runner import process_ufo, load_document, merge_documents
@@ -60,6 +66,24 @@ __all__ = [
     "parse_dsl",
     "parse_dsl_file",
     "DSLError",
+    "FRAMES",
+    "X_ALIGNS",
+    "Y_EDGES",
+    "RUNS",
+    "METRICS",
+    "CENTROID",
+    "FRACTIONAL_FRAMES",
+    "DIRECTIVES",
+    "PROPAGATE_VALUES",
+    "SUFFIX_KEYWORDS",
+    "OPERATORS",
+    "SIGILS",
+    "COMPONENT_PATTERN",
+    "AT_X_EDGES",
+    "AT_Y_SIDES",
+    "aligns_for",
+    "completions_after_dot",
+    "completions_for_slot",
     "convert_file",
     "render_document",
     "verify_conversion",

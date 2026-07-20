@@ -27,6 +27,7 @@ const editorForLayer = i => (anchorLayers[i] ? anchorLayers[i].ed : null);
 
 async function boot(){
   META = await (await fetch("/api/state")).json();
+  initVocabulary(META.vocabulary);
   setFontMeta();
   renderFontCards();
   const sel = $("#preset");
@@ -211,20 +212,33 @@ const scheduleCompute = debounce(() => compute(), 300);
 function presetOf(text){ return META.presets.find(p => META.presetTexts[p] === text) || ""; }
 
 /* ---- a code editor bound to a host element (one per layer) ---- */
-const KW = new Set(["width","box","outline","advance","left","center","right",
-  "bottom","middle","top","first","last","centroid"]);
-const METRICS = ["capHeight","xHeight","ascender","descender","baseline"];
-const METRIC_SET = new Set(METRICS);
-const DIRECTIVES = new Set(["!extends","!suffixes","!shiftx","!propagate"]);
-const BARE = [...KW, ...METRICS];
+// The DSL vocabulary is not spelled here: the server sends it from
+// anchorsfactory.vocabulary (the same tables the parser itself is built from),
+// so highlighting and completion cannot drift from what the parser accepts.
+let KW = new Set(), METRICS = [], METRIC_SET = new Set(), DIRECTIVES = new Set(),
+    FRAMES = [], ALIGNS = [], EDGES = [], RUNS = [], RUN_SET = new Set(),
+    CENTROID = "centroid", AFTER_DOT = {}, FOR_SLOT = {}, FRAME_SET = new Set(),
+    COMP_HEAD_RE = /^comp(\d+|last)$/;
 let CHAR_W = 0;
 
+function initVocabulary(v){
+  FRAMES = v.frames; ALIGNS = v.xAligns; EDGES = v.yEdges; RUNS = v.runs;
+  METRICS = v.metrics; CENTROID = v.centroid; AFTER_DOT = v.completionsAfterDot;
+  FOR_SLOT = v.completionsForSlot;
+  RUN_SET = new Set(RUNS); FRAME_SET = new Set(FRAMES);
+  METRIC_SET = new Set(METRICS);
+  DIRECTIVES = new Set(v.directives);
+  KW = new Set([...FRAMES, ...ALIGNS, ...EDGES, ...RUNS, CENTROID]);
+  COMP_HEAD_RE = new RegExp("^" + v.componentHeadPattern + "$");
+}
+
 // ---- completion providers (one per editor language) ------------------------
-// Each returns [{v, k}] for a context {word, head, seg}: `head` is the token
-// before the last dot (a frame / $glyph / compN), `seg` the part being typed.
-const FRAMES = ["box","outline","width"], ALIGNS = ["left","center","right"],
-      EDGES = ["bottom","middle","top"], RUNS = ["first","last"];
+// Each returns [{v, k}] for a context {word, head, seg, axis}: `head` is the
+// token before the last dot (a frame / $glyph / compN), `seg` the part being
+// typed, `axis` the anchor slot the caret sits in ("x"/"y", null if unknown).
 const _mk = (arr, k) => arr.map(v => ({v, k}));
+const _kindOf = v => FRAME_SET.has(v) ? "frame" : RUN_SET.has(v) ? "run"
+                   : METRIC_SET.has(v) ? "metric" : v === CENTROID ? "kw" : "align";
 
 // distinct anchor names across the current view (base anchors omit the `_`).
 function anchorNames(baseOnly){
@@ -237,7 +251,7 @@ function anchorNames(baseOnly){
 }
 
 // The anchor DSL: keywords, @labels, &vars, %anchors, and after-a-dot positions.
-function ANCHOR_COMPLETE({word, head, seg}){
+function ANCHOR_COMPLETE({word, head, seg, axis}){
   if(word[0] === "@"){ const s=new Set(); for(const x of allRulesText().matchAll(/@[\w.]+/g)) s.add(x[0]); return _mk([...s],"label"); }
   if(word[0] === "&"){ const s=new Set(); for(const x of allRulesText().matchAll(/&\w+/g)) s.add(x[0]); return _mk([...s],"var"); }
   if(word[0] === "%"){                                   // another anchor's position on this glyph
@@ -247,13 +261,15 @@ function ANCHOR_COMPLETE({word, head, seg}){
   }
   if(head != null){                                     // after a dot: position words for `head`
     if(head[0] === "$") return _mk(EDGES,"edge");        // $Glyph.top / .middle / .bottom
-    if(/^comp(\d+|last)$/.test(head)) return _mk(FRAMES,"frame");
-    if(head === "outline") return [..._mk(RUNS,"run"), ..._mk([...ALIGNS,...EDGES],"align"), {v:"centroid",k:"kw"}];
-    if(["box","width","advance"].includes(head)) return _mk([...ALIGNS,...EDGES],"align");
-    return [];                                           // unknown head → no suggestions
+    if(COMP_HEAD_RE.test(head)) return _mk(FRAMES,"frame");
+    // the library's own per-axis table: `width` has no vertical form, `outline`
+    // also takes runs and the centroid — none of that is decided here.
+    const words = (AFTER_DOT[head] || {})[axis || ""] || [];
+    return words.map(v => ({v, k: _kindOf(v)}));
   }
-  return [..._mk(FRAMES,"frame"), ..._mk([...ALIGNS,...EDGES],"align"),
-          {v:"centroid",k:"kw"}, ..._mk(METRICS,"metric")];
+  // opening a slot: frames + this axis's alignments, and metrics only where a
+  // height term is legal (the Y slot) — again the library's call, not ours.
+  return (FOR_SLOT[axis || ""] || []).map(v => ({v, k: _kindOf(v)}));
 }
 
 // GlyphConstruction: @anchor names, otherwise glyph names.
@@ -347,6 +363,17 @@ function makeEditor(host, onChange, onFocus, highlight = highlightLine, complete
   function sync(){ hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft; gutter.scrollTop = ta.scrollTop; }
   function markErrors(set){ errLines = set || new Set(); refresh(); }
 
+  // Which slot of `name ( X Y )` the caret sits in — the anchor DSL uses one
+  // grammar for both axes but a different alignment table per axis, so knowing
+  // the slot narrows the menu from six words to three.
+  function slotAxis(upto){
+    const line = upto.slice(upto.lastIndexOf("\n") + 1);
+    const open = line.lastIndexOf("(");
+    if(open < 0 || line.indexOf(")", open) >= 0) return null;
+    const inner = line.slice(open + 1).replace(/^\s+/, "");
+    const done = inner.split(/\s+/).length - 1;         // whole tokens before the caret
+    return done === 0 ? "x" : done === 1 ? "y" : null;  // beyond two → not a slot
+  }
   function currentWord(){
     const pos = ta.selectionStart, upto = ta.value.slice(0, pos);
     const m = /[@&%$]?[\w.]*$/.exec(upto);
@@ -356,14 +383,14 @@ function makeEditor(host, onChange, onFocus, highlight = highlightLine, complete
     const head = dot >= 0 ? word.slice(0, dot) : null;
     const seg = dot >= 0 ? word.slice(dot + 1) : word;
     const start = dot >= 0 ? pos - seg.length : pos - word.length;
-    return { word, head, seg, start, pos };
+    return { word, head, seg, start, pos, axis: slotAxis(upto) };
   }
   function acUpdate(){
-    const {word, head, seg, start, pos} = currentWord();
+    const {word, head, seg, start, pos, axis} = currentWord();
     // require ≥1 char normally, but pop immediately right after a dot (empty seg ok)
     if((head == null && seg.length < 1) || pos !== ta.selectionStart) return acHide();
     const lower = seg.toLowerCase();
-    acItems = complete({word, head, seg})
+    acItems = complete({word, head, seg, axis})
       .filter(c => c.v.toLowerCase().startsWith(head != null ? lower : word.toLowerCase()) && c.v !== word)
       .slice(0, 12);
     if(!acItems.length) return acHide();
