@@ -12,9 +12,11 @@ import math
 from typing import Optional
 
 from fontTools.misc.bezierTools import curveLineIntersections
+from fontTools.misc.transform import Transform
 from fontTools.pens.boundsPen import BoundsPen
 from fontTools.pens.recordingPen import DecomposingRecordingPen
 from fontTools.pens.statisticsPen import StatisticsPen
+from fontTools.pens.transformPen import TransformPen
 
 import logging
 
@@ -169,6 +171,30 @@ def _component_bounds(glyph, component):
     return pen.bounds
 
 
+def _deslanted_bounds(font, glyph, component=None):
+    """The glyph's bbox measured with the italic slant taken back out.
+
+    A UFO stores the already-slanted outline, so a slanted glyph's raw bbox is
+    not a box around the letter — it is a box around the letter *plus* the lean,
+    and where its X extremes sit depends on the shape: an ``H``'s at mid-height,
+    a ``V``'s at the top, an ``A``'s at the bottom. That makes the raw box centre
+    useless as a horizontal reference (on a 13° face it put ``V`` 82 units right
+    of ``A``, though the two are drawn on the same centre).
+
+    Shearing the outline back to upright before measuring removes exactly that,
+    for any shape rather than for parallelograms only: the result is a genuine
+    upright reference at ``S = 0``, which the italic shift then projects to the
+    anchor's height like any other baseline-defined value. Returns ``None`` when
+    the glyph draws nothing; on an upright font this is just the plain bbox.
+    """
+    angle = font.info.italicAngle if font is not None and font.info else None
+    if not angle:
+        return _component_bounds(glyph, component) if component is not None else glyph.bounds
+    pen = BoundsPen(getattr(glyph, "font", None))
+    _draw_source(glyph, component, TransformPen(pen, Transform().skew(math.radians(angle), 0)))
+    return pen.bounds
+
+
 def _spans(xs: list[float], eps: float = _MERGE_EPS) -> list[tuple[float, float]]:
     """Merge near-coincident crossings and pair them into ink spans (stems)."""
     merged: list[float] = []
@@ -314,8 +340,10 @@ def _pos(font, glyph, p: Pos, axis: Axis, *, cross=None, warnings=None) -> float
     if p.frame is Frame.ADVANCE:           # X-only (guarded in the IR)
         return _along(0.0, float(glyph.width), p.align)
     if p.frame is Frame.BOX:
-        lo, hi = (xMin, xMax) if axis is Axis.X else (yMin, yMax)
-        return _along(lo, hi, p.align)
+        if axis is Axis.X:
+            box = _deslanted_bounds(font, glyph, comp) or bounds
+            return _along(box[0], box[2], p.align)
+        return _along(yMin, yMax, p.align)
 
     # OUTLINE — sample where the ink actually is, on the scanline perpendicular
     # to this axis, at exactly the requested position (no inset/nudge).
@@ -389,12 +417,9 @@ def _italic_gap(font, glyph, xspec, anchor_y: float) -> float:
     sheared to follow the italic angle, summed per term. ``S`` is the height at
     which each X source is *defined*:
 
-    - ADVANCE → ``0``: the advance box is upright whatever the outline does, so
-      its centre is a baseline value and gets the full ``tan·y`` shear;
-    - BOX → the **middle of the bounding box**. The bbox is measured on the
-      already-slanted outline, so its centre is the upright centre sheared to
-      mid-height; projecting from ``0`` would count the slant twice (a 12°
-      demo H came out 74 units — ``tan(12°)·350`` — right of its own ink).
+    - BOX/ADVANCE → ``0``: both are upright references — the advance box never
+      leans, and a BOX position is measured on the *deslanted* outline (see
+      :func:`_deslanted_bounds`) — so they take the full ``tan·y`` shear;
     - OUTLINE → its ``@`` sample height, or ``anchor_y`` when there is none
       (plain ``outline.*`` is already on the slant → gap ``0``);
     - centroid → its own ``y`` (project the area centre up the slant);
@@ -413,13 +438,11 @@ def _italic_gap(font, glyph, xspec, anchor_y: float) -> float:
         _, cy = _centroid(glyph, comp)
         return anchor_y - cy
     if isinstance(xspec, Pos):
-        if xspec.frame is Frame.ADVANCE:
-            return anchor_y                      # S = 0: the advance box is upright
+        if xspec.frame in (Frame.ADVANCE, Frame.BOX):
+            return anchor_y                      # S = 0, both upright references
         comp = _resolve_component(glyph, getattr(xspec, "component", None))
         bounds = (_component_bounds(glyph, comp) if comp is not None else glyph.bounds) \
             or (0.0, 0.0, 0.0, 0.0)
-        if xspec.frame is Frame.BOX:
-            return anchor_y - (bounds[1] + bounds[3]) / 2      # S = bbox middle
         return anchor_y - _sample_line(font, glyph, xspec, Axis.X, anchor_y, bounds)
     return 0.0                                   # Abs / other: not sheared
 

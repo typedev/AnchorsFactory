@@ -82,6 +82,33 @@ def test_box_projects_from_its_bbox_middle(italic):
     assert resolve_x(f, g, Pos(Frame.BOX, HAlign.CENTER), 600) == pytest.approx(100 + TAN * (600 - 350))
 
 
+@pytest.fixture
+def wedge(italic):
+    """A slanted `V`: a wedge whose X extremes are both at the top, drawn on the
+    same centre (100) as the stem. The shape where a mid-height rule breaks."""
+    f, _ = italic
+    g = f.newGlyph("wedge")
+    g.width = 200
+    pen = g.getPen()
+    pen.moveTo((100 + TAN * 700 - 60, 700))        # top left
+    pen.lineTo((100 + TAN * 700 + 60, 700))        # top right
+    pen.lineTo((100 + 10, 0)); pen.lineTo((100 - 10, 0))   # narrow foot
+    pen.closePath()
+    return f, g
+
+
+def test_box_centre_is_shape_independent(slanted, wedge):
+    """The bug this rule exists for: a V's box extremes sit at the top and an A's
+    at the bottom, so a box measured on the slanted outline puts letters drawn on
+    one centre in different places. Deslanting before measuring makes the centre a
+    property of the drawing, not of where the shape happens to be widest."""
+    f, stem = slanted
+    _, v = wedge
+    for y in (0, 350, 700):
+        assert (resolve_x(f, v, Pos(Frame.BOX, HAlign.CENTER), y)
+                == pytest.approx(resolve_x(f, stem, Pos(Frame.BOX, HAlign.CENTER), y), abs=1e-6))
+
+
 def test_box_on_slanted_ink_lands_on_the_ink(slanted):
     """The point of the S = bbox-middle rule: on a genuinely slanted glyph,
     `box.center` must name the same place as the advance centre and the contour

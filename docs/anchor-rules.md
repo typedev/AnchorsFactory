@@ -234,19 +234,19 @@ anchor follows the stem instead of sitting beside it. The shift is
 It's automatic — nothing to write in a rule — and on an upright font the angle is
 0, so every shift is 0.
 
-> **Why `box.*` projects from mid-height.** A UFO stores the *already-slanted*
-> outline, so its bounding box leans with it: the box centre is the upright centre
-> sheared to the box's mid-height. Shearing that from the baseline would count the
-> slant twice — `box.center` used to land ≈ `tan·(mid-height)` right of the true
-> centre (~80 units at 13°). Taking `S` as the box middle is exact for a uniformly
-> sheared shape, which is what an italic glyph is.
+> **How `box.*` reads a slanted glyph.** A UFO stores the *already-slanted*
+> outline, so a raw bounding box is not a box around the letter — it is a box
+> around the letter plus its lean, and where its horizontal extremes sit depends
+> on the shape: an `H`'s at mid-height, a `V`'s at the top, an `A`'s at the
+> bottom. Measured that way, a `V` and an `A` drawn on the same centre came out
+> 82 units apart on a 13° face.
 >
-> It is still an approximation where the ink is not uniformly sheared — a glyph's
-> left and right extremes can sit at different heights, and a glyph drawn upright
-> inside an italic font leans on nothing at all. Where the shape is irregular,
-> **`outline.center`** (the ink centre at the anchor's own height),
-> **`outline.center@<h>`** or **`outline.centroid`** sample the real contour and
-> need no correction.
+> So on X, a `box.*` position is measured on the outline sheared **back to
+> upright**. That makes the box an honest upright reference (`S = 0`) for any
+> shape, and the italic shift then projects it to the anchor's height like any
+> other baseline value. Vertical edges (`box.top`, `box.bottom`) and every
+> `outline.*` scanline keep the real, slanted outline — they describe where the
+> ink actually is.
 
 ## Labels
 
