@@ -13,7 +13,7 @@ help:
 	@echo "venv         create .venv and install the package (editable) + dev deps + browsers"
 	@echo "browsers     download the Playwright chromium used by the studio UI test"
 	@echo "studio       launch Studio + open it in a browser window (ARGS='<ufo> -r <rules>')"
-	@echo "studio-save  like studio, but seed from the default preset + autosave edits to a file (default dev/studio-rules.anchors)"
+	@echo "studio-save  like studio, but seed from the default rule set + autosave edits to a file (default dev/studio-rules.anchors)"
 	@echo "test         run the test suite"
 	@echo "build        build sdist + wheel into dist/"
 	@echo "check        build, then validate the artifacts (twine check)"
@@ -35,10 +35,12 @@ browsers:
 
 # Launch Studio and open it in a Playwright Chromium window. Pass a font/rules
 # via ARGS, e.g.  make studio ARGS="MyFont.ufo -r my.anchors"
+# Bare set names (-r default, !extends default) resolve against examples/rules/,
+# the repository's samples — no rule sets ship with the package.
 studio:
 	$(PY) scripts/studio_dev.py $(ARGS)
 
-# Like studio, but seeded from the `default` preset and autosaving every valid
+# Like studio, but seeded from the `default` sample set and autosaving every valid
 # edit to a file (dev/studio-rules.anchors by default; override with ARGS="-f my.anchors").
 # Subsequent runs resume from that file. Good for an iterative rules session.
 studio-save:

@@ -11,7 +11,7 @@ from anchorsfactory import (
     parse_construction, parse_constructions,
 )
 from anchorsfactory.composites import resolve_unicode_refs
-from anchorsfactory.presets import construction_text
+from rulesets import gc_text, rules_doc
 from anchorsfactory.studio.demo import build_demo_font
 
 
@@ -66,7 +66,7 @@ def test_parse_constructions_line_with_leading_var_and_blanks():
 
 def _anchored_font():
     font = build_demo_font()
-    apply_document(font, load_document("default"))     # composites read glyph.anchors
+    apply_document(font, rules_doc())     # composites read glyph.anchors
     return font
 
 
@@ -138,7 +138,7 @@ def test_text_without_unicode_refs_is_untouched():
 
 def test_build_composites_from_codepoint_addressed_text():
     font = build_demo_font()
-    apply_document(font, load_document("default"))
+    apply_document(font, rules_doc())
     built = build_composites(font, "U+00E1 = U+0061 + U+00B4@top | 00E1")
     assert "aacute" in built
     c = built["aacute"]
@@ -150,8 +150,8 @@ def test_bundled_default_preset_builds_its_own_composites():
     """The two halves of the bundled preset agree: every construction it ships
     assembles from the anchors its rules place."""
     font = build_demo_font()
-    apply_document(font, load_document("default"))
-    built = build_composites(font, construction_text("default"))
+    apply_document(font, rules_doc())
+    built = build_composites(font, gc_text("default"))
     assert built                                   # the preset ships constructions
     demo = [c for c in built.values() if not any("not found" in p for p in c.problems)]
     assert demo, "no construction could be built on the demo font"
@@ -194,7 +194,7 @@ def test_case_suffix_without_a_font_uses_the_legacy_spelling():
 def test_bundled_default_uses_the_capital_set_for_uppercase():
     """The shipped constructions ask for the capital cut on uppercase bases and
     the plain mark on lowercase ones."""
-    gc = construction_text("default")
+    gc = gc_text("default")
     upper = next(l for l in gc.splitlines() if l.startswith("U+00C1 "))   # Aacute
     lower = next(l for l in gc.splitlines() if l.startswith("U+00E1 "))   # aacute
     assert ".case" in upper and ".case" not in lower

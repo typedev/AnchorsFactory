@@ -27,7 +27,8 @@ from .vocabulary import (
     aligns_for, completions_after_dot, completions_for_slot,
 )
 from .convert import convert_file, render_document, verify_conversion
-from .presets import list_presets, preset_text, is_preset
+from .presets import (list_presets, preset_text, is_preset, is_name,
+                      search_paths, set_search_paths, add_search_path)
 from .runner import process_ufo, load_document, merge_documents
 from .composites import (
     build_composites, parse_constructions, parse_construction,
@@ -90,6 +91,10 @@ __all__ = [
     "list_presets",
     "preset_text",
     "is_preset",
+    "is_name",
+    "search_paths",
+    "set_search_paths",
+    "add_search_path",
     "process_ufo",
     "load_document",
     "build_composites",

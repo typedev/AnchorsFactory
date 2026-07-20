@@ -1,7 +1,4 @@
 include LICENSE
 include README.md
-recursive-include anchorsfactory/rules *.anchors
-recursive-include anchorsfactory/rules *.glyphsConstruction
-recursive-include anchorsfactory/studio/static *
 recursive-include anchorsfactory/_vendor *
 recursive-include docs *.md

@@ -23,12 +23,21 @@ import threading
 import time
 from functools import partial
 from http.server import ThreadingHTTPServer
+from pathlib import Path
+
+#: The repository's sample rule sets — the package bundles none.
+REPO_RULES = Path(__file__).resolve().parent.parent / "examples" / "rules"
 
 
 def _build_studio(args):
+    from anchorsfactory.presets import set_search_paths
     from anchorsfactory.studio.demo import build_demo_font
     from anchorsfactory.studio.server import Studio, _seed_rules
 
+    # From a checkout, the repository's own sample sets are the obvious library
+    # to resolve `-r default` / `!extends default` against — nothing ships in
+    # the package.
+    set_search_paths(args.rules_path or [str(REPO_RULES)])
     rules_text = _seed_rules(args.rules)
     if args.ufo:
         from fontParts.world import OpenFont
@@ -45,7 +54,10 @@ def main(argv=None) -> int:
         prog="studio_dev", description="Launch Studio and open it in a browser window.")
     ap.add_argument("ufo", nargs="?", help="a .ufo to debug; omitted → built-in demo font")
     ap.add_argument("-r", "--rules", default="default",
-                    help="preset name or .anchors path to open with (default: 'default')")
+                    help="rule set to open with: a .anchors path, or a name resolved "
+                         "on --rules-path (default: 'default', from examples/rules/)")
+    ap.add_argument("--rules-path", action="append", metavar="DIR",
+                    help=f"where to resolve bare rule-set names (default: {REPO_RULES})")
     ap.add_argument("--save", metavar="PATH",
                     help="autosave the (valid) base-layer rules to PATH on every edit; "
                          "reopen with -r PATH to resume")

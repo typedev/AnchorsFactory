@@ -14,6 +14,7 @@ pytest.importorskip("fontParts.world")
 
 from anchorsfactory.apply import apply_document
 from anchorsfactory.runner import load_document
+from rulesets import rules_doc
 from anchorsfactory.studio.demo import build_demo_font
 from anchorsfactory.composites import (
     GlyphConstructionBuilder,
@@ -30,7 +31,7 @@ def test_vendored_module_imports_without_extra_deps():
 
 def test_gc_assembles_composite_from_af_anchors():
     font = build_demo_font()
-    apply_document(font, load_document("default"))
+    apply_document(font, rules_doc())
 
     a_anchors = {a.name: (a.x, a.y) for a in font["a"].anchors}
     acute_anchors = {a.name: (a.x, a.y) for a in font["acute"].anchors}

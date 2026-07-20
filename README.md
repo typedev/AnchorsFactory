@@ -23,14 +23,15 @@ Requires Python 3.10+, `fontParts` and `fontTools`.
 ## Quick start
 
 ```bash
-# place anchors using the bundled default ruleset, save to font_anchored.ufo
-anchorsfactory MyFont.ufo --rules default
+# place anchors using a rule set, save to font_anchored.ufo
+# (none ship with the package — start from a copy of examples/rules/default.anchors)
+anchorsfactory MyFont.ufo --rules my-rules.anchors
 
-# your own rules, overwrite in place, with a backup of existing anchors
+# overwrite in place, with a backup of existing anchors
 anchorsfactory MyFont.ufo --rules my-rules.anchors --in-place --backup-dir backups/
 
-# a whole folder of UFOs
-anchorsfactory masters/ --rules default
+# a whole folder of UFOs, addressing the set by name off a rule library
+anchorsfactory masters/ --rules-path my-rules --rules default
 ```
 
 By default the source UFO is never overwritten — output goes to
@@ -80,15 +81,34 @@ U+0413 += desc (outline.right 0)   # Г also gets a descender anchor
 
 Full reference: **[docs/anchor-rules.md](docs/anchor-rules.md)**.
 
-### Presets and migration
+### Rule sets: the host carries them
 
-Bundled rulesets `default` and `default-italics` are usable by name in
-`--rules` or `!extends`. The italic one is an **overlay**: the shear itself is
-automatic, so it only restates what a slanted *drawing* changes — eight rules on
-top of `default` rather than a second copy of it.
+**No rule sets ship with the package.** Rules are data, not code: bundled, they
+sat where a user could not edit them, and a change of data went out on a version
+of code. The library carries the engine and a resolver; you carry the rules.
 
-`default` covers **Latin core** — Basic Latin, Latin-1 Supplement and Latin
-Extended-A — and is *generated from the Unicode database*:
+The sample sets live in this repository under [`examples/rules/`](examples/rules/) —
+copy them and make them yours. Address one by path, or by bare name once a
+search path is configured:
+
+```bash
+anchorsfactory MyFont.ufo -r path/to/default.anchors           # by path
+anchorsfactory MyFont.ufo --rules-path my-rules -r default     # by name
+export ANCHORSFACTORY_RULES_PATH=my-rules                      # or by environment
+```
+
+A name is also looked up **next to the file doing the referencing**, so a set
+can `!extends default` its neighbour with no configuration at all. In Python,
+`load_document(ref, base_dir=…, search_paths=[…])`; process-wide,
+`anchorsfactory.set_search_paths([…])`.
+
+`default` and `default-italics` are the samples to start from. The italic one is
+an **overlay**: the shear itself is automatic, so it only restates what a slanted
+*drawing* changes — eight rules on top of `default` rather than a second copy of
+it.
+
+`examples/rules/default.anchors` covers **Latin core** — Basic Latin, Latin-1
+Supplement and Latin Extended-A — and is *generated from the Unicode database*:
 every composite comes from a canonical decomposition, and every base carries
 exactly the anchors those composites ask of it. It ships with a matching
 `default.glyphsConstruction`, so the two halves of the pipeline stay in step —
@@ -105,9 +125,10 @@ carry no codepoint at all — `acutecomb`, and the capital-height set `Acute` /
 `acute.case`, which is anchored at cap height rather than the lowercase
 midpoint.
 
-Wider Latin lives in the repo, not the wheel: `presets/latin-ext-b.*` and
-`presets/latin-ext-additional.*` (Vietnamese and the dot-below accents) are
-referenced by path.
+Wider Latin sits alongside it: `examples/rules/latin-ext-b.*` and
+`latin-ext-additional.*` (Vietnamese and the dot-below accents), plus the
+pre-generation `legacy-*` sets and the script sets `devanagari` / `hebrew` /
+`thai`.
 
 Old `.txt` rule files (see `examples/`) convert to the new syntax — verified
 lossless:
@@ -121,7 +142,7 @@ anchorsfactory-convert examples/default-anchors-list.txt -o my-rules.anchors
 ```python
 from anchorsfactory import process_ufo, load_document, apply_document
 
-process_ufo("MyFont.ufo", "default")          # high-level: open, apply, save
+process_ufo("MyFont.ufo", "my-rules.anchors")  # high-level: open, apply, save
 
 from fontParts.world import OpenFont
 font = OpenFont("MyFont.ufo")
@@ -139,8 +160,9 @@ from anchorsfactory import load_document, apply_document
 from anchorsfactory.composites import build_composites
 from anchorsfactory.presets import construction_text
 
-apply_document(font, load_document("default"))          # anchors first
-built = build_composites(font, construction_text("default"))
+RULES = ["examples/rules"]                              # your rule library
+apply_document(font, load_document("default", search_paths=RULES))   # anchors first
+built = build_composites(font, construction_text("default", search_paths=RULES))
 built["Aacute"].glyph        # a ConstructionGlyph: .draw(pen) / .width / .components
 built["Aacute"].source_line  # the construction's line, for click-to-rule
 built["Aacute"].problems     # missing base/mark glyph or anchor, if any
@@ -177,7 +199,7 @@ same-name dedup), so a preview never drifts from what gets written.
 ```python
 from anchorsfactory import compute_document, load_document, accumulate, resolve
 
-doc = load_document("default")
+doc = load_document("my-rules.anchors")
 placed = compute_document(font, doc)          # {glyph_name: [(anchor, x, y), ...]}
 
 # resolve() is the pure, single-anchor primitive behind it:

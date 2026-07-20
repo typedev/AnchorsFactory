@@ -21,8 +21,9 @@ from importlib.resources import files
 from pathlib import Path
 
 from .. import vocabulary
+from .. import presets
 from ..presets import (construction_text, has_construction, is_preset,
-                       list_presets, preset_text)
+                       list_presets, preset_text, set_search_paths)
 from .compose import build_composite_view
 from .demo import build_demo_font, font_metrics
 from .render import all_glyph_geometry, build_view
@@ -41,11 +42,37 @@ _DEFAULT_GC = (
     "odieresis = o + dieresis@top\n"
 )
 
+# Seed for the rules editor when `-r` names a set the search path can't answer
+# (the out-of-the-box case: nothing is bundled). Enough to show the pipeline
+# working on the demo font, and to be edited over.
+_DEFAULT_RULES = (
+    "# Anchor rules — `name ( X Y )`, one line per selector.\n"
+    "#   no rule sets ship with the package; point --rules-path at your own\n"
+    "#   (the samples live in examples/rules/ in the repository).\n"
+    "@ = top (box.center capHeight), bottom (box.center 0)\n"
+    "@mark = _top (outline.centroid 0), _bottom (outline.centroid capHeight)\n"
+    "{Lu} = @\n"
+    "{Ll} = top (box.center xHeight), bottom (box.center 0)\n"
+    "{Mn} = @mark\n"
+    "{Sk} = @mark                      # legacy spacing accents (acute, dieresis)\n"
+)
+
 
 def _seed_rules(rules: str) -> str:
-    """The editable rule text to open with: a preset's source, or a file's."""
+    """The editable rule text to open with: a named set's source, or a file's.
+
+    No rule sets ship with the package, so the default ``-r default`` resolves to
+    nothing until a search path is configured — that opens on a small built-in
+    seed rather than failing, the same way the constructions editor does.
+    """
     if is_preset(rules):
         return preset_text(rules)
+    if presets.is_name(rules):                  # a name nothing on the path answers
+        log.warning("no rule set %r on the search path (%s); opening a built-in seed. "
+                    "Point --rules-path at a directory of .anchors files — the "
+                    "samples are in examples/rules/ in the repository.",
+                    rules, ", ".join(presets.search_paths()) or "empty")
+        return _DEFAULT_RULES
     with open(rules, encoding="utf-8") as fh:
         return fh.read()
 
@@ -333,7 +360,13 @@ def build_parser() -> argparse.ArgumentParser:
                    help="one or more .ufo to debug (e.g. a Regular + Italic pair); "
                         "omitted → built-in demo font")
     p.add_argument("-r", "--rules", default="default",
-                   help="preset name or .anchors path to open with (default: 'default')")
+                   help="rule set to open with: a .anchors path, or a bare name "
+                        "resolved on --rules-path (default: 'default'; falls back "
+                        "to a built-in seed when it resolves to nothing)")
+    p.add_argument("--rules-path", action="append", metavar="DIR", default=None,
+                   help="directory to resolve bare rule-set names in (repeatable; "
+                        "defaults to $ANCHORSFACTORY_RULES_PATH). No rule sets ship "
+                        "with the package — the samples are in examples/rules/")
     p.add_argument("--save", metavar="PATH",
                    help="autosave the (valid) base-layer rules to PATH on every edit; "
                         "reopen with -r PATH to resume")
@@ -349,8 +382,13 @@ def main(argv=None) -> int:
         level=logging.INFO if args.verbose else logging.WARNING,
         format="%(levelname)s %(name)s: %(message)s",
     )
+    # The studio is a single-process app, so the rule search path is configured
+    # once, here, and `is_preset`/`load_document` pick it up process-wide (that
+    # includes `!extends <name>` inside an edited layer).
+    if args.rules_path:
+        set_search_paths(args.rules_path)
     rules_text = _seed_rules(args.rules)
-    # A preset's own composites, when it ships them: on a real font that fills
+    # A set's own composites, when it ships them: on a real font that fills
     # the constructions editor with the pipeline's second half. The demo font
     # has a handful of glyphs, so it keeps its own small seed.
     gc_text = (construction_text(args.rules)

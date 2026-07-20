@@ -67,10 +67,20 @@ def merge_documents(base: Document, child: Document) -> Document:
     return _merge(base, child)
 
 
-def _load(ref: str, base_dir, seen: tuple) -> Document:
-    if presets.is_preset(ref):
-        ident, this_dir = f"preset:{ref}", None
-        doc = parse_dsl(presets.preset_text(ref).splitlines())
+def _load(ref: str, base_dir, seen: tuple, search_paths=None) -> Document:
+    named = presets.resolve(ref, search_paths=search_paths, base_dir=base_dir)
+    if named is not None:
+        # A bare name resolved on the search path. Its own directory becomes the
+        # base for anything *it* references, so a rule set can sit anywhere and
+        # still reach its neighbours.
+        ident = os.path.abspath(named)
+        this_dir = os.path.dirname(ident)
+        doc = parse_dsl_file(named)
+    elif presets.is_name(ref) and not os.path.isfile(
+            ref if os.path.isabs(ref) else os.path.join(base_dir or "", ref)):
+        # A name that resolves to nothing, and no such file either: say where we
+        # looked rather than failing later on a confusing open().
+        raise presets._missing(ref, presets._EXT, search_paths, base_dir)
     else:
         path = ref if os.path.isabs(ref) else os.path.join(base_dir or "", ref)
         ident = os.path.abspath(path)
@@ -90,22 +100,29 @@ def _load(ref: str, base_dir, seen: tuple) -> Document:
         return doc
     merged = Document()
     for base_ref in doc.extends:        # bases first, in order...
-        merged = _merge(merged, _load(base_ref, this_dir, seen))
+        merged = _merge(merged, _load(base_ref, this_dir, seen, search_paths))
     return _merge(merged, doc)          # ...then this file on top
 
 
-def load_document(rules: str, base_dir: str | None = None) -> Document:
-    """Resolve a rules reference (preset name or file path) to a Document,
+def load_document(rules: str, base_dir: str | None = None,
+                  search_paths=None) -> Document:
+    """Resolve a rules reference (a bare set name or a file path) to a Document,
     inheriting any ``!extends`` bases. Legacy ``.txt`` files have no inheritance.
 
     *base_dir* anchors a relative *rules* path and relative top-level ``!extends``
     refs; each base then anchors its **own** nested relative ``!extends`` to its
-    own directory (the chain is threaded through). Absolute paths and preset
-    names ignore it. Defaults to the process cwd (``None``). A host editing rules
-    in a buffer should pass the rules file's directory so relative refs resolve
-    as they would on disk.
+    own directory (the chain is threaded through). Absolute paths ignore it.
+    Defaults to the process cwd (``None``). A host editing rules in a buffer
+    should pass the rules file's directory so relative refs resolve as they would
+    on disk.
+
+    *search_paths* are the directories a **bare name** is looked up in — the
+    package bundles no rule sets, so a host supplies its own library here (or
+    process-wide via :func:`anchorsfactory.presets.set_search_paths` /
+    ``$ANCHORSFACTORY_RULES_PATH``). A name is tried in *base_dir* first, so a
+    set can ``!extends`` a neighbour with no configuration at all.
     """
-    return _load(rules, base_dir=base_dir, seen=())
+    return _load(rules, base_dir=base_dir, seen=(), search_paths=search_paths)
 
 
 def dump_existing_anchors(font) -> str:
@@ -142,14 +159,17 @@ def process_ufo(
     replace: bool = True,
     round_coords: bool = True,
     document=None,
+    search_paths=None,
 ) -> str:
     """Apply rules to *ufo_path* and save. Returns the saved path.
 
     Pass a pre-loaded *document* to skip loading (e.g. when processing many
-    fonts with the same rules); otherwise *rules_path* is loaded.
+    fonts with the same rules); otherwise *rules_path* is loaded, with
+    *search_paths* resolving it if it is a bare set name.
     """
     font = OpenFont(ufo_path)
-    doc = document if document is not None else load_document(rules_path)
+    doc = (document if document is not None
+           else load_document(rules_path, search_paths=search_paths))
     log.info("%s %s", font.info.familyName, font.info.styleName)
 
     if backup_dir is not None:

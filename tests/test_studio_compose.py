@@ -5,13 +5,13 @@ import pytest
 
 pytest.importorskip("fontParts.world")
 
-from anchorsfactory.presets import preset_text
+from rulesets import rules_text
 from anchorsfactory.studio.compose import build_composite_view as build_composites
 from anchorsfactory.studio.demo import build_demo_font
 
 
 def _layers():
-    return [{"name": "base", "text": preset_text("default")}]
+    return [{"name": "base", "text": rules_text("default")}]
 
 
 def test_build_composite_from_placed_anchors():

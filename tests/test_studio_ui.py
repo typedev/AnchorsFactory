@@ -18,7 +18,7 @@ import pytest
 pytest.importorskip("fontParts.world")
 sync_api = pytest.importorskip("playwright.sync_api")
 
-from anchorsfactory.presets import preset_text
+from rulesets import rules_text
 from anchorsfactory.studio.demo import build_demo_font
 from anchorsfactory.studio.server import Studio, _Handler
 
@@ -26,7 +26,7 @@ from anchorsfactory.studio.server import Studio, _Handler
 @pytest.fixture
 def studio_url():
     """Run the studio server on an ephemeral port for the duration of a test."""
-    studio = Studio(build_demo_font(), preset_text("default"), "demo")
+    studio = Studio(build_demo_font(), rules_text("default"), "demo")
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), partial(_Handler, studio=studio))
     port = httpd.server_address[1]
     t = threading.Thread(target=httpd.serve_forever, daemon=True)

@@ -17,7 +17,7 @@ from ..apply import (Propagated, accumulate_provenance, propagate_seed,
 from ..dsl import DSLError, parse_dsl
 from ..geometry import explain
 from ..model import Document, resolve_suffixes
-from ..presets import is_preset
+from ..presets import is_preset, list_presets
 from ..runner import _merge, _restamp, load_document
 
 
@@ -88,24 +88,27 @@ def resolve_stack(layers) -> Document:
 
 
 def resolve_document(rules_text: str) -> Document:
-    """Parse the edited rules and resolve any ``!extends <preset>`` so custom
-    rules can inherit a bundled preset (e.g. ``!extends default`` then a few
-    overrides). Bases are merged first (marked ``inherited`` by ``runner._merge``),
-    the edited rules on top.
+    """Parse the edited rules and resolve any ``!extends <name>`` so custom rules
+    can inherit a whole set (e.g. ``!extends default`` then a few overrides).
+    Bases are merged first (marked ``inherited`` by ``runner._merge``), the edited
+    rules on top.
 
-    Only **bundled preset names** may be inherited here — the studio has no access
-    to the user's file paths — so a path reference raises a clear error. Inherited
-    rules keep their preset provenance but read as ``inherited=True`` (no jump into
-    the edited text); ``resolve_stack`` then overwrites ``origin`` with the layer
-    index.
+    Only a **rule-set name on the studio's search path** may be inherited here —
+    the studio has no access to the user's file paths — so a path reference raises
+    a clear error. The path is configured once at startup (``--rules-path``);
+    nothing is bundled with the package. Inherited rules keep the base's
+    provenance but read as ``inherited=True`` (no jump into the edited text);
+    ``resolve_stack`` then overwrites ``origin`` with the layer index.
     """
     doc = parse_dsl(rules_text.splitlines())
     if not doc.extends:
         return doc
     for ref in doc.extends:
         if not is_preset(ref):
-            raise DSLError(f"!extends {ref!r}: only a bundled preset name can be "
-                           f"inherited in studio (not a file path)")
+            known = ", ".join(list_presets()) or "none configured — see --rules-path"
+            raise DSLError(f"!extends {ref!r}: in studio only a rule-set name on the "
+                           f"search path can be inherited, not a file path "
+                           f"(available: {known})")
     merged = Document()
     for ref in doc.extends:                          # bases first (each marked inherited by _merge)...
         merged = _merge(merged, load_document(ref))

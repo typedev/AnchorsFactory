@@ -16,7 +16,9 @@ _UFOS = sorted(Path("ufo-test").glob("*.ufo"))
 if not _UFOS:
     pytest.skip("no test UFO available in ufo-test/", allow_module_level=True)
 
-RULES = "default"          # bundled preset
+from rulesets import RULES_DIR, SEARCH_PATHS
+
+RULES = str(RULES_DIR / "default.anchors")   # a sample set, by path
 
 
 @pytest.fixture
@@ -29,6 +31,12 @@ def ufo_copy(tmp_path):
 def _anchor_map(ufo_path):
     font = fontParts_world.OpenFont(ufo_path)
     return {(g.name, a.name): (a.x, a.y) for g in font for a in g.anchors}
+
+
+def test_rules_resolve_by_name_off_a_search_path(ufo_copy):
+    # the other addressing mode: a bare set name, resolved by process_ufo itself
+    out = process_ufo(ufo_copy, "default", search_paths=SEARCH_PATHS)
+    assert Path(out).exists()
 
 
 def test_default_save_is_safe(ufo_copy):

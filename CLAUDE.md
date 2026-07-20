@@ -14,8 +14,11 @@ anchors) is done by GlyphConstruction.
 The rewrite is complete and released to PyPI (currently **v0.4.1**); the package
 is `anchorsfactory/`. The WS1 world-scripts features (`%name` derived anchors,
 `!propagate`, `compN.` frames) are **committed on `master` but unreleased** —
-they make up the pending **v0.5.0**. The original module script lives in
-`examples/legacy/` for reference only.
+they make up the pending **v0.5.0**, together with that release's boundary
+change: **the distribution is the engine + CLI + vendored GlyphConstruction
+only**. Rule sets (`examples/rules/`) and the Studio (`anchorsfactory/studio/`,
+importable from a checkout, absent from the wheel) are repository material. The
+original module script lives in `examples/legacy/` for reference only.
 
 ## Environment & commands
 
@@ -91,8 +94,16 @@ each layer is testable and the DSL surface is decoupled from the engine.
   (`*_anchored.ufo`, never overwrites unless `--in-place`). `cli.py` — the
   `anchorsfactory` command; loads+validates rules once, then per-font.
 - `convert.py` — legacy → new DSL, with a lossless round-trip check.
-- `presets.py` + `rules/*.anchors` — bundled `default`/`default-italics`, read via
-  `importlib.resources`, referenced by bare name in `--rules`/`!extends`.
+- `presets.py` — resolves a **bare set name** (`--rules`/`!extends`) against a
+  search path: the referencing file's own directory, then explicit
+  `search_paths=`, then the process-wide list (`set_search_paths` /
+  `$ANCHORSFACTORY_RULES_PATH`). **No rule sets ship in the wheel** — the samples
+  live in `examples/rules/` and the host owns its own library.
+- `vocabulary.py` — the DSL's surface words (frames/aligns/runs/metrics/
+  directives/sigils) as public data, derived from the IR enums; `dsl.py` builds
+  its tables *from it*, so an editor's completion cannot drift from the parser.
+  Axis-aware helpers: `completions_after_dot(head, axis)`,
+  `completions_for_slot(axis)`, `as_dict()` for non-Python clients.
 
 ## Rule language
 

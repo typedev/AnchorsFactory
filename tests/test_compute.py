@@ -283,9 +283,9 @@ _UFOS = sorted(Path("ufo-test").glob("*.ufo"))
 @pytest.mark.parametrize("round_coords", [True, False])
 def test_real_font_parity_default_preset(round_coords):
     fontParts_world = pytest.importorskip("fontParts.world")
-    from anchorsfactory.runner import load_document
+    from rulesets import rules_doc
 
-    doc = load_document("default")
+    doc = rules_doc()
     font = fontParts_world.OpenFont(str(_UFOS[0]))
 
     computed = compute_document(font, doc, round_coords=round_coords)

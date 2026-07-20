@@ -1,8 +1,9 @@
-"""Bundled script presets (``devanagari``, ``hebrew``, ``thai``).
+"""The script rule sets shipped as samples (``devanagari``, ``hebrew``, ``thai``).
 
-Each preset must be discoverable by bare name, parse, and pass the pre-flight
-``validate_document`` check (labels/variables resolve, axes are consistent, no
-outline axis cycles) — all font-independent.
+They live in ``examples/rules/`` like every other set — nothing is bundled with
+the package. Each must be discoverable by bare name on a search path, parse, and
+pass the pre-flight ``validate_document`` check (labels/variables resolve, axes
+are consistent, no outline axis cycles) — all font-independent.
 
 The accuracy smoke tests are optional: they run only when the open script
 fonts used during rule research are present (point ``AF_SCRIPT_FONTS`` at a
@@ -21,26 +22,28 @@ from anchorsfactory import presets
 from anchorsfactory.apply import compute_document, validate_document
 from anchorsfactory.dsl import parse_dsl
 from anchorsfactory.runner import load_document
+from rulesets import SEARCH_PATHS, rule_set_names, rules_text
 
 SCRIPT_PRESETS = ["devanagari", "hebrew", "thai"]
 
 
 # --- discovery & loading ---------------------------------------------------- #
 @pytest.mark.parametrize("name", SCRIPT_PRESETS)
-def test_script_preset_is_bundled(name):
-    assert name in presets.list_presets()
-    assert presets.is_preset(name)
+def test_script_preset_is_on_the_search_path(name):
+    assert name in rule_set_names()
+    assert name in presets.list_presets(SEARCH_PATHS)
+    assert presets.is_preset(name, search_paths=SEARCH_PATHS)
 
 
 @pytest.mark.parametrize("name", SCRIPT_PRESETS)
 def test_script_preset_parses(name):
-    doc = parse_dsl(presets.preset_text(name).splitlines())
+    doc = parse_dsl(rules_text(name).splitlines())
     assert doc.rules and doc.labels and doc.variables
 
 
 @pytest.mark.parametrize("name", SCRIPT_PRESETS)
 def test_script_preset_loads_and_validates(name):
-    doc = load_document(name)          # by bare preset name, like the CLI
+    doc = load_document(name, search_paths=SEARCH_PATHS)   # by name, like the CLI
     assert doc.rules
     assert validate_document(doc) == []
 
@@ -50,7 +53,7 @@ def test_script_preset_extendable(name, tmp_path):
     # a user file retunes a &variable on top of the preset — must still validate
     f = tmp_path / "mine.af"
     f.write_text(f"!extends {name}\n&aboveDrop = 30\n&headDrop = 0\n")
-    doc = load_document(str(f))
+    doc = load_document(str(f), search_paths=SEARCH_PATHS)
     assert validate_document(doc) == []
 
 
@@ -78,7 +81,7 @@ def test_script_preset_accuracy_smoke(preset, rel):
     fontparts_world = pytest.importorskip("fontParts.world")
 
     font = fontparts_world.OpenFont(str(ufo))
-    doc = load_document(preset)
+    doc = load_document(preset, search_paths=SEARCH_PATHS)
     computed = compute_document(font, doc, on_error="collect")
 
     upm = font.info.unitsPerEm or 1000

@@ -38,7 +38,7 @@ def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     ap = argparse.ArgumentParser(
         prog="studio_save",
-        description="Launch Studio from the default preset, autosaving edits to a file.")
+        description="Launch Studio from the default rule set, autosaving edits to a file.")
     ap.add_argument("-f", "--file", default=str(DEFAULT_SAVE), metavar="PATH",
                     help=f"file to autosave the base rules to and resume from "
                          f"(default: {DEFAULT_SAVE})")
@@ -48,7 +48,7 @@ def main(argv=None) -> int:
 
     save = Path(args.file)
     save.parent.mkdir(parents=True, exist_ok=True)
-    # Resume from the file once it exists; until then, seed from `default`.
+    # Resume from the file once it exists; until then, seed from the `default` set.
     seed = str(save) if save.exists() else "default"
 
     return studio_dev.main([*passthrough, "-r", seed, "--save", str(save)])

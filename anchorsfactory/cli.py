@@ -56,7 +56,13 @@ def build_parser() -> argparse.ArgumentParser:
         description="Place anchors in UFO fonts from a rule file.",
     )
     p.add_argument("ufo", nargs="+", help="UFO file(s) or a directory of UFOs")
-    p.add_argument("-r", "--rules", required=True, help="path to the anchor rules file")
+    p.add_argument("-r", "--rules", required=True,
+                   help="anchor rules: a file path, or a bare set name looked up "
+                        "in --rules-path")
+    p.add_argument("--rules-path", action="append", metavar="DIR", default=None,
+                   help="directory to resolve bare rule-set names in (repeatable; "
+                        "defaults to $ANCHORSFACTORY_RULES_PATH). No rule sets ship "
+                        "with the package — see examples/rules/ in the repository")
     out = p.add_mutually_exclusive_group()
     out.add_argument("-o", "--output", help="output UFO path (single input only)")
     out.add_argument("--in-place", action="store_true", help="overwrite the source UFO")
@@ -84,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     # Load + validate the rules once, up front: fail fast on rule errors before
     # touching any font.
     try:
-        document = load_document(args.rules)
+        document = load_document(args.rules, search_paths=args.rules_path)
     except Exception as e:  # noqa: BLE001 — surface a clean message, not a traceback
         log.error("cannot load rules %s: %s", args.rules, e)
         return 2

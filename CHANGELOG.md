@@ -6,6 +6,43 @@ section to the new version (with today's date) and uses it as the release notes.
 
 ## [Unreleased]
 
+### Changed (breaking)
+
+- **No rule sets ship with the package.** Rules are data, and bundling them was
+  a mistake: `list_presets()` answered differently from a wheel than from a
+  checkout, the default set sat in `site-packages` where a user could not edit
+  it, and a change of *data* went out on a version of *code*. The library now
+  carries the engine and a **resolver**; the host carries the rules. Every set
+  (`default`, `default-italics`, `latin-ext-*`, `devanagari`, `hebrew`, `thai`,
+  `legacy-*`) moved to `examples/rules/` in the repository — copy them.
+  - `load_document(ref, base_dir=None, search_paths=None)` and
+    `process_ufo(..., search_paths=None)` take the directories a **bare name**
+    resolves in; `anchorsfactory.set_search_paths()` / `$ANCHORSFACTORY_RULES_PATH`
+    set them process-wide; the CLI and Studio take `--rules-path` (repeatable).
+    An explicit `search_paths=` replaces the process-wide list rather than
+    extending it, so `[]` means "nowhere".
+  - A name is tried in the **referencing file's own directory first**, so a set
+    inherits its neighbour (`!extends default`) with no configuration at all.
+  - `anchorsfactory.presets` keeps its function names but resolves off the search
+    path, and each takes an optional `search_paths=`/`base_dir=`. New:
+    `is_name()` (syntactic name-vs-path), `resolve()`, `search_paths()`,
+    `set_search_paths()`, `add_search_path()`. `is_preset(name)` now means
+    "resolves on the path", not "is bundled". An unresolvable name raises a
+    `KeyError` naming every directory searched.
+  - A rule inherited via a name now carries the base **file's path** as its
+    `RuleSource.origin` (was `preset:<name>`) — an origin an editor can open.
+  - `is_name()` treats any extension as a path, so a bare legacy `old.txt`
+    reference still loads as a file.
+
+- **The Studio no longer ships in the wheel.** It has no third-party dependency
+  to gate an extra on (stdlib `http.server` + the fontTools/fontParts the core
+  already needs), and an extra cannot exclude code from a distribution anyway.
+  It stays in the repository as the library's reference consumer, importable
+  from a checkout — `make studio`, or
+  `python -m anchorsfactory.studio.server`. The `anchorsfactory-studio` console
+  script is gone. `anchorsfactory.composites` and the vendored GlyphConstruction
+  are **unaffected**: they are core, always installed.
+
 ### Added
 
 - **`anchorsfactory.vocabulary`** — the rule language's surface words as public

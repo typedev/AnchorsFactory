@@ -42,14 +42,16 @@ dev = ["pytest", "build", "playwright"]
 [project.scripts]
 anchorsfactory = "anchorsfactory.cli:main"
 anchorsfactory-convert = "anchorsfactory.convert:main"
-anchorsfactory-studio = "anchorsfactory.studio.server:main"
 
+# The distribution is the engine, the CLI and the vendored GlyphConstruction —
+# nothing else. Rule sets are data the host owns (samples in examples/rules/),
+# and the Studio is a repository-only reference consumer: it has no third-party
+# dependencies to gate behind an extra, so it is simply not shipped. Both stay
+# importable from a source checkout.
 [tool.setuptools]
-packages = ["anchorsfactory", "anchorsfactory.rules", "anchorsfactory.studio", "anchorsfactory._vendor"]
+packages = ["anchorsfactory", "anchorsfactory._vendor"]
 
 [tool.setuptools.package-data]
-"anchorsfactory.rules" = ["*.anchors", "*.glyphsConstruction"]
-"anchorsfactory.studio" = ["static/*"]
 "anchorsfactory._vendor" = ["LICENSE", "*.md"]
 
 [tool.pytest.ini_options]

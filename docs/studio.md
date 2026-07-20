@@ -13,13 +13,16 @@ place anchors, use the `anchorsfactory` CLI.
 
 ## Launching
 
-Studio ships with the package as the `anchorsfactory-studio` console script
-(also runnable as `python -m anchorsfactory.studio`):
+Studio is **not part of the distribution** — it is a repository-only tool (it is
+the reference consumer of the library's own API, and has no dependency the
+package doesn't already have, so there was nothing to gate an extra on). Run it
+from a checkout:
 
 ```bash
-.venv/bin/anchorsfactory-studio MyFont.ufo                 # debug a font
-.venv/bin/anchorsfactory-studio MyFont.ufo -r my-rules.anchors  # open with your rules
-.venv/bin/anchorsfactory-studio                            # no font → built-in demo
+.venv/bin/python -m anchorsfactory.studio.server MyFont.ufo        # debug a font
+.venv/bin/python -m anchorsfactory.studio.server MyFont.ufo \
+    -r my-rules.anchors                                            # open with your rules
+.venv/bin/python -m anchorsfactory.studio.server                   # no font → built-in demo
 ```
 
 Then open the printed URL (default `http://127.0.0.1:8765/`) in a browser.
@@ -38,7 +41,8 @@ make studio ARGS="MyFont.ufo -r my.anchors"   # a UFO + your rules
 | option | meaning |
 |--------|---------|
 | `ufo` (positional, optional) | a `.ufo` to debug; omitted → a built-in synthetic demo font |
-| `-r`, `--rules NAME_OR_PATH` | the rule text to open with: a bundled preset name (`default`, `default-italics`) or a path to a `.anchors` file (default: `default`) |
+| `-r`, `--rules NAME_OR_PATH` | the rule text to open with: a path to a `.anchors` file, or a set name resolved on the search path (default: `default`; if nothing answers, Studio opens on a small built-in seed) |
+| `--rules-path DIR` | where to resolve bare set names (repeatable; defaults to `$ANCHORSFACTORY_RULES_PATH`). No rule sets ship with the package — `make studio` points this at the repository's `examples/rules/` |
 | `--save PATH` | autosave the base-layer rules to `PATH` on every valid edit — a file-backed working copy that survives across sessions and browsers; reopen with `-r PATH` to resume (see [Autosaving to a file](#autosaving-to-a-file)) |
 | `--host HOST` | bind address (default `127.0.0.1`) |
 | `--port PORT` | port (default `8765`) |
@@ -65,16 +69,16 @@ positions so you can see what a change moved.
 
 Rules live in a two-layer stack, both visible and both editable:
 
-- **base** — starts as a copy of a bundled preset (a dropdown switches which
-  one; switching replaces the layer's text). It is a working copy: edit it
-  freely, the bundled preset itself is untouched.
+- **base** — starts as a copy of a rule set from the search path (a dropdown
+  switches which one; switching replaces the layer's text). It is a working
+  copy: edit it freely, the file on disk is untouched.
 - **custom** — an optional layer *on top*. Effective rules are base first,
   custom after, under the normal accumulation model — so custom **overrides**
   (`=` replaces, `+=` adds, `-=` removes against whatever base built up).
 
 The custom layer is closed by default: click **+ custom** to open it, **✕** to
-close it and work with the base alone. Closing it is an instant "preset only"
-view — toggle it to compare the preset's placement with your overrides.
+close it and work with the base alone. Closing it is an instant "base only"
+view — toggle it to compare the base set's placement with your overrides.
 
 Getting rules in and out:
 
@@ -83,8 +87,8 @@ Getting rules in and out:
 - **⤓ .anchors** on either layer downloads that layer's text as a file.
 - `-r/--rules` on the command line seeds the base layer on first visit.
 
-`!extends` works inside a layer, but only **bundled preset names** can be
-inherited (`!extends default`) — Studio has no access to your file paths, so
+`!extends` works inside a layer, but only **set names on the search path** can
+be inherited (`!extends default`) — Studio has no access to your file paths, so
 `!extends ./other.anchors` is rejected with a clear error. To debug a rules file
 that extends another file, open the base file in the base layer and the child
 in the custom layer: the stack gives you the same merge.
@@ -98,7 +102,7 @@ the preset again. For an iterative debugging session, back the rules with a file
 instead:
 
 ```bash
-anchorsfactory-studio MyFont.ufo -r my.anchors --save my.anchors
+python -m anchorsfactory.studio.server MyFont.ufo -r my.anchors --save my.anchors
 ```
 
 With `--save PATH`, every time your edits parse and validate cleanly the **base
@@ -109,7 +113,7 @@ The header shows `· autosave → PATH` while it's active, and when a save path 
 set the file is authoritative for the base layer on load (it wins over any stale
 `localStorage`). Point `-r` and `--save` at the same file to edit it in place.
 
-For the common "start from the default preset and keep iterating" case there's a
+For the common "start from the default set and keep iterating" case there's a
 ready-made launcher — `make studio-save` (or `python scripts/studio_save.py`):
 it seeds the base from `default` on the first run, autosaves every valid edit to
 `dev/studio-rules.anchors`, and resumes from that file on later runs. Override the
@@ -193,9 +197,9 @@ click the suspicious anchor's card — the editor jumps to the rule that placed
 it, and the canvas shows the scanline/stems it measured. Edit the rule and
 watch the anchor move.
 
-**Build overrides on a preset.** Keep `default` in the base layer, open the
+**Build overrides on a set.** Keep `default` in the base layer, open the
 custom layer, and write only the exceptions (`Q += …`, `germandbls = …`).
-Close the custom layer to see the preset's own placement, reopen to see yours
+Close the custom layer to see the base set's own placement, reopen to see yours
 win; when happy, **⤓ .anchors** the custom layer and add `!extends default` at the
 top for use with the CLI.
 
@@ -211,16 +215,19 @@ exactly which glyphs and anchors degraded.
   or a `.zip`/`.ufoz` with one inside; a directory holding `metainfo.plist`
   also counts). The server's error appears in the Output panel, tagged
   `font`, and the status pill shows `font error`.
-- **`-r`/preset seems ignored on relaunch** — the browser restores your last
+- **`-r` seems ignored on relaunch** — the browser restores your last
   session's rule text from `localStorage`, which takes precedence over the
-  command-line seed. Re-select the preset in the base layer's dropdown to get
+  command-line seed. Re-select the set in the base layer's dropdown to get
   a fresh copy of it. (This is also why the same session looks different across
-  browsers, or between `anchorsfactory-studio` in your own Chrome and `make
+  browsers, or between a hand-launched server in your own Chrome and `make
   studio`, which uses a fresh Chromium profile with an empty `localStorage`.)
   Run with `--save PATH` to back the base layer with a file instead — the file
   then wins over `localStorage` on load, so every launch resumes from disk.
 - **A glyph is missing from the grid** — the grid only lists glyphs some rule
   matched *and* that exist in the font. Check the selector (name, `U+…` range,
   glob, category) against the font's actual glyph names.
-- **`!extends 'path'` fails** — only bundled preset names can be inherited in
-  Studio; put the file's contents in a layer instead (see above).
+- **`!extends 'path'` fails** — only set names on the search path can be
+  inherited in Studio; put the file's contents in a layer instead (see above).
+- **The preset dropdown is empty** — nothing ships with the package and no
+  search path is configured. Pass `--rules-path DIR` (from a checkout,
+  `make studio` already points at `examples/rules/`).

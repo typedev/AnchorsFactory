@@ -376,9 +376,13 @@ U+0413         = bar (width.center $H)   # Г → [bar(…)] only — the @ defa
 !propagate = composites    # composites inherit their components' anchors
 ```
 
-`!extends` takes a **bundled preset name** (`default`, `default-italics` — no
+`!extends` takes a **rule-set name** (`default`, `default-italics` — no
 extension/separator) or a **path** resolved relative to the file containing the
-directive (absolute paths allowed but discouraged). Multiple `!extends` layer
+directive (absolute paths allowed but discouraged). No rule sets ship with the
+package: a name is looked up first in the referencing file's own directory — so
+a set inherits its neighbour with no configuration — then on the search path
+(`--rules-path`, `$ANCHORSFACTORY_RULES_PATH`, or `search_paths=` in the API).
+The sample sets are in `examples/rules/` in the repository. Multiple `!extends` layer
 in order, then this file's own rules apply last; cycles are rejected. This is
 the inheritance model: ship a big standalone file, or `!extends default` plus a
 small set of `+=` / `-=` / `=` adjustments.
