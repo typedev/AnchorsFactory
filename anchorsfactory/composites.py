@@ -40,6 +40,142 @@ def _ident(s: str) -> str:
     return m.group(0) if m else s.strip()
 
 
+# --------------------------------------------------------------------------
+#  U+ references — an AnchorsFactory extension over the GlyphConstruction
+#  surface, resolved to plain glyph names *before* the vendored engine (whose
+#  own grammar accepts names only) ever sees the text.
+# --------------------------------------------------------------------------
+
+_UNICODE_REF = re.compile(r"\bU\+([0-9A-Fa-f]{4,6})(\.case)?\b")
+
+#: Marks the AGL cannot name, under the name type designers actually use.
+_LEGACY_MARK_NAMES = {
+    0x031B: "horn", 0x0325: "ringbelow", 0x0331: "macronbelow",
+    0x0326: "commaaccent",
+}
+
+#: Combining mark -> the spacing accent fonts conventionally encode instead.
+#: Rules address a mark by its combining codepoint; many fonts only encode the
+#: spacing twin (``acute`` U+00B4, not U+0301), so that is tried next.
+_SPACING_TWIN = {
+    0x0300: 0x0060, 0x0301: 0x00B4, 0x0302: 0x02C6, 0x0303: 0x02DC,
+    0x0304: 0x00AF, 0x0306: 0x02D8, 0x0307: 0x02D9, 0x0308: 0x00A8,
+    0x030A: 0x02DA, 0x030B: 0x02DD, 0x030C: 0x02C7, 0x0327: 0x00B8,
+    0x0328: 0x02DB, 0x0326: 0xF6C3,
+}
+
+
+def _character_map(glyphset) -> dict:
+    """``{codepoint: glyph name}`` for *glyphset* (first glyph to claim a
+    codepoint wins), or ``{}`` if it can't be iterated."""
+    cmap: dict[int, str] = {}
+    try:
+        for g in glyphset:
+            name = getattr(g, "name", g)
+            glyph = glyphset[name] if isinstance(g, str) else g
+            for u in (getattr(glyph, "unicodes", None) or ()):
+                cmap.setdefault(u, name)
+    except Exception:
+        return {}
+    return cmap
+
+
+def _name_for_codepoint(cp: int, cmap: dict, glyphset) -> str:
+    """Resolve a codepoint to the glyph name a construction should reference.
+
+    The font's own cmap first (it is the authority on what this font calls the
+    character), then the spacing twin of a combining mark, then the AGL name,
+    then ``uniXXXX``. The last two need no font: a construction's *target* glyph
+    normally does not exist yet — that is the glyph being built.
+    """
+    if cp in cmap:
+        return cmap[cp]
+    twin = _SPACING_TWIN.get(cp)
+    if twin is not None and twin in cmap:
+        return cmap[twin]
+    try:
+        from fontTools.agl import UV2AGL
+    except ImportError:                                   # pragma: no cover
+        UV2AGL = {}
+    agl = UV2AGL.get(cp)
+    if agl and glyphset is not None:
+        try:
+            if agl in glyphset:
+                return agl
+        except Exception:
+            pass
+    return agl or f"uni{cp:04X}"
+
+
+def _mark_base_name(cp: int) -> str | None:
+    """The conventional (AGL) name of a mark — ``acute`` for U+0301 or U+00B4 —
+    the stem the legacy spellings are built from."""
+    try:
+        from fontTools.agl import UV2AGL
+    except ImportError:                                   # pragma: no cover
+        return _LEGACY_MARK_NAMES.get(cp)
+    twin = _SPACING_TWIN.get(cp)
+    name = UV2AGL.get(twin) if twin else None
+    if not name:
+        agl = UV2AGL.get(cp)
+        if agl and agl.endswith("comb"):
+            name = agl[: -len("comb")]
+    return name or _LEGACY_MARK_NAMES.get(cp)
+
+
+def _case_name_for_codepoint(cp: int, glyphset) -> str | None:
+    """The capital-height cut of a mark, if this font ships one.
+
+    Fonts commonly carry a second accent set drawn for uppercase, and it has no
+    codepoints of its own — only a name, spelled ``acute.case`` or ``Acute``
+    depending on the house. Returns ``None`` when the font has no such glyph, so
+    the caller falls back to the plain mark.
+    """
+    base = _mark_base_name(cp)
+    if not base:
+        return None
+    candidates = [f"{base}.case", base.capitalize(), f"{base}comb.case"]
+    if glyphset is None:
+        return base.capitalize()          # no font to ask: the legacy spelling
+    for name in candidates:
+        try:
+            if name in glyphset:
+                return name
+        except Exception:
+            return None
+    return None
+
+
+def resolve_unicode_refs(gc_text: str, glyphset=None) -> str:
+    """Rewrite every ``U+XXXX`` token in *gc_text* to a glyph name.
+
+    AnchorsFactory rule sets address glyphs by codepoint so they stay portable
+    across naming schemes; GlyphConstruction's grammar only knows names (and
+    would in any case mis-split ``U+0041`` on its own ``+`` mark separator). So
+    every consumer resolves first — line- and column-agnostic token substitution,
+    which keeps source line numbers (and hence click-to-rule) intact. Text with
+    no ``U+`` token is returned unchanged.
+
+    A ``.case`` suffix (``U+0301.case``) asks for the capital-height cut of a
+    mark, which fonts carry under a name rather than a codepoint; it falls back
+    to the plain mark in fonts that have no such set.
+    """
+    if "U+" not in gc_text:
+        return gc_text
+    cmap = _character_map(glyphset) if glyphset is not None else {}
+    cache: dict[tuple, str] = {}
+
+    def sub(m):
+        cp, case = int(m.group(1), 16), bool(m.group(2))
+        key = (cp, case)
+        if key not in cache:
+            name = _case_name_for_codepoint(cp, glyphset) if case else None
+            cache[key] = name or _name_for_codepoint(cp, cmap, glyphset)
+        return cache[key]
+
+    return _UNICODE_REF.sub(sub, gc_text)
+
+
 def parse_construction(text: str):
     """Extract ``(name, base, marks)`` from one construction string.
 
@@ -107,7 +243,7 @@ def _emitted_line_numbers(gc_text: str) -> list[int]:
     return kept
 
 
-def parse_constructions(gc_text: str) -> list[Construction]:
+def parse_constructions(gc_text: str, glyphset=None) -> list[Construction]:
     """Parse *gc_text* into constructions, each tagged with its source line.
 
     The vendored parser returns one entry per line it keeps — a construction
@@ -115,7 +251,11 @@ def parse_constructions(gc_text: str) -> list[Construction]:
     in order, with the source line numbers the parser kept (see
     :func:`_emitted_line_numbers`) and drop the empty slots; a construction whose
     line can't be located keeps ``line=None``.
+
+    ``U+XXXX`` references are resolved first (see :func:`resolve_unicode_refs`);
+    pass *glyphset* so they resolve against the font's own names.
     """
+    gc_text = resolve_unicode_refs(gc_text, glyphset)
     constructions = ParseGlyphConstructionListFromString(gc_text, None)
     lines = _emitted_line_numbers(gc_text)
     out: list[Construction] = []
@@ -190,7 +330,7 @@ def build_composites(glyphset, gc_text: str) -> dict:
     consumers read ``glyph.font`` when drawing).
     """
     out: dict[str, Composite] = {}
-    for c in parse_constructions(gc_text):
+    for c in parse_constructions(gc_text, glyphset):
         parsed = parse_construction(c.text)
         base, marks = (parsed[1], parsed[2]) if parsed else (None, [])
         try:

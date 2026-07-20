@@ -10,6 +10,7 @@ from anchorsfactory import (
     apply_document, build_composites, composites_in_glyph_order, load_document,
     parse_construction, parse_constructions,
 )
+from anchorsfactory.composites import resolve_unicode_refs
 from anchorsfactory.studio.demo import build_demo_font
 
 
@@ -96,3 +97,79 @@ def test_composites_in_glyph_order():
     assert order.index("aacute") < order.index("odieresis") or \
            order.index("odieresis") < order.index("aacute")
     assert order[-1] == "zzz_unknown"
+
+
+# --- U+ references (the AnchorsFactory extension over GC) ------------------ #
+def test_unicode_refs_resolve_through_the_font():
+    """A codepoint resolves to whatever *this font* calls that character."""
+    font = build_demo_font()                      # encodes acute as U+00B4
+    assert resolve_unicode_refs("U+0041 = U+0061 + U+00B4@top", font) == \
+        "A = a + acute@top"
+
+
+def test_unicode_refs_fall_back_to_the_spacing_twin():
+    """A font that encodes only the spacing accent still gets the mark: the
+    combining codepoint falls through to its twin."""
+    font = build_demo_font()                      # has U+00B4, no U+0301
+    assert resolve_unicode_refs("U+0301", font) == "acute"
+
+
+def test_unicode_refs_without_a_font_use_agl_then_uni_names():
+    # The target glyph of a construction does not exist yet — no font can name it.
+    assert resolve_unicode_refs("U+00C1 = U+0041 + U+0301@top") == \
+        "Aacute = A + acutecomb@top"
+    assert resolve_unicode_refs("U+F6C3") == "uniF6C3"      # nothing knows this one
+
+
+def test_unicode_refs_preserve_line_numbers():
+    """Resolution is token substitution, so click-to-rule keeps working."""
+    gc = "# a comment\n\nU+00E1 = U+0061 + U+00B4@top\n"
+    font = build_demo_font()
+    assert len(resolve_unicode_refs(gc, font).splitlines()) == len(gc.splitlines())
+    (c,) = parse_constructions(gc, font)
+    assert (c.name, c.line) == ("aacute", 3)
+
+
+def test_text_without_unicode_refs_is_untouched():
+    gc = "aacute = a + acute@top"
+    assert resolve_unicode_refs(gc, build_demo_font()) is gc
+
+
+def test_build_composites_from_codepoint_addressed_text():
+    font = build_demo_font()
+    apply_document(font, load_document("default"))
+    built = build_composites(font, "U+00E1 = U+0061 + U+00B4@top | 00E1")
+    assert "aacute" in built
+    c = built["aacute"]
+    assert c.glyph is not None and not c.problems
+    assert (c.base, c.marks) == ("a", (("acute", "top"),))
+
+def _font_with_capital_accents():
+    """The demo font plus a capital-height accent set — unencoded, name-only,
+    the way fonts actually ship one."""
+    font = build_demo_font()
+    for name in ("Acute", "acute.case"):
+        g = font.newGlyph(name)
+        g.width = 0
+        pen = g.getPen()
+        pen.moveTo((200, 620)); pen.lineTo((280, 620))
+        pen.lineTo((360, 700)); pen.lineTo((280, 700)); pen.closePath()
+    return font
+
+
+def test_case_suffix_picks_the_fonts_capital_accent():
+    font = _font_with_capital_accents()
+    # `.case` prefers the house spelling it finds: acute.case before Acute.
+    assert resolve_unicode_refs("U+0301.case", font) == "acute.case"
+    del font["acute.case"]
+    assert resolve_unicode_refs("U+0301.case", font) == "Acute"
+
+
+def test_case_suffix_falls_back_to_the_plain_mark():
+    """A font with no capital set still builds — with the ordinary accent."""
+    font = build_demo_font()                      # has acute (U+00B4) only
+    assert resolve_unicode_refs("U+0301.case", font) == "acute"
+
+
+def test_case_suffix_without_a_font_uses_the_legacy_spelling():
+    assert resolve_unicode_refs("U+00C1 = A + U+0301.case@top") == "Aacute = A + Acute@top"

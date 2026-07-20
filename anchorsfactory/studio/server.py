@@ -20,7 +20,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
 
-from ..presets import is_preset, list_presets, preset_text
+from ..presets import (construction_text, has_construction, is_preset,
+                       list_presets, preset_text)
 from .compose import build_composite_view
 from .demo import build_demo_font, font_metrics
 from .render import all_glyph_geometry, build_view
@@ -88,7 +89,8 @@ class Studio:
     no change.
     """
 
-    def __init__(self, font, rules_text: str, font_name: str, save_path=None):
+    def __init__(self, font, rules_text: str, font_name: str, save_path=None,
+                 gc_text: str | None = None):
         self.fonts = [{"name": font_name, "font": font, "tmpdir": None, "allglyphs": None}]
         self.active = 0
         self.rules_text = rules_text
@@ -103,7 +105,7 @@ class Studio:
             "presets": list_presets(),
             "presetTexts": {name: preset_text(name) for name in list_presets()},
             "rules": rules_text,
-            "gc": _DEFAULT_GC,
+            "gc": gc_text or _DEFAULT_GC,
             "save": str(self.save_path) if self.save_path else None,
         }
 
@@ -344,6 +346,11 @@ def main(argv=None) -> int:
         format="%(levelname)s %(name)s: %(message)s",
     )
     rules_text = _seed_rules(args.rules)
+    # A preset's own composites, when it ships them: on a real font that fills
+    # the constructions editor with the pipeline's second half. The demo font
+    # has a handful of glyphs, so it keeps its own small seed.
+    gc_text = (construction_text(args.rules)
+               if is_preset(args.rules) and has_construction(args.rules) else None)
     if args.ufo:
         from fontParts.world import OpenFont
         studio = None
@@ -353,7 +360,8 @@ def main(argv=None) -> int:
             style = getattr(font.info, "styleName", None)
             name = f"{family} {style}".strip() if (family and style) else (family or Path(path).stem)
             if studio is None:
-                studio = Studio(font, rules_text, name, save_path=args.save)
+                studio = Studio(font, rules_text, name, save_path=args.save,
+                                gc_text=gc_text)
             else:
                 studio.add_font(font, name)
     else:

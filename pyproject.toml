@@ -48,7 +48,7 @@ anchorsfactory-studio = "anchorsfactory.studio.server:main"
 packages = ["anchorsfactory", "anchorsfactory.rules", "anchorsfactory.studio", "anchorsfactory._vendor"]
 
 [tool.setuptools.package-data]
-"anchorsfactory.rules" = ["*.anchors"]
+"anchorsfactory.rules" = ["*.anchors", "*.glyphsConstruction"]
 "anchorsfactory.studio" = ["static/*"]
 "anchorsfactory._vendor" = ["LICENSE", "*.md"]
 

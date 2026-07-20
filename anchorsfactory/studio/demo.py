@@ -96,11 +96,13 @@ def build_demo_font():
     # ---- Marks ----
     # acute: a right-leaning parallelogram (no flat bottom → outline centre is
     # sampled on the two slanted sides).
-    _glyph(font, "acute", 0, None, [
+    # Encoded like a real font's spacing accents, so codepoint-addressed rules
+    # (the bundled presets) reach them.
+    _glyph(font, "acute", 0, 0x00B4, [
         [(200, 520), (280, 520), (360, 640), (280, 640)],
     ])
     # dieresis: two square dots — a box-centre mark.
-    _glyph(font, "dieresis", 0, None, [
+    _glyph(font, "dieresis", 0, 0x00A8, [
         _rect(150, 560, 230, 640),
         _rect(300, 560, 380, 640),
     ])

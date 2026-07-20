@@ -11,6 +11,7 @@ from importlib.resources import files
 
 _RULES = "anchorsfactory.rules"
 _EXT = ".anchors"
+_GC_EXT = ".glyphsConstruction"
 # Extensions that mark a `--rules`/`!extends` reference as a *file path* (DSL),
 # not a bare preset name. `.anchors` is canonical; `.af`/`.dsl` stay recognised
 # so pre-existing rule files keep working.
@@ -38,4 +39,19 @@ def preset_text(name: str) -> str:
     res = files(_RULES) / f"{name}{_EXT}"
     if not res.is_file():
         raise KeyError(f"unknown preset {name!r}; available: {', '.join(list_presets())}")
+    return res.read_text(encoding="utf-8")
+
+
+def has_construction(name: str) -> bool:
+    """Whether the preset ships a matching GlyphConstruction file — the other
+    half of the pipeline (AnchorsFactory places the anchors, GlyphConstruction
+    assembles the composites that hang off them)."""
+    return (files(_RULES) / f"{name}{_GC_EXT}").is_file()
+
+
+def construction_text(name: str) -> str:
+    """Return the preset's GlyphConstruction text, or raise KeyError."""
+    res = files(_RULES) / f"{name}{_GC_EXT}"
+    if not res.is_file():
+        raise KeyError(f"preset {name!r} ships no {_GC_EXT} file")
     return res.read_text(encoding="utf-8")
