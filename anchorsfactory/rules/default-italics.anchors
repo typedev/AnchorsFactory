@@ -1,157 +1,35 @@
-# AnchorsFactory — default anchor rules (italic)
+# AnchorsFactory — Latin core, italic
 #
-# Same structure as default.anchors, tuned for italics: top anchors centre on the
-# slanted ink (outline.center@top), lowercase x-height letters use @baseLC, and
-# marks attach at x-height (@_loTop / @_loTopInk). See default.anchors / docs/anchor-rules.md.
+# An overlay on `default`, not a second copy of it. The italic shear itself needs
+# nothing here: the engine projects every X along `italicAngle` from the height it
+# was measured at, and `box.*` reads the slanted bbox correctly. What is left is
+# what a *drawing* changes — where the ink sits, which the angle cannot tell you.
+#
+# Every rule below is a design decision inherited from the pre-0.5.0 italic
+# ruleset. Labels are late-bound, so redefining one re-aims every rule in
+# `default` that uses it — that is why this file is short.
+
+!extends default
 
 # ============================================================
-#  VARIABLES — reusable measurements; change here, applies everywhere
+#  The lowercase anchors on the x-height, not the cap/x midpoint — and the marks
+#  follow it, so a base and its mark still meet at the same height.
 # ============================================================
-&barY    = capHeight*1/2               # uppercase crossbar height
-&barlowY = xHeight*1/2                 # lowercase crossbar height
-&baraltY = 400                         # fixed height of the alternate (left) bar
+@baseLC     = top (outline.center@top xHeight), bottom (box.center 0)
+@_top       = _top (outline.center@bottom xHeight), top (box.center box.top)
+@_topInk    = _top (outline.center@bottom xHeight), top (box.center box.top)
+
+# The capital-height set attaches on its ink too: a slanted accent's box centre
+# is not where it touches the letter.
+@_capTop    = _top (outline.center@bottom capHeight), top (box.center box.top)
+@_capTopInk = _top (outline.center@bottom capHeight), top (box.center box.top)
+
+# The italic lowercase has no round-vs-flat split — one treatment for all of it.
+# Redefining the label keeps every extra anchor `default` gave those glyphs
+# (a's ogonek, for one), which restating the rules per glyph would drop.
+@round      = top (outline.center@top xHeight), bottom (box.center 0)
 
 # ============================================================
-#  LABELS — reusable named sets of anchors
+#  Letters whose italic form puts the top ink at cap height
 # ============================================================
-@baseUC = top (outline.center@top capHeight), bottom (width.center 0)
-@baseLC = top (outline.center@top xHeight), bottom (width.center 0)
-@advCenter = top (outline.center@top capHeight), bottom (width.center 0)
-@_capTop = _top (outline.center@bottom capHeight)
-@_loTop = _top (outline.center@bottom xHeight)
-@_capTopInk = _top (outline.center@bottom capHeight)
-@_loTopInk = _top (outline.center@bottom xHeight)
-@topLeft = topleft (box.left capHeight)
-@bottom = bottom (box.center 0)
-@_bottom = _bottom (box.center 0)
-@ogonek = ogonek (outline.right 0)
-@_ogonek = _ogonek (outline.right 0)
-@desc = desc (outline.right 0)
-@_desc = _desc (outline.right 0)
-@bar = bar (width.center &barY)
-@bar.alt = bar.alt (box.left &baraltY)
-@barlow = barlow (box.center &barlowY)
-@hook = hook (outline.right 0)
-@hookdesc = hookdesc (width.center 0)
-@back = back (box.left capHeight)
-@descrever = descrever (outline.left 0)
-
-# ============================================================
-#  BASE GLYPHS — Latin
-# ============================================================
-U+0041..U+005A = @baseUC                  # A–Z : cap-height top + bottom
-U+0061..U+007A = @baseLC                 # a–z : x-height top + bottom
-# uppercase exceptions
-A += @ogonek
-E += @ogonek
-I += @ogonek
-U += @ogonek
-H += @hook, @desc, @bar
-M += @desc
-N += @desc
-T += @desc, @bar
-X += @desc, @bar
-Y += @bar
-L = top (box.left capHeight), caron (box.right capHeight), @bottom
-# lowercase ascenders take the cap-height top instead of @baseLC
-b = @baseUC ; d = @baseUC ; k = @baseUC ; l = @baseUC
-h = @baseUC, @desc
-# lowercase x-height extras
-a += @ogonek
-e += @ogonek
-i += @ogonek
-u += @ogonek, @desc
-n += @topLeft, @desc
-x += @desc, @bar
-t += barlow (width.center xHeight*2/3)
-U+0131 = top (outline.center@top xHeight)                    # dotlessi
-U+0237 = top (outline.center@top xHeight), @_desc            # dotlessj
-
-# ============================================================
-#  BASE GLYPHS — Cyrillic
-# ============================================================
-U+0410..U+042F = @baseUC                  # А–Я : cap-height
-U+0430..U+044F = @baseLC                 # а–я : x-height
-U+0401 = @baseUC ; U+0451 = @baseUC             # Ё ё
-# lowercase that take the cap-height top
-U+0431 = @baseUC ; U+0439 = @baseUC ; U+0444 = @baseUC                 # б й ф
-# uppercase exceptions
-U+0413 += @desc, @bar, @hookdesc, @bar.alt, @_desc   # Г
-U+0416 += @desc                                      # Ж
-U+0418 += @desc, @hook                               # И
-U+041A += @desc, @bar, @back                         # К
-U+041B += @desc, @hook                               # Л
-U+041F += @desc                                      # П
-U+0427 += @desc, @descrever, @hook                   # Ч
-U+042C += @bar                                       # Ь
-# lowercase exceptions
-U+0433 = @baseUC, @bar, @desc, @bar.alt, @_desc, @barlow   # г (cap-height top + parts)
-U+0436 += @desc                                      # ж
-U+0438 += @desc, @hook                               # и
-U+043A += @desc, @bar, @back                         # к
-U+043B += @desc, @hook                               # л
-U+043C += @desc                                      # м
-U+043D += @hook, @desc, @bar                         # н
-U+043F += @desc                                      # п
-U+0442 += @desc                                      # т
-U+0447 += @desc, @descrever, @hook                   # ч
-U+044C += @bar                                       # ь
-
-# ============================================================
-#  BASE GLYPHS — punctuation
-# ============================================================
-hyphen = _barlow (width.center $hyphen.middle), _bar (width.center $endash.middle)
-endash = _bar (width.center $endash.middle)
-
-# ============================================================
-#  DIACRITICS — by name AND Unicode (spacing ; combining)
-# ============================================================
-# top marks, x-height, lower-ink centred (pointed / slanted)
-acute = @_loTopInk ; acutecomb = @_loTopInk
-grave = @_loTopInk
-hungarumlaut = @_loTopInk
-U+00B4 = @_loTopInk ; U+0301 = @_loTopInk      # acute
-U+0060 = @_loTopInk ; U+0300 = @_loTopInk      # grave
-U+02DD = @_loTopInk ; U+030B = @_loTopInk      # hungarumlaut
-# capital-height counterparts
-Acute = @_capTopInk ; Grave = @_capTopInk ; Hungarumlaut = @_capTopInk
-# top marks, x-height, box centred
-breve = @_loTop ; caron = @_loTop ; circumflex = @_loTop ; dieresis = @_loTop
-dotaccent = @_loTop ; macron = @_loTop ; ring = @_loTop ; cyrbreve = @_loTop
-U+00A8 = @_loTop ; U+0308 = @_loTop          # dieresis
-U+00AF = @_loTop ; U+0304 = @_loTop          # macron
-U+02C6 = @_loTop ; U+0302 = @_loTop          # circumflex
-U+02C7 = @_loTop ; U+030C = @_loTop          # caron
-U+02D8 = @_loTop ; U+0306 = @_loTop          # breve
-U+02D9 = @_loTop ; U+0307 = @_loTop          # dotaccent
-U+02DA = @_loTop ; U+030A = @_loTop          # ring
-# tilde sits centred on the box (not lower-ink)
-tilde = _top (box.center xHeight) ; U+02DC = _top (box.center xHeight) ; U+0303 = _top (box.center xHeight)
-Tilde = _top (box.center capHeight)
-# capital-height box-centred counterparts
-Breve = @_capTop ; Caron = @_capTop ; Circumflex = @_capTop ; Dieresis = @_capTop
-Macron = @_capTop ; Ring = @_capTop ; Dotaccent = @_capTop
-# other / foundry-specific marks
-cyrBreve = @_capTop ; afii57929 = @_capTop ; accent = @_capTop ; Accent = @_capTop
-Caronl = @_capTop ; caronl = @_capTop
-Apostrophe = @_capTop, _topleft (outline.right capHeight)
-# bottom marks
-cedilla = @_bottom ; Cedilla = @_bottom
-commaaccent = @_bottom ; Commaaccent = @_bottom
-dotsubnosp = @_bottom ; Tail = @_bottom ; tail = @_bottom
-ogonek = @_ogonek ; Ogonek = @_ogonek
-U+00B8 = @_bottom ; U+0327 = @_bottom      # cedilla
-U+F6C3 = @_bottom ; U+0326 = @_bottom      # commaaccent / commabelow
-U+02DB = @_ogonek ; U+0328 = @_ogonek  # ogonek
-
-# ============================================================
-#  CUSTOM COMPONENT MARKS (foundry-specific names)
-# ============================================================
-Desc = _desc (outline.center@top 0) ; desc = _desc (outline.center@top 0)
-Descang = _desc (box.left 0) ; descang = _desc (box.left 0)
-Descrever = _descrever (outline.center@top 0) ; descrever = _descrever (outline.center@top 0)
-Hook = _hook (outline.right 0) ; hook = _hook (outline.right 0)
-Hookdesc = _hookdesc (box.left 0) ; hookdesc = _hookdesc (box.left 0)
-Barlong = _bar (width.center 0), _bar.alt (box.left 0)
-barlong = _bar (width.center 0), _bar.alt (box.left 0)
-Barshort = _back (width.center 0) ; barshort = _back (width.center 0)
+b = @baseUC ; d = @baseUC ; k = @baseUC ; l = @baseUC ; h = @baseUC

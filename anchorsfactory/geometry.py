@@ -389,8 +389,12 @@ def _italic_gap(font, glyph, xspec, anchor_y: float) -> float:
     sheared to follow the italic angle, summed per term. ``S`` is the height at
     which each X source is *defined*:
 
-    - BOX/ADVANCE → ``0`` (an upright reference; gap ``anchor_y``, the historical
-      ``tan·y`` shear);
+    - ADVANCE → ``0``: the advance box is upright whatever the outline does, so
+      its centre is a baseline value and gets the full ``tan·y`` shear;
+    - BOX → the **middle of the bounding box**. The bbox is measured on the
+      already-slanted outline, so its centre is the upright centre sheared to
+      mid-height; projecting from ``0`` would count the slant twice (a 12°
+      demo H came out 74 units — ``tan(12°)·350`` — right of its own ink).
     - OUTLINE → its ``@`` sample height, or ``anchor_y`` when there is none
       (plain ``outline.*`` is already on the slant → gap ``0``);
     - centroid → its own ``y`` (project the area centre up the slant);
@@ -409,11 +413,13 @@ def _italic_gap(font, glyph, xspec, anchor_y: float) -> float:
         _, cy = _centroid(glyph, comp)
         return anchor_y - cy
     if isinstance(xspec, Pos):
-        if xspec.frame in (Frame.ADVANCE, Frame.BOX):
-            return anchor_y                      # S = 0
+        if xspec.frame is Frame.ADVANCE:
+            return anchor_y                      # S = 0: the advance box is upright
         comp = _resolve_component(glyph, getattr(xspec, "component", None))
         bounds = (_component_bounds(glyph, comp) if comp is not None else glyph.bounds) \
             or (0.0, 0.0, 0.0, 0.0)
+        if xspec.frame is Frame.BOX:
+            return anchor_y - (bounds[1] + bounds[3]) / 2      # S = bbox middle
         return anchor_y - _sample_line(font, glyph, xspec, Axis.X, anchor_y, bounds)
     return 0.0                                   # Abs / other: not sheared
 

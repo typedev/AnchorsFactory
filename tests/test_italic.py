@@ -39,6 +39,20 @@ def italic():
     return f, g
 
 
+@pytest.fixture
+def slanted(italic):
+    """The same stem, actually sheared to the font's angle — a real italic glyph,
+    where the upright centre 100 sits at 100 + TAN·y."""
+    f, _ = italic
+    g = f.newGlyph("slantedstem")
+    g.width = 200
+    pen = g.getPen()
+    pen.moveTo((80, 0)); pen.lineTo((120, 0))
+    pen.lineTo((120 + TAN * 700, 700)); pen.lineTo((80 + TAN * 700, 700))
+    pen.closePath()
+    return f, g
+
+
 def test_plain_outline_is_not_sheared(italic):
     # sampled at the anchor's own height (S == Y) → gap 0 → no shear
     f, g = italic
@@ -54,11 +68,29 @@ def test_outline_at_sample_height_projects_up_the_slant(italic):
     assert resolve_x(f, g, spec, 500) == pytest.approx(100)
 
 
-def test_box_reference_shears_from_baseline(italic):
-    # box/advance are upright references (S = 0) → the historical tan·Y shear
+def test_advance_reference_shears_from_baseline(italic):
+    # the advance box is upright whatever the outline does (S = 0) → the full tan·Y
     f, g = italic
-    assert resolve_x(f, g, Pos(Frame.BOX, HAlign.CENTER), 600) == pytest.approx(100 + TAN * 600)
-    assert resolve_x(f, g, Pos(Frame.BOX, HAlign.CENTER), 0) == pytest.approx(100)
+    assert resolve_x(f, g, Pos(Frame.ADVANCE, HAlign.CENTER), 600) == pytest.approx(100 + TAN * 600)
+    assert resolve_x(f, g, Pos(Frame.ADVANCE, HAlign.CENTER), 0) == pytest.approx(100)
+
+
+def test_box_projects_from_its_bbox_middle(italic):
+    # the bbox is measured on the outline, so its centre already sits where the
+    # ink is at mid-height: S = (yMin + yMax) / 2, not 0.
+    f, g = italic
+    assert resolve_x(f, g, Pos(Frame.BOX, HAlign.CENTER), 600) == pytest.approx(100 + TAN * (600 - 350))
+
+
+def test_box_on_slanted_ink_lands_on_the_ink(slanted):
+    """The point of the S = bbox-middle rule: on a genuinely slanted glyph,
+    `box.center` must name the same place as the advance centre and the contour
+    itself — anything else counts the slant twice."""
+    f, g = slanted
+    for y in (0, 350, 600):
+        ink = resolve_x(f, g, Pos(Frame.OUTLINE, HAlign.CENTER), y)
+        assert resolve_x(f, g, Pos(Frame.BOX, HAlign.CENTER), y) == pytest.approx(ink)
+        assert resolve_x(f, g, Pos(Frame.ADVANCE, HAlign.CENTER), y) == pytest.approx(ink)
 
 
 def test_centroid_projects_from_its_own_height(italic):

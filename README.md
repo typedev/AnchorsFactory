@@ -83,7 +83,9 @@ Full reference: **[docs/anchor-rules.md](docs/anchor-rules.md)**.
 ### Presets and migration
 
 Bundled rulesets `default` and `default-italics` are usable by name in
-`--rules` or `!extends`.
+`--rules` or `!extends`. The italic one is an **overlay**: the shear itself is
+automatic, so it only restates what a slanted *drawing* changes — eight rules on
+top of `default` rather than a second copy of it.
 
 `default` covers **Latin core** — Basic Latin, Latin-1 Supplement and Latin
 Extended-A — and is *generated from the Unicode database*:

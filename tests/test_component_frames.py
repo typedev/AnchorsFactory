@@ -92,9 +92,9 @@ def test_component_zero_rejected():
 
 
 def test_italic_shear_uses_component_height():
-    # X follows the slant from the sample height; a component-scoped box is upright
-    # (S=0) so the shear is tan(-angle)*anchor_y — same formula, just the component's x.
+    # X follows the slant from the height its source is defined at; for a box that
+    # is the middle of *the component's* bounds (0..400), not the whole glyph's.
     d, _ = _d("lig = a (comp2.box.center 300)", font=_font(italic=-12))
-    expected = 600 + math.tan(math.radians(12)) * 300
+    expected = 600 + math.tan(math.radians(12)) * (300 - 200)
     assert d["a"][0] == round(expected)
     assert d["a"][1] == 300

@@ -227,22 +227,26 @@ anchor follows the stem instead of sitting beside it. The shift is
 - `outline.center` / `outline.center@capHeight` *at* cap-height get **no** shift
   — the sample height equals the anchor height (`S = Y`), so an `H`'s top stays
   exactly between its two slanted stems;
-- `box.*` / `width.*` are upright references (`S = 0`), sheared by `tan·Y` as
-  before; `outline.centroid` projects from its own height.
+- `width.*` is an upright reference (`S = 0`) — the advance box does not lean —
+  so it takes the full `tan·Y`; `box.*` projects from the **middle of the
+  bounding box**, and `outline.centroid` from its own height.
 
 It's automatic — nothing to write in a rule — and on an upright font the angle is
 0, so every shift is 0.
 
-> ⚠️ **Avoid `box.*` / `width.*` for horizontal positioning on italics.** A UFO
-> stores the *already-slanted* outline, so its bounding box already leans — its
-> centre sits at the slant of the glyph's mid-height. Adding the `tan·Y` shear on
-> top counts the slant twice, so `box.center` drifts ≈ `tan·(mid-height)` to the
-> right of the true centre (e.g. ~80 units at a 13° angle). And a slanted glyph's
-> box has no single well-defined centre height (its left and right extremes sit at
-> different heights), so it can't be cleanly corrected. Use **`outline.center`**
-> (the true ink centre at the anchor's height), **`outline.center@<h>`**, or
-> **`outline.centroid`** instead — they sample the actual contour and need no
-> extra shift. On an upright font `box.*` is fine.
+> **Why `box.*` projects from mid-height.** A UFO stores the *already-slanted*
+> outline, so its bounding box leans with it: the box centre is the upright centre
+> sheared to the box's mid-height. Shearing that from the baseline would count the
+> slant twice — `box.center` used to land ≈ `tan·(mid-height)` right of the true
+> centre (~80 units at 13°). Taking `S` as the box middle is exact for a uniformly
+> sheared shape, which is what an italic glyph is.
+>
+> It is still an approximation where the ink is not uniformly sheared — a glyph's
+> left and right extremes can sit at different heights, and a glyph drawn upright
+> inside an italic font leans on nothing at all. Where the shape is irregular,
+> **`outline.center`** (the ink centre at the anchor's own height),
+> **`outline.center@<h>`** or **`outline.centroid`** sample the real contour and
+> need no correction.
 
 ## Labels
 

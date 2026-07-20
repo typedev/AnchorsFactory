@@ -64,15 +64,17 @@ each layer is testable and the DSL surface is decoupled from the engine.
   the other axis's coordinate; both at once = an axis cycle, rejected). Italic
   shear is **height-aware**: every X is projected along `italicAngle` from the
   height it was measured at to the anchor's height (`tan(-angle)·(Y−S)`; `S=0`
-  for box/advance, the `@`/anchor height for outline, `cy` for centroid). Also
+  for advance, the bbox middle for box, the `@`/anchor height for outline, `cy`
+  for centroid). Also
   `Centroid` (via `StatisticsPen`) and `Frac` positions. `@` decouples the sample
   line (a height on X, a column on Y) from the anchor's other coordinate. A
   `compN.` qualifier draws only the N-th component into a fresh recorder
   (`DecomposingRecordingPen` flattens components, so post-hoc filtering is
   impossible) and scopes crossings/bbox/centroid/`@`-edges to it.
-  (Caveat: `glyph.bounds` is the bbox of the *already-slanted* outline, so on
-  italics `box.*`/`width.*` double-count the slant — prefer `outline.*`/centroid;
-  documented in `docs/anchor-rules.md`.)
+  `glyph.bounds` is the bbox of the *already-slanted* outline, so `box.*` takes
+  `S` = the bbox's own middle (exact for a uniformly sheared shape); `width.*`
+  keeps `S=0` since the advance box is upright. For irregular shapes prefer
+  `outline.*`/centroid; documented in `docs/anchor-rules.md`.
 - `parser.py` — legacy `.txt` → IR. `dsl.py` — the new language → IR. Both
   produce a `Document`; the engine never sees surface syntax.
 - `apply.py` — the **accumulation model**: rules scanned in order, each matching

@@ -16,6 +16,7 @@ In the Studio these load as a **layer** (open / drop the file), not via
 | `latin-ext-additional.*` | Latin Extended Additional (U+1E00–U+1EFF) — Vietnamese and the dot-below accents |
 | `legacy-default.anchors` | The pre-generation `default` ruleset, kept for reference: Latin **and** Cyrillic, plus foundry-specific component marks addressed by name |
 | `legacy-basic.glyphsConstruction` | The matching pre-generation construction list (name-addressed) |
+| `legacy-default-italics.anchors` | The pre-0.5.0 italic ruleset, a full standalone copy of the upright one. Superseded by `default-italics`, which is now a short overlay on `default` |
 
 Each set comes in two halves that are meant to be used together: `.anchors`
 places the anchors, `.glyphsConstruction` assembles the composites that hang off
