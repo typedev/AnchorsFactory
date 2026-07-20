@@ -11,6 +11,7 @@ from anchorsfactory import (
     parse_construction, parse_constructions,
 )
 from anchorsfactory.composites import resolve_unicode_refs
+from anchorsfactory.presets import construction_text
 from anchorsfactory.studio.demo import build_demo_font
 
 
@@ -144,6 +145,21 @@ def test_build_composites_from_codepoint_addressed_text():
     assert c.glyph is not None and not c.problems
     assert (c.base, c.marks) == ("a", (("acute", "top"),))
 
+
+def test_bundled_default_preset_builds_its_own_composites():
+    """The two halves of the bundled preset agree: every construction it ships
+    assembles from the anchors its rules place."""
+    font = build_demo_font()
+    apply_document(font, load_document("default"))
+    built = build_composites(font, construction_text("default"))
+    assert built                                   # the preset ships constructions
+    demo = [c for c in built.values() if not any("not found" in p for p in c.problems)]
+    assert demo, "no construction could be built on the demo font"
+    for c in demo:
+        assert c.glyph is not None
+
+
+# --- legacy accent sets ---------------------------------------------------- #
 def _font_with_capital_accents():
     """The demo font plus a capital-height accent set — unencoded, name-only,
     the way fonts actually ship one."""
@@ -173,3 +189,12 @@ def test_case_suffix_falls_back_to_the_plain_mark():
 
 def test_case_suffix_without_a_font_uses_the_legacy_spelling():
     assert resolve_unicode_refs("U+00C1 = A + U+0301.case@top") == "Aacute = A + Acute@top"
+
+
+def test_bundled_default_uses_the_capital_set_for_uppercase():
+    """The shipped constructions ask for the capital cut on uppercase bases and
+    the plain mark on lowercase ones."""
+    gc = construction_text("default")
+    upper = next(l for l in gc.splitlines() if l.startswith("U+00C1 "))   # Aacute
+    lower = next(l for l in gc.splitlines() if l.startswith("U+00E1 "))   # aacute
+    assert ".case" in upper and ".case" not in lower

@@ -1,0 +1,242 @@
+# AnchorsFactory — Latin Extended-B
+#
+# GENERATED from the Unicode database by the maintainer's generator
+# (dev/gen_latin_rules.py) — do not hand-edit; layer your own rules on top.
+#
+# Glyphs are addressed by codepoint — except the ASCII letters, which every
+# font names alike — so the rules assume no naming scheme.
+#
+# Uppercase bases anchor at capHeight, lowercase at the cap/x midpoint, and
+# marks attach at that same midpoint: one mark set serves both cases and a
+# composite never shifts. Round lowercase letters centre on the outline
+# crossing instead of the bounding box.
+#
+# Marks carry their own top/bottom anchor as well as the _top/_bottom they
+# attach by: that is what lets accents stack (an acute over a circumflex),
+# since a composite inherits the anchors of its last component.
+
+!propagate = composites   # composites inherit their components' anchors
+
+# ============================================================
+#  VARIABLES
+# ============================================================
+&capxMid = capHeight*1/2+xHeight*1/2   # lowercase top / mark height
+
+# ============================================================
+#  LABELS — the anchor vocabulary
+# ============================================================
+@baseUC     = top (box.center capHeight), bottom (box.center 0)
+@baseLC     = top (box.center &capxMid), bottom (box.center 0)
+@ogonek     = ogonek (outline.right 0)
+@horn       = horn (outline.right xHeight)
+# marks: _top/_bottom is where the mark attaches, top/bottom where the next
+# mark stacks on it
+@_top       = _top (box.center &capxMid), top (box.center box.top)
+@_topInk    = _top (outline.center@bottom &capxMid), top (box.center box.top)
+@_bottom    = _bottom (box.center 0), bottom (box.center box.bottom)
+# the capital-height accent set, which a font carries under a name only
+@_capTop    = _top (box.center capHeight), top (box.center box.top)
+@_capTopInk = _top (outline.center@bottom capHeight), top (box.center box.top)
+@_ogonek    = _ogonek (outline.right 0)
+@_horn      = _horn (outline.left 0)
+@stackTop   = top (box.center box.top)
+
+# ============================================================
+#  BASE GLYPHS
+# ============================================================
+U+0180 = @baseLC                           # ƀ · LATIN SMALL LETTER B WITH STROKE
+U+0181 = @baseUC                           # Ɓ · LATIN CAPITAL LETTER B WITH HOOK
+U+0182 = @baseUC                           # Ƃ · LATIN CAPITAL LETTER B WITH TOPBAR
+U+0183 = @baseLC                           # ƃ · LATIN SMALL LETTER B WITH TOPBAR
+U+0184 = @baseUC                           # Ƅ · LATIN CAPITAL LETTER TONE SIX
+U+0185 = @baseLC                           # ƅ · LATIN SMALL LETTER TONE SIX
+U+0186 = @baseUC                           # Ɔ · LATIN CAPITAL LETTER OPEN O
+U+0187 = @baseUC                           # Ƈ · LATIN CAPITAL LETTER C WITH HOOK
+U+0188 = @baseLC                           # ƈ · LATIN SMALL LETTER C WITH HOOK
+U+0189 = @baseUC                           # Ɖ · LATIN CAPITAL LETTER AFRICAN D
+U+018A = @baseUC                           # Ɗ · LATIN CAPITAL LETTER D WITH HOOK
+U+018B = @baseUC                           # Ƌ · LATIN CAPITAL LETTER D WITH TOPBAR
+U+018C = @baseLC                           # ƌ · LATIN SMALL LETTER D WITH TOPBAR
+U+018D = @baseLC                           # ƍ · LATIN SMALL LETTER TURNED DELTA
+U+018E = @baseUC                           # Ǝ · LATIN CAPITAL LETTER REVERSED E
+U+018F = @baseUC                           # Ə · LATIN CAPITAL LETTER SCHWA
+U+0190 = @baseUC                           # Ɛ · LATIN CAPITAL LETTER OPEN E
+U+0191 = @baseUC                           # Ƒ · LATIN CAPITAL LETTER F WITH HOOK
+U+0192 = @baseLC                           # ƒ · LATIN SMALL LETTER F WITH HOOK
+U+0193 = @baseUC                           # Ɠ · LATIN CAPITAL LETTER G WITH HOOK
+U+0194 = @baseUC                           # Ɣ · LATIN CAPITAL LETTER GAMMA
+U+0195 = @baseLC                           # ƕ · LATIN SMALL LETTER HV
+U+0196 = @baseUC                           # Ɩ · LATIN CAPITAL LETTER IOTA
+U+0197 = @baseUC                           # Ɨ · LATIN CAPITAL LETTER I WITH STROKE
+U+0198 = @baseUC                           # Ƙ · LATIN CAPITAL LETTER K WITH HOOK
+U+0199 = @baseLC                           # ƙ · LATIN SMALL LETTER K WITH HOOK
+U+019A = @baseLC                           # ƚ · LATIN SMALL LETTER L WITH BAR
+U+019B = @baseLC                           # ƛ · LATIN SMALL LETTER LAMBDA WITH STROKE
+U+019C = @baseUC                           # Ɯ · LATIN CAPITAL LETTER TURNED M
+U+019D = @baseUC                           # Ɲ · LATIN CAPITAL LETTER N WITH LEFT HOOK
+U+019E = @baseLC                           # ƞ · LATIN SMALL LETTER N WITH LONG RIGHT LEG
+U+019F = @baseUC                           # Ɵ · LATIN CAPITAL LETTER O WITH MIDDLE TILDE
+U+01A2 = @baseUC                           # Ƣ · LATIN CAPITAL LETTER OI
+U+01A3 = @baseLC                           # ƣ · LATIN SMALL LETTER OI
+U+01A4 = @baseUC                           # Ƥ · LATIN CAPITAL LETTER P WITH HOOK
+U+01A5 = @baseLC                           # ƥ · LATIN SMALL LETTER P WITH HOOK
+U+01A6 = @baseUC                           # Ʀ · LATIN LETTER YR
+U+01A7 = @baseUC                           # Ƨ · LATIN CAPITAL LETTER TONE TWO
+U+01A8 = @baseLC                           # ƨ · LATIN SMALL LETTER TONE TWO
+U+01A9 = @baseUC                           # Ʃ · LATIN CAPITAL LETTER ESH
+U+01AA = @baseLC                           # ƪ · LATIN LETTER REVERSED ESH LOOP
+U+01AB = @baseLC                           # ƫ · LATIN SMALL LETTER T WITH PALATAL HOOK
+U+01AC = @baseUC                           # Ƭ · LATIN CAPITAL LETTER T WITH HOOK
+U+01AD = @baseLC                           # ƭ · LATIN SMALL LETTER T WITH HOOK
+U+01AE = @baseUC                           # Ʈ · LATIN CAPITAL LETTER T WITH RETROFLEX HOOK
+U+01B1 = @baseUC                           # Ʊ · LATIN CAPITAL LETTER UPSILON
+U+01B2 = @baseUC                           # Ʋ · LATIN CAPITAL LETTER V WITH HOOK
+U+01B3 = @baseUC                           # Ƴ · LATIN CAPITAL LETTER Y WITH HOOK
+U+01B4 = @baseLC                           # ƴ · LATIN SMALL LETTER Y WITH HOOK
+U+01B5 = @baseUC                           # Ƶ · LATIN CAPITAL LETTER Z WITH STROKE
+U+01B6 = @baseLC                           # ƶ · LATIN SMALL LETTER Z WITH STROKE
+U+01B7 = @baseUC                           # Ʒ · LATIN CAPITAL LETTER EZH
+U+01B8 = @baseUC                           # Ƹ · LATIN CAPITAL LETTER EZH REVERSED
+U+01B9 = @baseLC                           # ƹ · LATIN SMALL LETTER EZH REVERSED
+U+01BA = @baseLC                           # ƺ · LATIN SMALL LETTER EZH WITH TAIL
+U+01BB = @baseLC                           # ƻ · LATIN LETTER TWO WITH STROKE
+U+01BC = @baseUC                           # Ƽ · LATIN CAPITAL LETTER TONE FIVE
+U+01BD = @baseLC                           # ƽ · LATIN SMALL LETTER TONE FIVE
+U+01BE = @baseLC                           # ƾ · LATIN LETTER INVERTED GLOTTAL STOP WITH STROKE
+U+01BF = @baseLC                           # ƿ · LATIN LETTER WYNN
+U+01C0 = @baseLC                           # ǀ · LATIN LETTER DENTAL CLICK
+U+01C1 = @baseLC                           # ǁ · LATIN LETTER LATERAL CLICK
+U+01C2 = @baseLC                           # ǂ · LATIN LETTER ALVEOLAR CLICK
+U+01C3 = @baseLC                           # ǃ · LATIN LETTER RETROFLEX CLICK
+U+01C4 = @baseUC                           # Ǆ · LATIN CAPITAL LETTER DZ WITH CARON
+U+01C5 = @baseLC                           # ǅ · LATIN CAPITAL LETTER D WITH SMALL LETTER Z WITH CARON
+U+01C6 = @baseLC                           # ǆ · LATIN SMALL LETTER DZ WITH CARON
+U+01C7 = @baseUC                           # Ǉ · LATIN CAPITAL LETTER LJ
+U+01C8 = @baseLC                           # ǈ · LATIN CAPITAL LETTER L WITH SMALL LETTER J
+U+01C9 = @baseLC                           # ǉ · LATIN SMALL LETTER LJ
+U+01CA = @baseUC                           # Ǌ · LATIN CAPITAL LETTER NJ
+U+01CB = @baseLC                           # ǋ · LATIN CAPITAL LETTER N WITH SMALL LETTER J
+U+01CC = @baseLC                           # ǌ · LATIN SMALL LETTER NJ
+U+01DD = @baseLC                           # ǝ · LATIN SMALL LETTER TURNED E
+U+01E4 = @baseUC                           # Ǥ · LATIN CAPITAL LETTER G WITH STROKE
+U+01E5 = @baseLC                           # ǥ · LATIN SMALL LETTER G WITH STROKE
+U+01F1 = @baseUC                           # Ǳ · LATIN CAPITAL LETTER DZ
+U+01F2 = @baseLC                           # ǲ · LATIN CAPITAL LETTER D WITH SMALL LETTER Z
+U+01F3 = @baseLC                           # ǳ · LATIN SMALL LETTER DZ
+U+01F6 = @baseUC                           # Ƕ · LATIN CAPITAL LETTER HWAIR
+U+01F7 = @baseUC                           # Ƿ · LATIN CAPITAL LETTER WYNN
+U+021C = @baseUC                           # Ȝ · LATIN CAPITAL LETTER YOGH
+U+021D = @baseLC                           # ȝ · LATIN SMALL LETTER YOGH
+U+0220 = @baseUC                           # Ƞ · LATIN CAPITAL LETTER N WITH LONG RIGHT LEG
+U+0221 = @baseLC                           # ȡ · LATIN SMALL LETTER D WITH CURL
+U+0222 = @baseUC                           # Ȣ · LATIN CAPITAL LETTER OU
+U+0223 = @baseLC                           # ȣ · LATIN SMALL LETTER OU
+U+0224 = @baseUC                           # Ȥ · LATIN CAPITAL LETTER Z WITH HOOK
+U+0225 = @baseLC                           # ȥ · LATIN SMALL LETTER Z WITH HOOK
+U+0234 = @baseLC                           # ȴ · LATIN SMALL LETTER L WITH CURL
+U+0235 = @baseLC                           # ȵ · LATIN SMALL LETTER N WITH CURL
+U+0236 = @baseLC                           # ȶ · LATIN SMALL LETTER T WITH CURL
+U+0237 = @baseLC                           # ȷ · LATIN SMALL LETTER DOTLESS J
+U+0238 = @baseLC                           # ȸ · LATIN SMALL LETTER DB DIGRAPH
+U+0239 = @baseLC                           # ȹ · LATIN SMALL LETTER QP DIGRAPH
+U+023A = @baseUC                           # Ⱥ · LATIN CAPITAL LETTER A WITH STROKE
+U+023B = @baseUC                           # Ȼ · LATIN CAPITAL LETTER C WITH STROKE
+U+023C = @baseLC                           # ȼ · LATIN SMALL LETTER C WITH STROKE
+U+023D = @baseUC                           # Ƚ · LATIN CAPITAL LETTER L WITH BAR
+U+023E = @baseUC                           # Ⱦ · LATIN CAPITAL LETTER T WITH DIAGONAL STROKE
+U+023F = @baseLC                           # ȿ · LATIN SMALL LETTER S WITH SWASH TAIL
+U+0240 = @baseLC                           # ɀ · LATIN SMALL LETTER Z WITH SWASH TAIL
+U+0241 = @baseUC                           # Ɂ · LATIN CAPITAL LETTER GLOTTAL STOP
+U+0242 = @baseLC                           # ɂ · LATIN SMALL LETTER GLOTTAL STOP
+U+0243 = @baseUC                           # Ƀ · LATIN CAPITAL LETTER B WITH STROKE
+U+0244 = @baseUC                           # Ʉ · LATIN CAPITAL LETTER U BAR
+U+0245 = @baseUC                           # Ʌ · LATIN CAPITAL LETTER TURNED V
+U+0246 = @baseUC                           # Ɇ · LATIN CAPITAL LETTER E WITH STROKE
+U+0247 = @baseLC                           # ɇ · LATIN SMALL LETTER E WITH STROKE
+U+0248 = @baseUC                           # Ɉ · LATIN CAPITAL LETTER J WITH STROKE
+U+0249 = @baseLC                           # ɉ · LATIN SMALL LETTER J WITH STROKE
+U+024A = @baseUC                           # Ɋ · LATIN CAPITAL LETTER SMALL Q WITH HOOK TAIL
+U+024B = @baseLC                           # ɋ · LATIN SMALL LETTER Q WITH HOOK TAIL
+U+024C = @baseUC                           # Ɍ · LATIN CAPITAL LETTER R WITH STROKE
+U+024D = @baseLC                           # ɍ · LATIN SMALL LETTER R WITH STROKE
+U+024E = @baseUC                           # Ɏ · LATIN CAPITAL LETTER Y WITH STROKE
+U+024F = @baseLC                           # ɏ · LATIN SMALL LETTER Y WITH STROKE
+
+# Bases from another block that this one's composites lean on:
+# `+=` so the set that owns them keeps its top/bottom.
+# ------------------------------------------------------------
+O += @ogonek, @horn
+U += @horn
+o += @ogonek, @horn
+u += @horn
+
+# Bases that are themselves precomposed (ế = ê + acute): anchored on
+# their own ink, and `+=` so an inherited anchor set survives.
+# ------------------------------------------------------------
+U+00C4 += @stackTop                        # Ä · LATIN CAPITAL LETTER A WITH DIAERESIS
+U+00C5 += @stackTop                        # Å · LATIN CAPITAL LETTER A WITH RING ABOVE
+U+00D5 += @stackTop                        # Õ · LATIN CAPITAL LETTER O WITH TILDE
+U+00D6 += @stackTop                        # Ö · LATIN CAPITAL LETTER O WITH DIAERESIS
+U+00DC += @stackTop                        # Ü · LATIN CAPITAL LETTER U WITH DIAERESIS
+U+00E4 += @stackTop                        # ä · LATIN SMALL LETTER A WITH DIAERESIS
+U+00E5 += @stackTop                        # å · LATIN SMALL LETTER A WITH RING ABOVE
+U+00F5 += @stackTop                        # õ · LATIN SMALL LETTER O WITH TILDE
+U+00F6 += @stackTop                        # ö · LATIN SMALL LETTER O WITH DIAERESIS
+U+00FC += @stackTop                        # ü · LATIN SMALL LETTER U WITH DIAERESIS
+U+01EA += @stackTop                        # Ǫ · LATIN CAPITAL LETTER O WITH OGONEK
+U+01EB += @stackTop                        # ǫ · LATIN SMALL LETTER O WITH OGONEK
+U+0226 += @stackTop                        # Ȧ · LATIN CAPITAL LETTER A WITH DOT ABOVE
+U+0227 += @stackTop                        # ȧ · LATIN SMALL LETTER A WITH DOT ABOVE
+U+022E += @stackTop                        # Ȯ · LATIN CAPITAL LETTER O WITH DOT ABOVE
+U+022F += @stackTop                        # ȯ · LATIN SMALL LETTER O WITH DOT ABOVE
+
+# ============================================================
+#  MARKS — the combining mark and the spacing accent alike, since a
+#  font may encode either
+# ============================================================
+U+0300 = @_topInk                          # ◌̀ · COMBINING GRAVE ACCENT
+U+0060 = @_topInk                          # ` · GRAVE ACCENT
+U+0301 = @_topInk                          # ◌́ · COMBINING ACUTE ACCENT
+U+00B4 = @_topInk                          # ´ · ACUTE ACCENT
+U+0304 = @_top                             # ◌̄ · COMBINING MACRON
+U+00AF = @_top                             # ¯ · MACRON
+U+0307 = @_top                             # ◌̇ · COMBINING DOT ABOVE
+U+02D9 = @_top                             # ˙ · DOT ABOVE
+U+030C = @_top                             # ◌̌ · COMBINING CARON
+U+02C7 = @_top                             # ˇ · CARON
+U+030F = @_topInk                          # ◌̏ · COMBINING DOUBLE GRAVE ACCENT
+U+0311 = @_top                             # ◌̑ · COMBINING INVERTED BREVE
+U+031B = @_horn                            # ◌̛ · COMBINING HORN
+U+0326 = @_bottom                          # ◌̦ · COMBINING COMMA BELOW
+U+F6C3 = @_bottom                          # · · COMMA ACCENT (Adobe private use)
+U+0327 = @_bottom                          # ◌̧ · COMBINING CEDILLA
+U+00B8 = @_bottom                          # ¸ · CEDILLA
+U+0328 = @_ogonek                          # ◌̨ · COMBINING OGONEK
+U+02DB = @_ogonek                          # ˛ · OGONEK
+
+# ============================================================
+#  LEGACY MARK NAMES — the same marks, by name
+#
+#  Plenty of fonts ship accents the codepoint rules above cannot reach:
+#  an unencoded combining set, or a second, capital-height set that has
+#  no codepoints at all. These are the conventional names for both. A
+#  font that lacks them simply matches nothing.
+# ============================================================
+grave = @_topInk ; gravecomb = @_topInk
+Grave = @_capTopInk ; grave.case = @_capTopInk ; gravecomb.case = @_capTopInk
+acute = @_topInk ; acutecomb = @_topInk
+Acute = @_capTopInk ; acute.case = @_capTopInk ; acutecomb.case = @_capTopInk
+macron = @_top ; macroncomb = @_top
+Macron = @_capTop ; macron.case = @_capTop ; macroncomb.case = @_capTop
+dotaccent = @_top ; dotaccentcomb = @_top
+Dotaccent = @_capTop ; dotaccent.case = @_capTop ; dotaccentcomb.case = @_capTop
+caron = @_top ; caroncomb = @_top
+Caron = @_capTop ; caron.case = @_capTop ; caroncomb.case = @_capTop
+horn = @_horn ; horncomb = @_horn
+Horn = @_horn ; horn.case = @_horn ; horncomb.case = @_horn
+commaaccent = @_bottom ; commaaccentcomb = @_bottom
+Commaaccent = @_bottom ; commaaccent.case = @_bottom ; commaaccentcomb.case = @_bottom
+cedilla = @_bottom ; cedillacomb = @_bottom
+Cedilla = @_bottom ; cedilla.case = @_bottom ; cedillacomb.case = @_bottom
+ogonek = @_ogonek ; ogonekcomb = @_ogonek
+Ogonek = @_ogonek ; ogonek.case = @_ogonek ; ogonekcomb.case = @_ogonek

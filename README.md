@@ -83,8 +83,32 @@ Full reference: **[docs/anchor-rules.md](docs/anchor-rules.md)**.
 ### Presets and migration
 
 Bundled rulesets `default` and `default-italics` are usable by name in
-`--rules` or `!extends`. Old `.txt` rule files (see `examples/`) convert to the
-new syntax — verified lossless:
+`--rules` or `!extends`.
+
+`default` covers **Latin core** — Basic Latin, Latin-1 Supplement and Latin
+Extended-A — and is *generated from the Unicode database*:
+every composite comes from a canonical decomposition, and every base carries
+exactly the anchors those composites ask of it. It ships with a matching
+`default.glyphsConstruction`, so the two halves of the pipeline stay in step —
+AnchorsFactory places the anchors, GlyphConstruction assembles the composites.
+
+Rules address glyphs **by codepoint** (`U+00C1`) wherever the name would be a
+guess, so they make no assumption about a font's naming scheme; the ASCII
+letters, which every font names alike, stay spelled out as `A`–`Z` / `a`–`z`.
+
+Accents get both treatments, because fonts ship them both ways: each mark is
+ruled on its **combining** codepoint *and* its spacing twin (`U+0301` and
+`U+00B4`), and again under the **legacy names** a font may use for glyphs that
+carry no codepoint at all — `acutecomb`, and the capital-height set `Acute` /
+`acute.case`, which is anchored at cap height rather than the lowercase
+midpoint.
+
+Wider Latin lives in the repo, not the wheel: `presets/latin-ext-b.*` and
+`presets/latin-ext-additional.*` (Vietnamese and the dot-below accents) are
+referenced by path.
+
+Old `.txt` rule files (see `examples/`) convert to the new syntax — verified
+lossless:
 
 ```bash
 anchorsfactory-convert examples/default-anchors-list.txt -o my-rules.anchors
@@ -102,6 +126,44 @@ font = OpenFont("MyFont.ufo")
 apply_document(font, load_document("my-rules.anchors"))
 font.save()
 ```
+
+### Composites (GlyphConstruction)
+
+`anchorsfactory.composites` assembles composite glyphs from the anchors just
+placed, using a vendored, unmodified [GlyphConstruction](https://github.com/typemytype/GlyphConstruction).
+
+```python
+from anchorsfactory import load_document, apply_document
+from anchorsfactory.composites import build_composites
+from anchorsfactory.presets import construction_text
+
+apply_document(font, load_document("default"))          # anchors first
+built = build_composites(font, construction_text("default"))
+built["Aacute"].glyph        # a ConstructionGlyph: .draw(pen) / .width / .components
+built["Aacute"].source_line  # the construction's line, for click-to-rule
+built["Aacute"].problems     # missing base/mark glyph or anchor, if any
+```
+
+Constructions use stock GlyphConstruction syntax with **one AnchorsFactory
+extension**: a glyph may be addressed as `U+XXXX`, resolved to the font's own
+glyph name before the engine sees it (the font's cmap first, then a combining
+mark's spacing twin, then the AGL name, then `uniXXXX`). Plain names still work
+and are the better choice where a name is unambiguous.
+
+A mark may take a **`.case`** suffix, asking for the font's capital-height accent
+set — a legacy cut that exists under a name (`Acute`, `acute.case`) but never a
+codepoint. Fonts without one fall back to the plain mark, so the same file builds
+either way:
+
+```
+U+00C1 = A + U+0301.case@top   | 00C1  # Á · LATIN CAPITAL LETTER A WITH ACUTE
+U+00E1 = a + U+0301@top        | 00E1  # á · LATIN SMALL LETTER A WITH ACUTE
+```
+
+That keeps a rule set portable across naming schemes, at the cost of stock
+GlyphConstruction not reading such a file — call `resolve_unicode_refs(text, font)`
+to get plain-name text back. Files with no `U+` token are untouched, so
+name-based constructions keep working unchanged.
 
 ### Compute without mutating (preview)
 

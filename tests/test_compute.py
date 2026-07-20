@@ -290,8 +290,11 @@ def test_real_font_parity_default_preset(round_coords):
 
     computed = compute_document(font, doc, round_coords=round_coords)
     apply_document(font, doc, clear=True, round_coords=round_coords)
+    # Only glyphs the document selects: `apply` deliberately leaves every other
+    # glyph's pre-existing anchors alone, so the font legitimately keeps anchors
+    # this preset never computed.
     written = {
         g.name: [(a.name, a.x, a.y) for a in g.anchors]
-        for g in font if g.anchors
+        for g in font if g.anchors and g.name in computed
     }
     assert computed == written

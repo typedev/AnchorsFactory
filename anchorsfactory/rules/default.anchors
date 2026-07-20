@@ -1,166 +1,194 @@
-# AnchorsFactory — default anchor rules
+# AnchorsFactory — Latin core — Basic Latin, Latin-1 Supplement, Latin Extended-A
 #
-# Sections: labels · base glyphs (Latin, Cyrillic, punctuation) · diacritics
-# · custom component marks.
+# GENERATED from the Unicode database by the maintainer's generator
+# (dev/gen_latin_rules.py) — do not hand-edit; layer your own rules on top.
 #
-# Uppercase bases and capital-height marks reference capHeight. Lowercase bases
-# and lowercase marks reference the cap/x midpoint (capHeight*1/2+xHeight*1/2),
-# so a mark's _top sits at the same height as the base top it attaches to and
-# composites don't shift. Round lowercase letters centre their top anchor on
-# the x-height crossing and their bottom on the baseline crossing.
+# Glyphs are addressed by codepoint — except the ASCII letters, which every
+# font names alike — so the rules assume no naming scheme.
 #
-# Combining marks are matched by Unicode (a font should encode them); spacing
-# accents also by their conventional name.
+# Uppercase bases anchor at capHeight, lowercase at the cap/x midpoint, and
+# marks attach at that same midpoint: one mark set serves both cases and a
+# composite never shifts. Round lowercase letters centre on the outline
+# crossing instead of the bounding box.
+#
+# Marks carry their own top/bottom anchor as well as the _top/_bottom they
+# attach by: that is what lets accents stack (an acute over a circumflex),
+# since a composite inherits the anchors of its last component.
+
+!propagate = composites   # composites inherit their components' anchors
 
 # ============================================================
-#  VARIABLES — reusable measurements; change here, applies everywhere
+#  VARIABLES
 # ============================================================
-&capxMid = capHeight*1/2+xHeight*1/2   # lowercase top / mark height (the cap–x midpoint)
-&barY    = capHeight*1/2               # uppercase crossbar height
-&barlowY = xHeight*1/2                 # lowercase crossbar height
-&baraltY = 400                         # fixed height of the alternate (left) bar
+&capxMid = capHeight*1/2+xHeight*1/2   # lowercase top / mark height
 
 # ============================================================
-#  LABELS — reusable named sets of anchors
+#  LABELS — the anchor vocabulary
 # ============================================================
-@baseUC = top (box.center capHeight), bottom (box.center 0)
-@topLeft = topleft (box.left capHeight)
-@bottom = bottom (box.center 0)
-@_capTop = _top (box.center capHeight)
-@_capTopInk = _top (outline.center@bottom capHeight)
-@_bottom = _bottom (box.center 0)
-# lowercase top: at the cap/x midpoint
-@baseLC = top (box.center &capxMid), bottom (box.center 0)
-@round = top (outline.center@xHeight &capxMid), bottom (outline.center 0)
-@_loTop = _top (box.center &capxMid)
-@_loTopInk = _top (outline.center@bottom &capxMid)
-@ogonek = ogonek (outline.right 0)
-@_ogonek = _ogonek (outline.right 0)
-@desc = desc (outline.right 0)
-@_desc = _desc (outline.right 0)
-@bar = bar (width.center &barY)
-@bar.alt = bar.alt (box.left &baraltY)
-@barlow = barlow (box.center &barlowY)
-@hook = hook (outline.right 0)
-@hookdesc = hookdesc (width.center 0)
-@back = back (box.left capHeight)
-@descrever = descrever (outline.left 0)
+@baseUC     = top (box.center capHeight), bottom (box.center 0)
+@baseLC     = top (box.center &capxMid), bottom (box.center 0)
+@round      = top (outline.center@xHeight &capxMid), bottom (outline.center 0)
+@ogonek     = ogonek (outline.right 0)
+# marks: _top/_bottom is where the mark attaches, top/bottom where the next
+# mark stacks on it
+@_top       = _top (box.center &capxMid), top (box.center box.top)
+@_topInk    = _top (outline.center@bottom &capxMid), top (box.center box.top)
+@_bottom    = _bottom (box.center 0), bottom (box.center box.bottom)
+# the capital-height accent set, which a font carries under a name only
+@_capTop    = _top (box.center capHeight), top (box.center box.top)
+@_capTopInk = _top (outline.center@bottom capHeight), top (box.center box.top)
+@_ogonek    = _ogonek (outline.right 0)
 
 # ============================================================
-#  BASE GLYPHS — Latin
+#  BASE GLYPHS
 # ============================================================
-U+0041..U+005A = @baseUC                  # A–Z : cap-height top + bottom
-U+0061..U+007A = @baseLC              # a–z : midpoint top + bottom
-# round lowercase: top centred on the x-height crossing, bottom on the baseline
-a = @round ; c = @round ; e = @round ; o = @round ; s = @round
-# exceptions (extra anchors)
-A += @ogonek
-E += @ogonek
-I += @ogonek
-U += @ogonek
-H += @hook, @desc, @bar
-M += @desc
-N += @desc
-T += @desc, @bar
-X += @desc, @bar
-Y += @bar
-a += @ogonek
-e += @ogonek
-i += @ogonek
-u += @ogonek, @desc
-h += @desc
-n += @topLeft, @desc
-x += @desc, @bar
-t += barlow (width.center xHeight*2/3)
-L = top (box.left capHeight), caron (box.right capHeight), @bottom
-# Latin outside A–Z
-Schwa = @baseUC ; schwa = @baseLC
-Oslash = @baseUC ; oslash = @baseLC
-AE = @baseUC ; ae = @baseLC
-U+0131 = @baseLC                      # dotlessi
-U+0237 = @baseLC, @_desc              # dotlessj
+A = @baseUC, @ogonek
+B = @baseUC
+C = @baseUC
+D = @baseUC
+E = @baseUC, @ogonek
+F = @baseUC
+G = @baseUC
+H = @baseUC
+I = @baseUC, @ogonek
+J = @baseUC
+K = @baseUC
+L = @baseUC
+M = @baseUC
+N = @baseUC
+O = @baseUC
+P = @baseUC
+Q = @baseUC
+R = @baseUC
+S = @baseUC
+T = @baseUC
+U = @baseUC, @ogonek
+V = @baseUC
+W = @baseUC
+X = @baseUC
+Y = @baseUC
+Z = @baseUC
+a = @round, @ogonek
+b = @baseLC
+c = @round
+d = @baseLC
+e = @round, @ogonek
+f = @baseLC
+g = @baseLC
+h = @baseLC
+i = @baseLC, @ogonek
+j = @baseLC
+k = @baseLC
+l = @baseLC
+m = @baseLC
+n = @baseLC
+o = @round
+p = @baseLC
+q = @baseLC
+r = @baseLC
+s = @round
+t = @baseLC
+u = @baseLC, @ogonek
+v = @baseLC
+w = @baseLC
+x = @baseLC
+y = @baseLC
+z = @baseLC
+U+00AA = @baseLC                           # ª · FEMININE ORDINAL INDICATOR
+U+00B5 = @baseLC                           # µ · MICRO SIGN
+U+00BA = @baseLC                           # º · MASCULINE ORDINAL INDICATOR
+U+00C6 = @baseUC                           # Æ · LATIN CAPITAL LETTER AE
+U+00D0 = @baseUC                           # Ð · LATIN CAPITAL LETTER ETH
+U+00D8 = @baseUC                           # Ø · LATIN CAPITAL LETTER O WITH STROKE
+U+00DE = @baseUC                           # Þ · LATIN CAPITAL LETTER THORN
+U+00DF = @baseLC                           # ß · LATIN SMALL LETTER SHARP S
+U+00E6 = @baseLC                           # æ · LATIN SMALL LETTER AE
+U+00F0 = @baseLC                           # ð · LATIN SMALL LETTER ETH
+U+00F8 = @baseLC                           # ø · LATIN SMALL LETTER O WITH STROKE
+U+00FE = @baseLC                           # þ · LATIN SMALL LETTER THORN
+U+0110 = @baseUC                           # Đ · LATIN CAPITAL LETTER D WITH STROKE
+U+0111 = @baseLC                           # đ · LATIN SMALL LETTER D WITH STROKE
+U+0126 = @baseUC                           # Ħ · LATIN CAPITAL LETTER H WITH STROKE
+U+0127 = @baseLC                           # ħ · LATIN SMALL LETTER H WITH STROKE
+U+0131 = @baseLC                           # ı · LATIN SMALL LETTER DOTLESS I
+U+0132 = @baseUC                           # Ĳ · LATIN CAPITAL LIGATURE IJ
+U+0133 = @baseLC                           # ĳ · LATIN SMALL LIGATURE IJ
+U+0138 = @baseLC                           # ĸ · LATIN SMALL LETTER KRA
+U+013F = @baseUC                           # Ŀ · LATIN CAPITAL LETTER L WITH MIDDLE DOT
+U+0140 = @baseLC                           # ŀ · LATIN SMALL LETTER L WITH MIDDLE DOT
+U+0141 = @baseUC                           # Ł · LATIN CAPITAL LETTER L WITH STROKE
+U+0142 = @baseLC                           # ł · LATIN SMALL LETTER L WITH STROKE
+U+0149 = @baseLC                           # ŉ · LATIN SMALL LETTER N PRECEDED BY APOSTROPHE
+U+014A = @baseUC                           # Ŋ · LATIN CAPITAL LETTER ENG
+U+014B = @baseLC                           # ŋ · LATIN SMALL LETTER ENG
+U+0152 = @baseUC                           # Œ · LATIN CAPITAL LIGATURE OE
+U+0153 = @baseLC                           # œ · LATIN SMALL LIGATURE OE
+U+0166 = @baseUC                           # Ŧ · LATIN CAPITAL LETTER T WITH STROKE
+U+0167 = @baseLC                           # ŧ · LATIN SMALL LETTER T WITH STROKE
+U+017F = @baseLC                           # ſ · LATIN SMALL LETTER LONG S
 
 # ============================================================
-#  BASE GLYPHS — Cyrillic
+#  MARKS — the combining mark and the spacing accent alike, since a
+#  font may encode either
 # ============================================================
-U+0410..U+042F = @baseUC                  # А–Я : cap-height
-U+0430..U+044F = @baseLC              # а–я : midpoint
-U+0401 = @baseUC                          # Ё
-U+0451 = @round                     # ё (round lowercase)
-# round lowercase Cyrillic
-U+043E = @round ; U+0441 = @round ; U+0435 = @round ; U+044D = @round ; U+0437 = @round   # о с е э з
-# uppercase exceptions
-U+0413 += @desc, @bar, @hookdesc, @bar.alt, @_desc   # Г
-U+0416 += @desc                                      # Ж
-U+0418 += @desc, @hook                               # И
-U+041A += @desc, @bar, @back                         # К
-U+041B += @desc, @hook                               # Л
-U+041F += @desc                                      # П
-U+0427 += @desc, @descrever, @hook                   # Ч
-U+042C += @bar                                       # Ь
-# lowercase exceptions
-U+0433 += @bar, @desc, @bar.alt, @_desc, @barlow     # г
-U+0436 += @desc                                      # ж
-U+0438 += @desc, @hook                               # и
-U+043A += @desc, @bar, @back                         # к
-U+043B += @desc, @hook                               # л
-U+043C += @desc                                      # м
-U+043D += @hook, @desc, @bar                         # н
-U+043F += @desc                                      # п
-U+0442 += @desc                                      # т
-U+0447 += @desc, @descrever, @hook                   # ч
-U+044C += @bar                                       # ь
+U+0300 = @_topInk                          # ◌̀ · COMBINING GRAVE ACCENT
+U+0060 = @_topInk                          # ` · GRAVE ACCENT
+U+0301 = @_topInk                          # ◌́ · COMBINING ACUTE ACCENT
+U+00B4 = @_topInk                          # ´ · ACUTE ACCENT
+U+0302 = @_top                             # ◌̂ · COMBINING CIRCUMFLEX ACCENT
+U+02C6 = @_top                             # ˆ · MODIFIER LETTER CIRCUMFLEX ACCENT
+U+0303 = @_top                             # ◌̃ · COMBINING TILDE
+U+02DC = @_top                             # ˜ · SMALL TILDE
+U+0304 = @_top                             # ◌̄ · COMBINING MACRON
+U+00AF = @_top                             # ¯ · MACRON
+U+0306 = @_top                             # ◌̆ · COMBINING BREVE
+U+02D8 = @_top                             # ˘ · BREVE
+U+0307 = @_top                             # ◌̇ · COMBINING DOT ABOVE
+U+02D9 = @_top                             # ˙ · DOT ABOVE
+U+0308 = @_top                             # ◌̈ · COMBINING DIAERESIS
+U+00A8 = @_top                             # ¨ · DIAERESIS
+U+030A = @_top                             # ◌̊ · COMBINING RING ABOVE
+U+02DA = @_top                             # ˚ · RING ABOVE
+U+030B = @_topInk                          # ◌̋ · COMBINING DOUBLE ACUTE ACCENT
+U+02DD = @_topInk                          # ˝ · DOUBLE ACUTE ACCENT
+U+030C = @_top                             # ◌̌ · COMBINING CARON
+U+02C7 = @_top                             # ˇ · CARON
+U+0327 = @_bottom                          # ◌̧ · COMBINING CEDILLA
+U+00B8 = @_bottom                          # ¸ · CEDILLA
+U+0328 = @_ogonek                          # ◌̨ · COMBINING OGONEK
+U+02DB = @_ogonek                          # ˛ · OGONEK
 
 # ============================================================
-#  BASE GLYPHS — punctuation
+#  LEGACY MARK NAMES — the same marks, by name
+#
+#  Plenty of fonts ship accents the codepoint rules above cannot reach:
+#  an unencoded combining set, or a second, capital-height set that has
+#  no codepoints at all. These are the conventional names for both. A
+#  font that lacks them simply matches nothing.
 # ============================================================
-hyphen = _barlow (width.center $hyphen.middle), _bar (width.center $endash.middle)
-endash = _bar (width.center $endash.middle)
-
-# ============================================================
-#  DIACRITICS — lowercase marks at the midpoint, caps at capHeight
-# ============================================================
-# lowercase, lower-ink centred (pointed / slanted): acute, grave, hungarumlaut
-acute = @_loTopInk ; grave = @_loTopInk ; hungarumlaut = @_loTopInk
-U+00B4 = @_loTopInk ; U+0301 = @_loTopInk      # acute (spacing ; combining)
-U+0060 = @_loTopInk ; U+0300 = @_loTopInk      # grave
-U+02DD = @_loTopInk ; U+030B = @_loTopInk      # hungarumlaut
-# lowercase, box centred
-breve = @_loTop ; caron = @_loTop ; circumflex = @_loTop ; dieresis = @_loTop
-dotaccent = @_loTop ; macron = @_loTop ; ring = @_loTop ; tilde = @_loTop ; cyrbreve = @_loTop
-U+00A8 = @_loTop ; U+0308 = @_loTop          # dieresis
-U+00AF = @_loTop ; U+0304 = @_loTop          # macron
-U+02C6 = @_loTop ; U+0302 = @_loTop          # circumflex
-U+02C7 = @_loTop ; U+030C = @_loTop          # caron
-U+02D8 = @_loTop ; U+0306 = @_loTop          # breve
-U+02D9 = @_loTop ; U+0307 = @_loTop          # dotaccent
-U+02DA = @_loTop ; U+030A = @_loTop          # ring
-U+02DC = @_loTop ; U+0303 = @_loTop          # tilde
-# capital-height marks
-Acute = @_capTopInk ; Grave = @_capTopInk ; Hungarumlaut = @_capTopInk
-Breve = @_capTop ; Caron = @_capTop ; Circumflex = @_capTop ; Dieresis = @_capTop
-Macron = @_capTop ; Ring = @_capTop ; Tilde = @_capTop ; Dotaccent = @_capTop
-cyrBreve = @_capTop ; afii57929 = @_capTop ; accent = @_capTop ; Accent = @_capTop
-Caronl = @_capTop ; caronl = @_capTop
-Apostrophe = @_capTop, _topleft (outline.right capHeight)
-# bottom marks (attach at the baseline — shared by upper and lower case)
-cedilla = @_bottom ; Cedilla = @_bottom
-commaaccent = @_bottom ; Commaaccent = @_bottom
-dotsubnosp = @_bottom ; Tail = @_bottom ; tail = @_bottom
-ogonek = @_ogonek ; Ogonek = @_ogonek
-U+00B8 = @_bottom ; U+0327 = @_bottom      # cedilla
-U+F6C3 = @_bottom ; U+0326 = @_bottom      # commaaccent / commabelow
-U+02DB = @_ogonek ; U+0328 = @_ogonek  # ogonek
-
-# ============================================================
-#  CUSTOM COMPONENT MARKS (foundry-specific names)
-# ============================================================
-Desc = _desc (outline.center@top 0) ; desc = _desc (outline.center@top 0)
-Descang = _desc (box.left 0) ; descang = _desc (box.left 0)
-Descrever = _descrever (outline.center@top 0) ; descrever = _descrever (outline.center@top 0)
-Hook = _hook (outline.right 0) ; hook = _hook (outline.right 0)
-Hookdesc = _hookdesc (box.left 0) ; hookdesc = _hookdesc (box.left 0)
-Barlong = _bar (width.center 0), _bar.alt (box.left 0)
-barlong = _bar (width.center 0), _bar.alt (box.left 0)
-Barshort = _back (outline.center@top 0), _bar (width.center $Barshort.middle)
-barshort = _back (outline.center@top 0), _barlow (width.center $barshort.middle)
+grave = @_topInk ; gravecomb = @_topInk
+Grave = @_capTopInk ; grave.case = @_capTopInk ; gravecomb.case = @_capTopInk
+acute = @_topInk ; acutecomb = @_topInk
+Acute = @_capTopInk ; acute.case = @_capTopInk ; acutecomb.case = @_capTopInk
+circumflex = @_top ; circumflexcomb = @_top
+Circumflex = @_capTop ; circumflex.case = @_capTop ; circumflexcomb.case = @_capTop
+tilde = @_top ; tildecomb = @_top
+Tilde = @_capTop ; tilde.case = @_capTop ; tildecomb.case = @_capTop
+macron = @_top ; macroncomb = @_top
+Macron = @_capTop ; macron.case = @_capTop ; macroncomb.case = @_capTop
+breve = @_top ; brevecomb = @_top
+Breve = @_capTop ; breve.case = @_capTop ; brevecomb.case = @_capTop
+dotaccent = @_top ; dotaccentcomb = @_top
+Dotaccent = @_capTop ; dotaccent.case = @_capTop ; dotaccentcomb.case = @_capTop
+dieresis = @_top ; dieresiscomb = @_top
+Dieresis = @_capTop ; dieresis.case = @_capTop ; dieresiscomb.case = @_capTop
+ring = @_top ; ringcomb = @_top
+Ring = @_capTop ; ring.case = @_capTop ; ringcomb.case = @_capTop
+hungarumlaut = @_topInk ; hungarumlautcomb = @_topInk
+Hungarumlaut = @_capTopInk ; hungarumlaut.case = @_capTopInk ; hungarumlautcomb.case = @_capTopInk
+caron = @_top ; caroncomb = @_top
+Caron = @_capTop ; caron.case = @_capTop ; caroncomb.case = @_capTop
+cedilla = @_bottom ; cedillacomb = @_bottom
+Cedilla = @_bottom ; cedilla.case = @_bottom ; cedillacomb.case = @_bottom
+ogonek = @_ogonek ; ogonekcomb = @_ogonek
+Ogonek = @_ogonek ; ogonek.case = @_ogonek ; ogonekcomb.case = @_ogonek

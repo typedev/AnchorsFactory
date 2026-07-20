@@ -34,10 +34,10 @@ def test_extends_preset_then_override(tmp_path):
     f = tmp_path / "my.anchors"
     f.write_text(
         "!extends default\n"
-        "U+0413 += extra (box.center 0)\n"     # Г: defaults + an extra anchor
+        "U+0047 += extra (box.center 0)\n"     # G: defaults + an extra anchor
     )
     doc = load_document(str(f))
-    names = [s.name for s in accumulate(doc, "Ge", [0x0413])]
+    names = [s.name for s in accumulate(doc, "G", [0x0047])]
     assert "extra" in names
     assert "top" in names                       # inherited from the default @
 

@@ -1,0 +1,104 @@
+# AnchorsFactory — Latin Extended-B: composites
+#
+# GENERATED from the Unicode database by the maintainer's generator
+# (dev/gen_latin_rules.py) — every construction is a canonical
+# decomposition; do not hand-edit.
+#
+# GlyphConstruction syntax with one AnchorsFactory extension: a glyph may
+# be addressed as U+XXXX and is resolved to the font's own name before the
+# engine sees it. ASCII letters are written as themselves. A `.case` mark
+# asks for a font's capital-height accent set (`Acute`, `acute.case`) and
+# falls back to the plain mark where there is none. `| XXXX` assigns the
+# codepoint to the built glyph.
+
+U+01A0 = O + U+031B.case@horn                  | 01A0  # Ơ · LATIN CAPITAL LETTER O WITH HORN
+U+01A1 = o + U+031B@horn                       | 01A1  # ơ · LATIN SMALL LETTER O WITH HORN
+U+01AF = U + U+031B.case@horn                  | 01AF  # Ư · LATIN CAPITAL LETTER U WITH HORN
+U+01B0 = u + U+031B@horn                       | 01B0  # ư · LATIN SMALL LETTER U WITH HORN
+U+01CD = A + U+030C.case@top                   | 01CD  # Ǎ · LATIN CAPITAL LETTER A WITH CARON
+U+01CE = a + U+030C@top                        | 01CE  # ǎ · LATIN SMALL LETTER A WITH CARON
+U+01CF = I + U+030C.case@top                   | 01CF  # Ǐ · LATIN CAPITAL LETTER I WITH CARON
+U+01D0 = i + U+030C@top                        | 01D0  # ǐ · LATIN SMALL LETTER I WITH CARON
+U+01D1 = O + U+030C.case@top                   | 01D1  # Ǒ · LATIN CAPITAL LETTER O WITH CARON
+U+01D2 = o + U+030C@top                        | 01D2  # ǒ · LATIN SMALL LETTER O WITH CARON
+U+01D3 = U + U+030C.case@top                   | 01D3  # Ǔ · LATIN CAPITAL LETTER U WITH CARON
+U+01D4 = u + U+030C@top                        | 01D4  # ǔ · LATIN SMALL LETTER U WITH CARON
+U+01D5 = U+00DC + U+0304.case@top              | 01D5  # Ǖ · LATIN CAPITAL LETTER U WITH DIAERESIS AND MACRON
+U+01D6 = U+00FC + U+0304@top                   | 01D6  # ǖ · LATIN SMALL LETTER U WITH DIAERESIS AND MACRON
+U+01D7 = U+00DC + U+0301.case@top              | 01D7  # Ǘ · LATIN CAPITAL LETTER U WITH DIAERESIS AND ACUTE
+U+01D8 = U+00FC + U+0301@top                   | 01D8  # ǘ · LATIN SMALL LETTER U WITH DIAERESIS AND ACUTE
+U+01D9 = U+00DC + U+030C.case@top              | 01D9  # Ǚ · LATIN CAPITAL LETTER U WITH DIAERESIS AND CARON
+U+01DA = U+00FC + U+030C@top                   | 01DA  # ǚ · LATIN SMALL LETTER U WITH DIAERESIS AND CARON
+U+01DB = U+00DC + U+0300.case@top              | 01DB  # Ǜ · LATIN CAPITAL LETTER U WITH DIAERESIS AND GRAVE
+U+01DC = U+00FC + U+0300@top                   | 01DC  # ǜ · LATIN SMALL LETTER U WITH DIAERESIS AND GRAVE
+U+01DE = U+00C4 + U+0304.case@top              | 01DE  # Ǟ · LATIN CAPITAL LETTER A WITH DIAERESIS AND MACRON
+U+01DF = U+00E4 + U+0304@top                   | 01DF  # ǟ · LATIN SMALL LETTER A WITH DIAERESIS AND MACRON
+U+01E0 = U+0226 + U+0304.case@top              | 01E0  # Ǡ · LATIN CAPITAL LETTER A WITH DOT ABOVE AND MACRON
+U+01E1 = U+0227 + U+0304@top                   | 01E1  # ǡ · LATIN SMALL LETTER A WITH DOT ABOVE AND MACRON
+U+01E2 = U+00C6 + U+0304.case@top              | 01E2  # Ǣ · LATIN CAPITAL LETTER AE WITH MACRON
+U+01E3 = U+00E6 + U+0304@top                   | 01E3  # ǣ · LATIN SMALL LETTER AE WITH MACRON
+U+01E6 = G + U+030C.case@top                   | 01E6  # Ǧ · LATIN CAPITAL LETTER G WITH CARON
+U+01E7 = g + U+030C@top                        | 01E7  # ǧ · LATIN SMALL LETTER G WITH CARON
+U+01E8 = K + U+030C.case@top                   | 01E8  # Ǩ · LATIN CAPITAL LETTER K WITH CARON
+U+01E9 = k + U+030C@top                        | 01E9  # ǩ · LATIN SMALL LETTER K WITH CARON
+U+01EA = O + U+0328.case@ogonek                | 01EA  # Ǫ · LATIN CAPITAL LETTER O WITH OGONEK
+U+01EB = o + U+0328@ogonek                     | 01EB  # ǫ · LATIN SMALL LETTER O WITH OGONEK
+U+01EC = U+01EA + U+0304.case@top              | 01EC  # Ǭ · LATIN CAPITAL LETTER O WITH OGONEK AND MACRON
+U+01ED = U+01EB + U+0304@top                   | 01ED  # ǭ · LATIN SMALL LETTER O WITH OGONEK AND MACRON
+U+01EE = U+01B7 + U+030C.case@top              | 01EE  # Ǯ · LATIN CAPITAL LETTER EZH WITH CARON
+U+01EF = U+0292 + U+030C@top                   | 01EF  # ǯ · LATIN SMALL LETTER EZH WITH CARON
+U+01F0 = j + U+030C@top                        | 01F0  # ǰ · LATIN SMALL LETTER J WITH CARON
+U+01F4 = G + U+0301.case@top                   | 01F4  # Ǵ · LATIN CAPITAL LETTER G WITH ACUTE
+U+01F5 = g + U+0301@top                        | 01F5  # ǵ · LATIN SMALL LETTER G WITH ACUTE
+U+01F8 = N + U+0300.case@top                   | 01F8  # Ǹ · LATIN CAPITAL LETTER N WITH GRAVE
+U+01F9 = n + U+0300@top                        | 01F9  # ǹ · LATIN SMALL LETTER N WITH GRAVE
+U+01FA = U+00C5 + U+0301.case@top              | 01FA  # Ǻ · LATIN CAPITAL LETTER A WITH RING ABOVE AND ACUTE
+U+01FB = U+00E5 + U+0301@top                   | 01FB  # ǻ · LATIN SMALL LETTER A WITH RING ABOVE AND ACUTE
+U+01FC = U+00C6 + U+0301.case@top              | 01FC  # Ǽ · LATIN CAPITAL LETTER AE WITH ACUTE
+U+01FD = U+00E6 + U+0301@top                   | 01FD  # ǽ · LATIN SMALL LETTER AE WITH ACUTE
+U+01FE = U+00D8 + U+0301.case@top              | 01FE  # Ǿ · LATIN CAPITAL LETTER O WITH STROKE AND ACUTE
+U+01FF = U+00F8 + U+0301@top                   | 01FF  # ǿ · LATIN SMALL LETTER O WITH STROKE AND ACUTE
+U+0200 = A + U+030F.case@top                   | 0200  # Ȁ · LATIN CAPITAL LETTER A WITH DOUBLE GRAVE
+U+0201 = a + U+030F@top                        | 0201  # ȁ · LATIN SMALL LETTER A WITH DOUBLE GRAVE
+U+0202 = A + U+0311.case@top                   | 0202  # Ȃ · LATIN CAPITAL LETTER A WITH INVERTED BREVE
+U+0203 = a + U+0311@top                        | 0203  # ȃ · LATIN SMALL LETTER A WITH INVERTED BREVE
+U+0204 = E + U+030F.case@top                   | 0204  # Ȅ · LATIN CAPITAL LETTER E WITH DOUBLE GRAVE
+U+0205 = e + U+030F@top                        | 0205  # ȅ · LATIN SMALL LETTER E WITH DOUBLE GRAVE
+U+0206 = E + U+0311.case@top                   | 0206  # Ȇ · LATIN CAPITAL LETTER E WITH INVERTED BREVE
+U+0207 = e + U+0311@top                        | 0207  # ȇ · LATIN SMALL LETTER E WITH INVERTED BREVE
+U+0208 = I + U+030F.case@top                   | 0208  # Ȉ · LATIN CAPITAL LETTER I WITH DOUBLE GRAVE
+U+0209 = i + U+030F@top                        | 0209  # ȉ · LATIN SMALL LETTER I WITH DOUBLE GRAVE
+U+020A = I + U+0311.case@top                   | 020A  # Ȋ · LATIN CAPITAL LETTER I WITH INVERTED BREVE
+U+020B = i + U+0311@top                        | 020B  # ȋ · LATIN SMALL LETTER I WITH INVERTED BREVE
+U+020C = O + U+030F.case@top                   | 020C  # Ȍ · LATIN CAPITAL LETTER O WITH DOUBLE GRAVE
+U+020D = o + U+030F@top                        | 020D  # ȍ · LATIN SMALL LETTER O WITH DOUBLE GRAVE
+U+020E = O + U+0311.case@top                   | 020E  # Ȏ · LATIN CAPITAL LETTER O WITH INVERTED BREVE
+U+020F = o + U+0311@top                        | 020F  # ȏ · LATIN SMALL LETTER O WITH INVERTED BREVE
+U+0210 = R + U+030F.case@top                   | 0210  # Ȑ · LATIN CAPITAL LETTER R WITH DOUBLE GRAVE
+U+0211 = r + U+030F@top                        | 0211  # ȑ · LATIN SMALL LETTER R WITH DOUBLE GRAVE
+U+0212 = R + U+0311.case@top                   | 0212  # Ȓ · LATIN CAPITAL LETTER R WITH INVERTED BREVE
+U+0213 = r + U+0311@top                        | 0213  # ȓ · LATIN SMALL LETTER R WITH INVERTED BREVE
+U+0214 = U + U+030F.case@top                   | 0214  # Ȕ · LATIN CAPITAL LETTER U WITH DOUBLE GRAVE
+U+0215 = u + U+030F@top                        | 0215  # ȕ · LATIN SMALL LETTER U WITH DOUBLE GRAVE
+U+0216 = U + U+0311.case@top                   | 0216  # Ȗ · LATIN CAPITAL LETTER U WITH INVERTED BREVE
+U+0217 = u + U+0311@top                        | 0217  # ȗ · LATIN SMALL LETTER U WITH INVERTED BREVE
+U+0218 = S + U+0326.case@bottom                | 0218  # Ș · LATIN CAPITAL LETTER S WITH COMMA BELOW
+U+0219 = s + U+0326@bottom                     | 0219  # ș · LATIN SMALL LETTER S WITH COMMA BELOW
+U+021A = T + U+0326.case@bottom                | 021A  # Ț · LATIN CAPITAL LETTER T WITH COMMA BELOW
+U+021B = t + U+0326@bottom                     | 021B  # ț · LATIN SMALL LETTER T WITH COMMA BELOW
+U+021E = H + U+030C.case@top                   | 021E  # Ȟ · LATIN CAPITAL LETTER H WITH CARON
+U+021F = h + U+030C@top                        | 021F  # ȟ · LATIN SMALL LETTER H WITH CARON
+U+0226 = A + U+0307.case@top                   | 0226  # Ȧ · LATIN CAPITAL LETTER A WITH DOT ABOVE
+U+0227 = a + U+0307@top                        | 0227  # ȧ · LATIN SMALL LETTER A WITH DOT ABOVE
+U+0228 = E + U+0327.case@bottom                | 0228  # Ȩ · LATIN CAPITAL LETTER E WITH CEDILLA
+U+0229 = e + U+0327@bottom                     | 0229  # ȩ · LATIN SMALL LETTER E WITH CEDILLA
+U+022A = U+00D6 + U+0304.case@top              | 022A  # Ȫ · LATIN CAPITAL LETTER O WITH DIAERESIS AND MACRON
+U+022B = U+00F6 + U+0304@top                   | 022B  # ȫ · LATIN SMALL LETTER O WITH DIAERESIS AND MACRON
+U+022C = U+00D5 + U+0304.case@top              | 022C  # Ȭ · LATIN CAPITAL LETTER O WITH TILDE AND MACRON
+U+022D = U+00F5 + U+0304@top                   | 022D  # ȭ · LATIN SMALL LETTER O WITH TILDE AND MACRON
+U+022E = O + U+0307.case@top                   | 022E  # Ȯ · LATIN CAPITAL LETTER O WITH DOT ABOVE
+U+022F = o + U+0307@top                        | 022F  # ȯ · LATIN SMALL LETTER O WITH DOT ABOVE
+U+0230 = U+022E + U+0304.case@top              | 0230  # Ȱ · LATIN CAPITAL LETTER O WITH DOT ABOVE AND MACRON
+U+0231 = U+022F + U+0304@top                   | 0231  # ȱ · LATIN SMALL LETTER O WITH DOT ABOVE AND MACRON
+U+0232 = Y + U+0304.case@top                   | 0232  # Ȳ · LATIN CAPITAL LETTER Y WITH MACRON
+U+0233 = y + U+0304@top                        | 0233  # ȳ · LATIN SMALL LETTER Y WITH MACRON

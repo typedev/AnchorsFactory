@@ -41,15 +41,25 @@ def test_default_save_is_safe(ufo_copy):
     assert _anchor_map(ufo_copy) == before          # source untouched on disk
 
 
+def _written_anchor_map(src, out):
+    """Anchors the run actually placed — glyphs the rules did not select keep
+    whatever anchors the source font already had (``apply`` leaves them alone),
+    and those are not this module's to assert on."""
+    before, after = _anchor_map(src), _anchor_map(out)
+    return {k: v for k, v in after.items() if before.get(k) != v}
+
+
 def test_round_coords_yield_integers(ufo_copy):
     out = process_ufo(ufo_copy, RULES, round_coords=True)
-    for (_, _), (x, y) in _anchor_map(out).items():
+    written = _written_anchor_map(ufo_copy, out)
+    assert written, "the preset placed nothing on the test font"
+    for (_, _), (x, y) in written.items():
         assert x == int(x) and y == int(y)
 
 
 def test_no_round_keeps_fractions(ufo_copy):
     out = process_ufo(ufo_copy, RULES, round_coords=False)
-    coords = _anchor_map(out).values()
+    coords = _written_anchor_map(ufo_copy, out).values()
     assert any(x != int(x) for x, _ in coords), "expected some fractional X from outline anchors"
 
 
