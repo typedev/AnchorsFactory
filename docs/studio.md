@@ -22,6 +22,7 @@ from a checkout:
 .venv/bin/python -m anchorsfactory.studio.server MyFont.ufo        # debug a font
 .venv/bin/python -m anchorsfactory.studio.server MyFont.ufo \
     -r my-rules.anchors                                            # open with your rules
+.venv/bin/python -m anchorsfactory.studio.server Reg.ufo Italic.ufo  # several at once, switchable
 .venv/bin/python -m anchorsfactory.studio.server                   # no font → built-in demo
 ```
 
@@ -93,6 +94,21 @@ be inherited (`!extends default`) — Studio has no access to your file paths, s
 that extends another file, open the base file in the base layer and the child
 in the custom layer: the stack gives you the same merge.
 
+### The constructions editor
+
+Anchor placement is only the first half of the pipeline; the second is assembling
+composite glyphs by snapping mark anchors to base anchors. Studio shows both. A
+separate **construction** pane holds
+[GlyphConstruction](https://github.com/typemytype/GlyphConstruction) text
+(`aacute = a + acute@top`), and the **composites** grid tab renders what it
+builds *from the anchors the rules just placed* — so you see the whole pipeline,
+not only the anchor dots. On that tab **show uncovered** lists precomposed glyphs
+in the font that the constructions don't build (a coverage gap), and assembly
+problems (a missing base, mark, or anchor) surface in the Output panel.
+**⤓ .glyphConstruction** downloads the pane's text. A preset that ships a matching
+`.glyphsConstruction` seeds this pane when opened by name; otherwise it starts
+from a small demo seed.
+
 ### Autosaving to a file
 
 By default your edits persist only in the browser's `localStorage` — which is
@@ -139,20 +155,26 @@ too, tagged `glyph·anchor`; when there is nothing to report it reads
 
 ### The glyph grid
 
-Two tabs:
+Three tabs:
 
-- **affected** — every glyph at least one rule matched, in glyph order, each
+- **anchored** — every glyph at least one rule matched, in glyph order, each
   thumbnail showing its outline, anchors, and anchor count. This is the default
-  and answers "what did my rules place".
-- **all glyphs** — every glyph in the font (affected ones keep their anchors), so
-  you can spot glyphs your rules *miss*. A **hide affected** checkbox drops the
-  ones already covered, leaving exactly the unaddressed glyphs. Thumbnails render
-  lazily (drawn as they scroll into view), so even large fonts stay responsive.
+  and answers "what did my rules place". A **show unused** checkbox additionally
+  reveals (dimmed) the glyphs no rule touched, so you can spot the ones your
+  rules *miss*.
+- **all glyphs** — every glyph in the font (anchored ones keep their anchors).
+  Thumbnails render lazily (drawn as they scroll into view), so even large fonts
+  stay responsive.
+- **composites** — the glyphs GlyphConstruction assembled from the placed anchors
+  (see [The constructions editor](#the-constructions-editor)). Here **show
+  unused** becomes **show uncovered**, adding the precomposed glyphs the
+  constructions don't build.
 
-The filter box narrows either tab by substring; the count reads `affected · N` /
-`all · N` / `unaffected · N`. Click a thumbnail to inspect it — an unaffected
-glyph shows its outline and metrics with no anchors. The active tab and checkbox
-persist in `localStorage`.
+The filter box narrows any tab by substring; the count reads `anchored · N`
+(or `anchored + unused · N`), `all · N`, `composites · N` (or
+`composites + uncovered · N`). Click a thumbnail to inspect it — a glyph no rule
+touched shows its outline and metrics with no anchors. The active tab and
+checkbox persist in `localStorage`.
 
 ### The inspector
 
@@ -172,7 +194,7 @@ The readout beside the canvas lists each anchor's exact coordinates, the
 strategy family used per axis (`x: outline · y: metric`, …), any warnings, and
 its **provenance**: `→ base L12` names the layer and line of the rule that
 placed it. Clicking the card highlights the anchor on the canvas and jumps the
-editor to that rule line. (Anchors inherited from a preset via `!extends` have
+editor to that rule line. (Anchors inherited from a base set via `!extends` have
 no editor line to jump to.) Two badges flag non-rule origins: **propagated**
 (`↳ inherited from <component>`) for an anchor a composite got via `!propagate`,
 and **↦ %ref** for a `%name` derived anchor.
@@ -186,9 +208,12 @@ Besides the command-line argument, you can load a font from the browser:
 - or click **load .ufoz** in the header to pick a `.ufoz`/`.zip` file.
 
 The files are sent to the local server, reconstructed in a temporary directory,
-and opened; the previous font (and its temp dir) is discarded. Your original
-font on disk is never touched. The header shows the loaded font's family name,
-UPM, and italic angle.
+and opened as a **new active font** — any fonts already loaded are kept, so you
+can hold a Regular and its Italic (or several masters) at once and switch between
+them. Your original font on disk is never touched. The sidebar shows a card per
+loaded font (family name, UPM, italic angle); click one to make it active, or
+remove it (which discards just that font's temp dir). The command line also
+takes more than one UFO up front — `… server Regular.ufo Italic.ufo`.
 
 ## Typical workflows
 

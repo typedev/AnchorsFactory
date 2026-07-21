@@ -11,14 +11,16 @@ intersection) and writes them into the font. It is the *pre-marking* half of a
 pipeline whose second half (composite assembly by snapping mark anchors to base
 anchors) is done by GlyphConstruction.
 
-The rewrite is complete and released to PyPI (currently **v0.4.1**); the package
+The rewrite is complete and released to PyPI (currently **v0.5.1**); the package
 is `anchorsfactory/`. The WS1 world-scripts features (`%name` derived anchors,
-`!propagate`, `compN.` frames) are **committed on `master` but unreleased** —
-they make up the pending **v0.5.0**, together with that release's boundary
-change: **the distribution is the engine + CLI + vendored GlyphConstruction
-only**. Rule sets (`examples/rules/`) and the Studio (`anchorsfactory/studio/`,
-importable from a checkout, absent from the wheel) are repository material. The
-original module script lives in `examples/legacy/` for reference only.
+`!propagate`, `compN.` frames) shipped in **v0.5.0**, together with that
+release's boundary change: **the distribution is the engine + CLI + vendored
+GlyphConstruction only**. Rule sets (`examples/rules/`) and the Studio
+(`anchorsfactory/studio/`, importable from a checkout, absent from the wheel) are
+repository material. (v0.5.1 was a same-day follow-up: 0.5.0's wheel accidentally
+shipped the Studio via a stale egg-info; the release script now clears build
+state and inspects the wheel before upload.) The original module script lives in
+`examples/legacy/` for reference only.
 
 ## Environment & commands
 
@@ -31,7 +33,7 @@ make test                           # run the test suite
 make build                          # build sdist + wheel (uv build) into dist/
 # equivalently, by hand:
 .venv/bin/python -m pytest
-.venv/bin/python -m anchorsfactory <ufo> --rules default        # run the CLI
+.venv/bin/python -m anchorsfactory <ufo> --rules-path examples/rules --rules default   # run the CLI
 .venv/bin/python -m anchorsfactory.convert <legacy.txt>         # convert old rules
 ```
 

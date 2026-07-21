@@ -227,9 +227,10 @@ anchor follows the stem instead of sitting beside it. The shift is
 - `outline.center` / `outline.center@capHeight` *at* cap-height get **no** shift
   — the sample height equals the anchor height (`S = Y`), so an `H`'s top stays
   exactly between its two slanted stems;
-- `width.*` is an upright reference (`S = 0`) — the advance box does not lean —
-  so it takes the full `tan·Y`; `box.*` projects from the **middle of the
-  bounding box**, and `outline.centroid` from its own height.
+- `width.*` and `box.*` are both upright references (`S = 0`) — the advance box
+  does not lean, and a `box.*` position is measured on the outline sheared back
+  upright (see the note below) — so both take the full `tan·Y`; `outline.centroid`
+  projects from its own height.
 
 It's automatic — nothing to write in a rule — and on an upright font the angle is
 0, so every shift is 0.

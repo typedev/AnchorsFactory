@@ -100,7 +100,8 @@ export ANCHORSFACTORY_RULES_PATH=my-rules                      # or by environme
 A name is also looked up **next to the file doing the referencing**, so a set
 can `!extends default` its neighbour with no configuration at all. In Python,
 `load_document(ref, base_dir=…, search_paths=[…])`; process-wide,
-`anchorsfactory.set_search_paths([…])`.
+`anchorsfactory.set_search_paths([…])` / `add_search_path(dir)`.
+`is_name(ref)` tells a bare name from a path without touching the disk.
 
 `resolve_ref(ref, base_dir=…, search_paths=…)` answers *which file* a reference
 loads from — the same decision `load_document` makes, and the same string that
@@ -193,9 +194,10 @@ U+00E1 = a + U+0301@top        | 00E1  # á · LATIN SMALL LETTER A WITH ACUTE
 ```
 
 That keeps a rule set portable across naming schemes, at the cost of stock
-GlyphConstruction not reading such a file — call `resolve_unicode_refs(text, font)`
-to get plain-name text back. Files with no `U+` token are untouched, so
-name-based constructions keep working unchanged.
+GlyphConstruction not reading such a file — call
+`anchorsfactory.composites.resolve_unicode_refs(text, font)` to get plain-name
+text back. Files with no `U+` token are untouched, so name-based constructions
+keep working unchanged.
 
 ### Compute without mutating (preview)
 
