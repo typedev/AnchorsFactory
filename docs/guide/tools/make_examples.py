@@ -375,13 +375,14 @@ def build_svg(font: FontData, glyph_name: str, anchors: list[Anchor],
 # ---------------------------------------------------------------------------
 # rules mode: run the real engine on an in-memory font
 
-def anchors_from_rules(font: FontData, glyph_name: str, rules: str) -> list[Anchor]:
+def anchors_from_rules(font: FontData, glyph_name: str, rules: str,
+                       rules_path=None) -> list[Anchor]:
     if font._ufo is None:
         raise SystemExit("rules mode needs a UFO font (fontParts)")
     from anchorsfactory.apply import apply_document
     from anchorsfactory.runner import load_document
 
-    doc = load_document(rules)
+    doc = load_document(rules, search_paths=rules_path)
     # Mutates the in-memory font only; we never call font.save().
     apply_document(font._ufo, doc, names=[glyph_name])
     glyph = font._ufo[glyph_name]
@@ -389,7 +390,7 @@ def anchors_from_rules(font: FontData, glyph_name: str, rules: str) -> list[Anch
 
 
 def rule_caption(rules: str, max_lines: int = 8) -> list[str]:
-    if not os.path.exists(rules):        # bundled preset name
+    if not os.path.exists(rules):        # a set name resolved on the search path
         return [f"!rules {rules}"]
     lines = []
     with open(rules, encoding="utf-8") as f:
@@ -437,7 +438,11 @@ def main(argv=None):
     p_rules = sub.add_parser("rules", parents=[common],
                              help="run anchorsfactory on the font and render the result")
     p_rules.add_argument("--rules", required=True,
-                         help=".anchors rules file (or bundled preset name)")
+                         help=".anchors rules file, or a set name resolved on "
+                              "--rules-path (no sets ship with the package)")
+    p_rules.add_argument("--rules-path", action="append", default=None, metavar="DIR",
+                         help="directory to resolve a bare --rules name in "
+                              "(repeatable; e.g. examples/rules)")
     p_rules.add_argument("--caption", action="append", default=None,
                          help="override the rule-text caption; repeatable")
     p_rules.add_argument("--no-caption", action="store_true")
@@ -449,7 +454,7 @@ def main(argv=None):
         anchors = args.anchor
         caption = args.caption
     else:
-        anchors = anchors_from_rules(font, args.glyph, args.rules)
+        anchors = anchors_from_rules(font, args.glyph, args.rules, args.rules_path)
         if not anchors:
             print(f"warning: rules produced no anchors for {args.glyph}", file=sys.stderr)
         caption = [] if args.no_caption else (args.caption or rule_caption(args.rules))
