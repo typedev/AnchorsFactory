@@ -11,6 +11,8 @@ changed" without inferring it from a version number.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-11
+
 ### Added
 
 - **`anchorsfactory.speedups.enable()`**, an opt-in fix for fontParts' default
