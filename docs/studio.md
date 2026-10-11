@@ -78,33 +78,36 @@ Everything recomputes live: edits are debounced (~300 ms), sent to the server,
 and the grid, canvas, and readout update in place — anchors glide to their new
 positions so you can see what a change moved.
 
-### Rule layers: base + custom
+### Rule layers
 
-Rules live in a two-layer stack, both visible and both editable:
-
-- **base** — starts as a copy of a rule set from the search path (a dropdown
-  switches which one; switching replaces the layer's text). It is a working
-  copy: edit it freely, the file on disk is untouched.
-- **custom** — an optional layer *on top*. Effective rules are base first,
-  custom after, under the normal accumulation model — so custom **overrides**
-  (`=` replaces, `+=` adds, `-=` removes against whatever base built up).
-
-The custom layer is closed by default: click **+ custom** to open it, **✕** to
-close it and work with the base alone. Closing it is an instant "base only"
-view — toggle it to compare the base set's placement with your overrides.
+Anchor rules live in a stack of **layers**, one tab each, all editable. The
+bottom tab, **default**, starts as a copy of a rule set from the search path
+(the dropdown switches which one and replaces its text). Every other tab is a
+layer *on top*: effective rules are the tabs bottom → top under the normal
+accumulation model, so a later tab **overrides** (`=` replaces, `+=` adds, `-=`
+removes against whatever the tabs below built up). The active tab is only what
+you edit; **×** closes a layer.
 
 Getting rules in and out:
 
-- **open** loads a `.anchors` file into the custom layer; so does dropping a single
-  `.anchors` (or legacy `.af`/`.dsl`/`.txt`) file anywhere on the page.
-- **⤓ .anchors** on either layer downloads that layer's text as a file.
-- `-r/--rules` on the command line seeds the base layer on first visit.
+- **Opening a project folder** (see "Loading a font") also loads every
+  `.anchors` and `.glyphsConstruction` file at the folder's top, each as a tab
+  on top of the current ones (a file already open is refreshed, not doubled).
+  `.anchors` files that `!extends` another one come after it.
+- **+ file** opens more rule files; dropping a single `.anchors` (or legacy
+  `.af`/`.dsl`/`.txt`) or `.glyphsConstruction` file anywhere does the same.
+- **save** (or **Ctrl+S**) writes the active tab back to the file it came
+  from; a tab opened without one (or after a reload) asks where to save it. In
+  Chrome and Edge the first save in a folder asks to allow editing; in other
+  browsers save downloads the file. A tab with unsaved changes shows **●**.
+- **⤓ .anchors** downloads the active tab's text.
+- `-r/--rules` on the command line seeds the default layer on first visit.
 
-`!extends` works inside a layer, but only **set names on the search path** can
-be inherited (`!extends default`) — Studio has no access to your file paths, so
-`!extends ./other.anchors` is rejected with a clear error. To debug a rules file
-that extends another file, open the base file in the base layer and the child
-in the custom layer: the stack gives you the same merge.
+`!extends` inherits a **set name**: an `.anchors` file opened from the project
+folder (by its name, as currently edited, e.g. `!extends base` for
+`base.anchors`) or a set on the search path (`!extends default`). A file never
+inherits itself, so `default.anchors` with `!extends default` gets the sample
+set. Paths (`!extends ./other.anchors`) are rejected with a clear error.
 
 ### The constructions editor
 
@@ -117,9 +120,13 @@ builds *from the anchors the rules just placed* — so you see the whole pipelin
 not only the anchor dots. On that tab **show uncovered** lists precomposed glyphs
 in the font that the constructions don't build (a coverage gap), and assembly
 problems (a missing base, mark, or anchor) surface in the Output panel.
-**⤓ .glyphConstruction** downloads the pane's text. A preset that ships a matching
-`.glyphsConstruction` seeds this pane when opened by name; otherwise it starts
-from a small demo seed.
+
+The pane has tabs like the anchor layers: the engine reads them concatenated in
+tab order (a later definition of a glyph wins), and errors, dimmed `!if` lines
+and "→ construction L…" jumps land in the right tab. **save** /
+**⤓ .glyphsConstruction** work on the active tab. A preset that ships a
+matching `.glyphsConstruction` seeds the first tab when opened by name;
+otherwise it starts from a small demo seed.
 
 ### Autosaving to a file
 

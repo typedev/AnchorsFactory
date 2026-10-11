@@ -78,6 +78,9 @@ main{display:grid;grid-template-columns:var(--edw,380px) 6px minmax(0,1fr) 6px v
 .ltab:hover{color:var(--text)}
 .ltab.sel{color:var(--ink);background:var(--canvas);border-color:var(--line)}
 .ltab.add{border-style:dashed}
+.ltab.dirty::before{content:"●";color:var(--stem);margin-right:5px;font-size:9px;vertical-align:1px}
+.lclose{margin-left:6px;color:var(--muted);opacity:.6;padding:0 2px;border-radius:3px}
+.lclose:hover{opacity:1;color:var(--err);background:var(--panel2)}
 .pane-body{flex:1;min-height:0;position:relative;border-top:1px solid var(--line)}
 .lhost{position:absolute;inset:0;display:none}
 .lhost.active{display:block}

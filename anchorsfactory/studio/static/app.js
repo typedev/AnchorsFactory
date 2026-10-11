@@ -12,7 +12,9 @@ let COMPOSITES = {};                   // name -> GlyphConstruction-assembled co
 let UNCOVERED = [];                    // precomposed glyph names the constructions don't build (composites "show uncovered")
 let anchorLayers = [];                 // [{name, host, ed}] bottom→top; [0] is the "default" layer
 let activeLayer = 0;                   // which anchor layer the tab strip is editing
-let gcEd = null, activeEd = null;
+let gcLayers = [], activeGc = 0;        // construction tabs (concatenated for the engine)
+let activeEd = null;
+let projectDir = null;                 // the opened folder's handle (Chromium), for Save as
 let RENDER_MODE = "fill";              // inspector outline style: "fill" | "outline" (grid is always filled)
 let ZOOM = 1;                          // inspector preview zoom (grid thumbnails ignore it)
 const lastPos = {};                          // glyph -> {anchor -> {x,y}} for tweening
@@ -24,7 +26,15 @@ const escapeHtml = s => String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;"
 const debounce = (fn, ms) => { let t; return (...a)=>{clearTimeout(t); t=setTimeout(()=>fn(...a), ms);}; };
 const allRulesText = () => anchorLayers.map(l => l.ed.getValue()).join("\n");
 // layer index -1 is the constructions editor (problems prefixed "constructions:")
-const editorForLayer = i => (i === -1 ? gcEd : anchorLayers[i] ? anchorLayers[i].ed : null);
+const editorForLayer = i => (i === -1 ? (gcLayers[activeGc] || {}).ed : anchorLayers[i] ? anchorLayers[i].ed : null);
+// the anchor layers as compute sends them (a file's name makes it an !extends target)
+const sentLayers = () => anchorLayers.map(l => ({name: l.name, text: l.ed.getValue(), ...(l.file ? {file: l.file.name} : {})}));
+// jump to a problem / rule line: layer -1 is the constructions (a line of the concatenated text)
+function gotoLoc(layer, line){
+  if(layer === -1) return gcGoto(line);
+  const ed = editorForLayer(layer); if(!ed) return;
+  setActiveLayer(layer); activeEd = ed; ed.gotoLine(line);
+}
 
 async function boot(){
   const status = $("#status");
@@ -62,63 +72,229 @@ function setFontMeta(){
 }
 
 /* ===================================================================== *
- *  Anchor rules: tabbed *layers* that merge bottom→top ([0] = "default").
+ *  Rules: tabbed *layers*. Anchors merge bottom→top ([0] = "default");
+ *  constructions are concatenated in tab order (later definitions win).
  *  The active tab is only which layer you edit; compute always sends them all.
+ *  A layer opened from a file (the project folder, a picker, a drop) keeps
+ *  `file = {name, handle, saved}`: Save writes back to it, and an .anchors
+ *  file's name is a set `!extends` can inherit.
  * ===================================================================== */
 const persist = debounce(() => {
   try {
     localStorage.setItem("af.rules", JSON.stringify({
       preset: $("#preset").value,
-      layers: anchorLayers.map(l => ({name: l.name, text: l.ed.getValue()})),
+      layers: anchorLayers.map(l => ({name: l.name, text: l.ed.getValue(), file: l.file ? l.file.name : null})),
       active: activeLayer,
     }));
   } catch(_){}
 }, 400);
 
 const persistGC = debounce(() => {
-  try { localStorage.setItem("af.gc", gcEd.getValue()); } catch(_){}
+  try {
+    localStorage.setItem("af.gc", JSON.stringify({
+      layers: gcLayers.map(l => ({name: l.name, text: l.ed.getValue(), file: l.file ? l.file.name : null})),
+      active: activeGc,
+    }));
+  } catch(_){}
 }, 400);
 
-function renderAnchorTabs(){
-  const strip = $("#anchorTabs"); strip.innerHTML = "";
-  anchorLayers.forEach((l, idx) => {
+const STACKS = {
+  anchors: {ext: ".anchors", strip: "#anchorTabs", hosts: "#anchorEditors",
+            layers: () => anchorLayers, active: () => activeLayer, persist: () => persist()},
+  gc:      {ext: ".glyphsConstruction", strip: "#gcTabs", hosts: "#edGC",
+            layers: () => gcLayers, active: () => activeGc, persist: () => persistGC()},
+};
+const isDirty = l => !!(l.file && l.file.saved != null && l.ed.getValue() !== l.file.saved);
+
+function renderTabs(kind){
+  const st = STACKS[kind], layers = st.layers(), strip = $(st.strip); strip.innerHTML = "";
+  layers.forEach((l, idx) => {
     const b = document.createElement("button");
-    b.className = "ltab" + (idx === activeLayer ? " sel" : "");
+    b.className = "ltab" + (idx === st.active() ? " sel" : "") + (isDirty(l) ? " dirty" : "");
     b.textContent = l.name;
-    b.title = idx === 0 ? "default layer (bottom of the merge)" : `layer: ${l.name}`;
-    b.addEventListener("click", () => setActiveLayer(idx));
+    b.title = (kind === "anchors" && idx === 0 ? "default layer (bottom of the merge)" : `layer: ${l.name}`) +
+      (l.file ? `\nfile: ${l.file.name}${l.file.handle ? "" : " (not linked: Save asks where)"}` : "");
+    b.addEventListener("click", () => setActive(kind, idx));
+    const closable = kind === "anchors" ? idx > 0 : layers.length > 1;
+    if(closable){
+      const x = document.createElement("span"); x.className = "lclose"; x.textContent = "×"; x.title = "close this layer";
+      x.addEventListener("click", e => { e.stopPropagation(); closeLayer(kind, idx); });
+      b.appendChild(x);
+    }
     strip.appendChild(b);
   });
   const add = document.createElement("button");
   add.className = "ltab add"; add.textContent = "+ file";
-  add.title = "load another .anchors file as a layer on top";
-  add.addEventListener("click", () => $("#rulesfile").click());
+  add.title = `open another ${st.ext} file as a layer on top`;
+  add.addEventListener("click", () => openRulesFile(kind));
   strip.appendChild(add);
 }
+const renderAnchorTabs = () => renderTabs("anchors");
 
-function setActiveLayer(i){
-  activeLayer = Math.max(0, Math.min(anchorLayers.length - 1, i));
-  anchorLayers.forEach((l, idx) => l.host.classList.toggle("active", idx === activeLayer));
-  activeEd = anchorLayers[activeLayer].ed;
-  renderAnchorTabs();
+function setActive(kind, i){
+  const layers = STACKS[kind].layers();
+  i = Math.max(0, Math.min(layers.length - 1, i));
+  if(kind === "anchors") activeLayer = i; else activeGc = i;
+  layers.forEach((l, idx) => l.host.classList.toggle("active", idx === i));
+  activeEd = layers[i].ed;
+  renderTabs(kind);
 }
+const setActiveLayer = i => setActive("anchors", i);
 
-function addAnchorLayer(name, text, {activate = false} = {}){
+function addLayer(kind, name, text, {activate = false, file = null} = {}){
+  const st = STACKS[kind], layers = st.layers();
   const host = document.createElement("div");
   host.className = "lhost";
-  $("#anchorEditors").appendChild(host);
-  const ed = makeEditor(host, () => { persist(); scheduleCompute(); }, () => { activeEd = ed; });
+  $(st.hosts).appendChild(host);
+  const onChange = () => { st.persist(); scheduleCompute(); syncDirty(kind); };
+  const ed = kind === "anchors"
+    ? makeEditor(host, onChange, () => { activeEd = ed; })
+    : makeEditor(host, onChange, () => { activeEd = ed; }, highlightGC, GC_COMPLETE);
   ed.setValue(text || "");
-  const idx = anchorLayers.push({name, host, ed}) - 1;
-  if(activate) setActiveLayer(idx); else renderAnchorTabs();
+  const idx = layers.push({name, host, ed, file}) - 1;
+  if(activate) setActive(kind, idx); else renderTabs(kind);
   return idx;
+}
+const addAnchorLayer = (name, text, opts) => addLayer("anchors", name, text, opts);
+
+// the dirty dot only flips on the first edit after a save, so re-render then
+const syncDirty = debounce(kind => {
+  const strip = $(STACKS[kind].strip);
+  STACKS[kind].layers().forEach((l, idx) => { const b = strip.children[idx]; if(b) b.classList.toggle("dirty", isDirty(l)); });
+}, 150);
+
+function closeLayer(kind, idx){
+  const st = STACKS[kind], layers = st.layers(), l = layers[idx];
+  if(isDirty(l) && !confirm(`${l.name} has unsaved changes. Close it anyway?`)) return;
+  l.host.remove(); layers.splice(idx, 1);
+  const active = st.active();
+  setActive(kind, active > idx ? active - 1 : Math.min(active, layers.length - 1));
+  st.persist(); SELECTED = null; HL_ANCHOR = null; compute();
+}
+
+/** Add a rules file as a layer, or refresh the layer already opened from it. */
+function addRulesLayer(kind, name, text, file, {activate = true} = {}){
+  const st = STACKS[kind], layers = st.layers();
+  const stem = name.replace(/\.(anchors|af|dsl|txt|glyphsConstruction|glyphConstruction)$/i, "");
+  const same = layers.findIndex(l => l.file && l.file.name === name);
+  file = file ? {...file, name, saved: text} : null;
+  if(same >= 0){ layers[same].ed.setValue(text); layers[same].file = file; if(activate) setActive(kind, same); else renderTabs(kind); }
+  else addLayer(kind, stem, text, {activate, file});
+  st.persist();
+}
+
+const GC_FILE = /\.glyphs?Construction$/i;
+const kindOf = name => GC_FILE.test(name) ? "gc" : RULES_FILE.test(name) ? "anchors" : null;
+
+/** "+ file": a file picker that links the file (Chromium), else an <input>. */
+async function openRulesFile(kind){
+  if(!window.showOpenFilePicker){ $("#rulesfile").dataset.kind = kind; $("#rulesfile").click(); return; }
+  let handles;
+  try { handles = await showOpenFilePicker({id: "rules", multiple: true, types: [{description: "rules",
+    accept: {"text/plain": kind === "gc" ? [".glyphsConstruction", ".glyphConstruction", ".txt"] : [".anchors", ".af", ".dsl", ".txt"]}}]}); }
+  catch(_){ return; }
+  for(const h of handles){
+    const text = await (await h.getFile()).text();
+    addRulesLayer(kindOf(h.name) || kind, h.name, text, {handle: h});
+  }
+  SELECTED = null; HL_ANCHOR = null; compute();
+}
+
+/** Save a layer back to its file; with no linked file, ask where (or download). */
+async function saveLayer(kind){
+  const st = STACKS[kind], l = st.layers()[st.active()]; if(!l) return;
+  const text = l.ed.getValue(), status = $("#status");
+  let handle = l.file && l.file.handle;
+  try {
+    if(handle && (await handle.queryPermission({mode: "readwrite"})) !== "granted"
+       && (await handle.requestPermission({mode: "readwrite"})) !== "granted") handle = null;
+    if(!handle){
+      if(!window.showSaveFilePicker){ downloadText(text, (l.file ? l.file.name : l.name + st.ext)); return; }
+      try {
+        handle = await showSaveFilePicker({id: "rules", suggestedName: l.file ? l.file.name : l.name + st.ext,
+          ...(projectDir ? {startIn: projectDir} : {}),
+          types: [{description: "rules", accept: {"text/plain": [st.ext]}}]});
+      } catch(_){ return; }                          // the picker was dismissed
+    }
+    const w = await handle.createWritable(); await w.write(text); await w.close();
+    l.file = {name: handle.name, handle, saved: text};
+    if(kind === "anchors" && handle.name.toLowerCase().endsWith(".anchors")) l.name = handle.name.replace(/\.anchors$/i, "");
+    renderTabs(kind); st.persist();
+    status.className = "pill ok"; status.textContent = `saved ${handle.name}`;
+    if(kind === "anchors") compute();                // the file name may now be an !extends target
+  } catch(err){
+    status.className = "pill bad"; status.textContent = "save failed";
+    $("#problems").innerHTML = `<div class="row err"><span class="tag">save</span><span>${escapeHtml(String(err.message || err))}</span></div>`;
+  }
+}
+
+function activeKind(){ return gcLayers.some(l => l.ed === activeEd) ? "gc" : "anchors"; }
+
+/* -- constructions: one text for the engine, lines mapped back to tabs ---- */
+
+function gcCombined(){
+  const starts = []; let line = 1;
+  const text = gcLayers.map(l => { const t = l.ed.getValue(); starts.push(line); line += t.split("\n").length; return t; }).join("\n");
+  return {text, starts};
+}
+function gcLocate(line){
+  const {starts} = gcCombined();
+  let i = starts.length - 1; while(i > 0 && starts[i] > line) i--;
+  return {idx: i, line: line - starts[i] + 1};
+}
+function gcGoto(line){
+  const {idx, line: local} = gcLocate(line);
+  setActive("gc", idx); activeEd = gcLayers[idx].ed; gcLayers[idx].ed.gotoLine(local);
+}
+function gcSplitLines(lines){
+  const {starts} = gcCombined(), sets = gcLayers.map(() => new Set());
+  for(const n of lines){ let i = starts.length - 1; while(i > 0 && starts[i] > n) i--; sets[i].add(n - starts[i] + 1); }
+  return sets;
+}
+
+/** The project folder's rules: every .anchors / .glyphsConstruction at its top. */
+async function loadProjectRules(nodes, dir){
+  projectDir = dir || null;
+  const files = [];
+  for(const n of nodes){
+    const kind = kindOf(n.name); if(!kind || kind === "anchors" && !/\.anchors$/i.test(n.name)) continue;
+    try { files.push({kind, name: n.name, text: await (await readRetrying(n.file, n.name)).text()}); }
+    catch(err){ /* an unreadable rules file is skipped, the font still opens */ }
+  }
+  if(!files.length) return [];
+  // anchors: bases before the files that `!extends` them, else by name
+  const anchors = files.filter(f => f.kind === "anchors").sort((a, b) => a.name.localeCompare(b.name));
+  const stem = f => f.name.replace(/\.anchors$/i, "");
+  const order = [], seen = new Set();
+  const visit = (f, path = new Set()) => {
+    if(seen.has(f) || path.has(f)) return; path.add(f);
+    for(const m of f.text.matchAll(/^\s*!extends\s+(.+)$/gm))
+      for(const ref of m[1].split(/[\s,]+/)){ const base = anchors.find(g => stem(g) === ref && g !== f); if(base) visit(base, path); }
+    seen.add(f); order.push(f);
+  };
+  anchors.forEach(f => visit(f));
+  const gcs = files.filter(f => f.kind === "gc").sort((a, b) => a.name.localeCompare(b.name));
+  for(const f of [...order, ...gcs]){
+    const handle = dir ? await dir.getFileHandle(f.name).catch(() => null) : null;
+    addRulesLayer(f.kind, f.name, f.text, {handle}, {activate: false});
+  }
+  if(order.length) setActive("anchors", anchorLayers.findIndex(l => l.file && l.file.name === order[order.length - 1].name));
+  if(gcs.length) setActive("gc", gcLayers.findIndex(l => l.file && l.file.name === gcs[gcs.length - 1].name));
+  return files.map(f => f.name);
 }
 
 function setupEditors(){
-  // Construction (GlyphConstruction) editor — single, no tabs.
-  gcEd = makeEditor($("#edGC"), () => { persistGC(); scheduleCompute(); }, () => activeEd = gcEd, highlightGC, GC_COMPLETE);
+  // Constructions (GlyphConstruction): tabs, concatenated for the engine.
   let savedGC = null; try { savedGC = localStorage.getItem("af.gc"); } catch(_){}
-  gcEd.setValue(savedGC != null ? savedGC : (META.gc || ""));
+  let gcState = null; try { gcState = JSON.parse(savedGC); } catch(_){ gcState = null; }
+  if(gcState && Array.isArray(gcState.layers) && gcState.layers.length){
+    gcState.layers.forEach(l => addLayer("gc", l.name || "constructions", l.text || "",
+                                         {file: l.file ? {name: l.file, handle: null, saved: null} : null}));
+    setActive("gc", Number.isInteger(gcState.active) ? gcState.active : 0);
+  } else {                                           // older sessions kept one plain text
+    addLayer("gc", "constructions", typeof savedGC === "string" && !gcState ? savedGC : (META.gc || ""));
+    setActive("gc", 0);
+  }
 
   // Anchor layers — restore the saved stack, or seed one "default" layer from the preset.
   let saved = null; try { saved = JSON.parse(localStorage.getItem("af.rules") || "null"); } catch(_){}
@@ -127,7 +303,8 @@ function setupEditors(){
     saved.layers.forEach((l, idx) => addAnchorLayer(
       l.name || (idx === 0 ? "default" : `layer ${idx}`),
       // with --save on, the default (bottom) layer is authoritative from disk
-      (idx === 0 && META.save) ? META.rules : (l.text || "")));
+      (idx === 0 && META.save) ? META.rules : (l.text || ""),
+      {file: l.file ? {name: l.file, handle: null, saved: null} : null}));
     setActiveLayer(Number.isInteger(saved.active) ? saved.active : 0);
   } else {
     $("#preset").value = presetOf(META.rules) || META.presets[0] || "";
@@ -146,20 +323,24 @@ function setupEditors(){
     btn.addEventListener("click", () => {
       const a = btn.dataset.a;
       if(a === "find"){ activeEd = anchorLayers[activeLayer].ed; openFind(); }
-      else if(a === "find-gc"){ activeEd = gcEd; openFind(); }
-      else if(a === "dl-anchor"){ const l = anchorLayers[activeLayer]; downloadText(l.ed.getValue(), (l.name || "anchors") + ".anchors"); }
-      else if(a === "dl-gc") downloadText(gcEd.getValue(), "constructions.glyphConstruction");
+      else if(a === "find-gc"){ activeEd = gcLayers[activeGc].ed; openFind(); }
+      else if(a === "save-anchor") saveLayer("anchors");
+      else if(a === "save-gc") saveLayer("gc");
+      else if(a === "dl-anchor"){ const l = anchorLayers[activeLayer]; downloadText(l.ed.getValue(), l.file ? l.file.name : (l.name || "anchors") + ".anchors"); }
+      else if(a === "dl-gc"){ const l = gcLayers[activeGc]; downloadText(l.ed.getValue(), l.file ? l.file.name : (l.name || "constructions") + ".glyphsConstruction"); }
     });
   });
+  // Ctrl/Cmd+S saves the layer being edited.
+  addEventListener("keydown", e => {
+    if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s"){ e.preventDefault(); saveLayer(activeKind()); }
+  });
 
-  // + file / open → append a .anchors file as a new layer on top.
+  // "+ file" without a file picker API: an <input>, not linked (Save asks where).
   $("#rulesfile").addEventListener("change", async e => {
-    const f = e.target.files[0];
-    if(f){
-      addAnchorLayer(f.name.replace(/\.(anchors|af|dsl|txt)$/i, ""), await f.text(), {activate: true});
-      persist(); SELECTED = null; HL_ANCHOR = null; compute();
-    }
+    const kind = e.target.dataset.kind || "anchors";
+    for(const f of [...e.target.files]) addRulesLayer(kindOf(f.name) || kind, f.name, await f.text(), {handle: null});
     e.target.value = "";
+    SELECTED = null; HL_ANCHOR = null; compute();
   });
 }
 
@@ -618,7 +799,10 @@ function setupFontDrop(){
     // the DataTransfer empties after the event: take the entries now
     const entries = [...e.dataTransfer.items].filter(i => i.kind === "file")
       .map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
-    if(entries.length) guarded(openEntries(entries));
+    // Chromium: a writable handle for the same item, also only during the event
+    const item = [...e.dataTransfer.items].find(i => i.kind === "file");
+    const handle = item && item.getAsFileSystemHandle ? item.getAsFileSystemHandle().catch(() => null) : Promise.resolve(null);
+    if(entries.length) guarded(openEntries(entries, handle));
   });
   $("#loadfont").addEventListener("click", () => $("#fontfile").click());
   $("#addfont").addEventListener("click", () => $("#fontfile").click());
@@ -650,18 +834,20 @@ async function pickFolder(){
   let dir;
   try { dir = await showDirectoryPicker({id: "font", mode: "read"}); }
   catch(err){ return; }                              // the picker was dismissed
-  await guarded(openFolder(handleFolder(dir)));
+  await guarded(openFolder(handleFolder(dir), dir));
 }
 
-async function openEntries(entries){
+async function openEntries(entries, handlePromise){
   if(entries.length > 1) throw new Error("Drop one font at a time.");
   const entry = entries[0];
-  if(entry.isDirectory) return openFolder(entryFolder(entry));
+  if(entry.isDirectory) return openFolder(entryFolder(entry), handlePromise);
   const file = await readRetrying(() => new Promise((res, rej) => entry.file(res, rej)), entry.name);
-  if(RULES_FILE.test(entry.name)){                   // a rules file → a new anchor layer
+  const kind = kindOf(entry.name);
+  if(kind){                                          // a rules file → a new layer, linked for Save
     await bootDone;                                  // (on the start screen: ready for the font)
-    addAnchorLayer(entry.name.replace(RULES_FILE, ""), await file.text(), {activate: true});
-    persist(); SELECTED = null; HL_ANCHOR = null; compute(); return;
+    const handle = await handlePromise;
+    addRulesLayer(kind, entry.name, await file.text(), {handle: handle && handle.kind === "file" ? handle : null});
+    SELECTED = null; HL_ANCHOR = null; compute(); return;
   }
   if(!/\.(ufoz|zip)$/i.test(entry.name)) throw unsupported(entry.name);
   return sendFont(entry.name, [{path: entry.name, file}]);
@@ -761,18 +947,20 @@ function normalizeRelative(path){
  * it references (projects hold builds, proofs and other masters too). A source
  * outside the folder or missing from it is left for Python to report.
  */
-async function openFolder(folder){
+async function openFolder(folder, dirPromise = null){
   progress("Listing the files", 0, 0);
   if(/\.ufo$/i.test(folder.name))
     return sendFont(folder.name, await readPending(await collect(folder, folder.name, [])));
   const top = await listRetrying(folder, folder.name);
+  // the rules next to the font: loaded once it opens, linked for Save
+  const project = {rules: top.filter(n => n.kind === "file" && kindOf(n.name)), dir: dirPromise};
   const found = top.filter(n => n.kind === "file" && /\.designspace$/i.test(n.name))
                    .sort((a, b) => a.name.localeCompare(b.name));
   if(!found.length){
     const ufo = top.filter(n => n.kind === "directory" && /\.ufo$/i.test(n.name))
                    .sort((a, b) => a.name.localeCompare(b.name))[0];
     if(!ufo) throw new Error(`${folder.name}: no .designspace or .ufo at the top of this folder.`);
-    return sendFont(ufo.name, await readPending(await collect(ufo.folder, `${folder.name}/${ufo.name}`, [])));
+    return sendFont(ufo.name, await readPending(await collect(ufo.folder, `${folder.name}/${ufo.name}`, [])), project);
   }
   let chosen = found[0];
   if(found.length > 1){
@@ -792,7 +980,7 @@ async function openFolder(folder){
     if(ufo) await collect(ufo, `${folder.name}/${rel}`, pending);
   }
   const files = [{path: `${folder.name}/${chosen.name}`, file: ds}, ...await readPending(pending)];
-  return sendFont(folder.name, files);
+  return sendFont(folder.name, files, project);
 }
 
 // Which designspace of a dropped folder to open: resolves to its path, or null.
@@ -867,7 +1055,7 @@ function fontError(err){
   $("#problems").innerHTML = `<div class="row err"><span class="tag">font</span><span>${escapeHtml(text)}</span></div>`;
 }
 
-async function sendFont(name, collected){
+async function sendFont(name, collected, project = null){
   progress("Opening the font", 0, 0);
   await bootDone;
   const status = $("#status");
@@ -897,6 +1085,15 @@ async function sendFont(name, collected){
     box.hidden = false;
     box.innerHTML = `<div class="m-row muted">${escapeHtml(j.designspace)}: ${j.masters} master${j.masters === 1 ? "" : "s"}</div>` +
       (j.problems || []).map(m => `<div class="m-row warn">${escapeHtml(m)}</div>`).join("");
+  }
+  if(project){
+    if(!j.designspace) box.innerHTML = "";
+    const dir = await Promise.resolve(project.dir).catch(() => null);
+    const names = await loadProjectRules(project.rules, dir && dir.kind === "directory" ? dir : null);
+    if(names.length){
+      box.hidden = false;
+      box.insertAdjacentHTML("beforeend", `<div class="m-row muted">rules: ${escapeHtml([...names].sort().join(", "))}</div>`);
+    }
   }
   SELECTED = null; HL_ANCHOR = null; GLYPHS = {};    // the new font becomes active
   ALLGLYPHS = null; ALLMAP = {};                     // …its all-glyphs geometry is fresh
@@ -956,9 +1153,9 @@ async function setFontContext(i, card){
 async function compareMasters(){
   const box = $("#masters"); box.hidden = false;
   box.innerHTML = `<div class="m-row muted">comparing…</div>`;
-  const layers = anchorLayers.map(l => ({name: l.name, text: l.ed.getValue()}));
+  const layers = sentLayers();
   let j; try {
-    j = await studioApi.call("masters", {layers, gc: gcEd ? gcEd.getValue() : ""});
+    j = await studioApi.call("masters", {layers, gc: gcCombined().text});
   } catch(e){ j = {ok:false, errors:[String(e)], warnings:[]}; }
   const rows = [
     ...(j.errors || []).map(m => `<div class="m-row err">${escapeHtml(m)}</div>`),
@@ -998,8 +1195,8 @@ function downloadText(text, filename){
  * ===================================================================== */
 async function compute(){
   const status = $("#status"); status.className = "pill"; status.textContent = "computing…";
-  const layers = anchorLayers.map(l => ({name: l.name, text: l.ed.getValue()}));
-  const gc = gcEd ? gcEd.getValue() : "";
+  const layers = sentLayers();
+  const gc = gcCombined().text;
   try {
     VIEW = await studioApi.call("compute", {layers, gc});
   } catch(err) {                                    // server 500 / dropped connection / Python error
@@ -1054,14 +1251,14 @@ function markErrorLines(){
     if(loc.layer === -1) gcSet.add(loc.line); else if(sets[loc.layer]) sets[loc.layer].add(loc.line);
   }
   anchorLayers.forEach((l, idx) => l.ed.markErrors(sets[idx]));
-  if(gcEd) gcEd.markErrors(gcSet);
+  gcSplitLines(gcSet).forEach((set, i) => gcLayers[i].ed.markErrors(set));
 }
 
 // dim what the `!if` blocks drop for the active master (sent on every compute)
 function markInactiveLines(){
   const inactive = VIEW.inactive || {};
   anchorLayers.forEach((l, idx) => l.ed.markInactive(new Set(inactive[idx] || [])));
-  if(gcEd) gcEd.markInactive(new Set(VIEW.gcInactive || []));
+  gcSplitLines(VIEW.gcInactive || []).forEach((set, i) => gcLayers[i].ed.markInactive(set));
 }
 
 function renderProblems(){
@@ -1083,7 +1280,7 @@ function renderProblems(){
   function row(cls, tag, msg, loc){
     const r=document.createElement("div"); r.className="row "+cls+(loc?" clickable":"");
     r.innerHTML=`<span class="tag">${tag}</span><span>${escapeHtml(msg)}</span>`;
-    if(loc) r.addEventListener("click", ()=>{ activeEd = editorForLayer(loc.layer); editorForLayer(loc.layer).gotoLine(loc.line); });
+    if(loc) r.addEventListener("click", () => gotoLoc(loc.layer, loc.line));
     box.appendChild(r);
   }
 }
@@ -1175,7 +1372,7 @@ function renderGrid(){
     card.addEventListener("click", ()=>{
       SELECTED=g.name; HL_ANCHOR=null; renderGrid(); renderInspector();
       // composites: clicking the cell also jumps the Construction editor to the rule
-      if(GRID_TAB==="composites" && g.line!=null && gcEd){ activeEd=gcEd; gcEd.gotoLine(g.line); }
+      if(GRID_TAB==="composites" && g.line!=null) gcGoto(g.line);
     });
     grid.appendChild(card);
     obs.observe(card);
@@ -1403,7 +1600,7 @@ function renderCompositeInspector(canvas, read){
     `<div class="comp-row">↦ <span class="j">${escapeHtml(j.anchor)}</span> at ${Math.round(j.x)}, ${Math.round(j.y)}</div>`).join("");
   read.innerHTML = html;
   const jump = read.querySelector(".rule[data-gcline]");
-  if(jump && gcEd) jump.addEventListener("click", ()=>{ activeEd = gcEd; gcEd.gotoLine(+jump.dataset.gcline); });
+  if(jump) jump.addEventListener("click", () => gcGoto(+jump.dataset.gcline));
 }
 
 function renderInspector(){
@@ -1432,7 +1629,7 @@ function renderInspector(){
       (warn?`<div class="wn">${warn}</div>`:"");
     card.addEventListener("click", ()=>{
       highlightAnchor(a.name);
-      if(a.line!=null){ activeEd = editorForLayer(a.layer); editorForLayer(a.layer).gotoLine(a.line); }
+      if(a.line!=null) gotoLoc(a.layer, a.line);
     });
     read.appendChild(card);
   }

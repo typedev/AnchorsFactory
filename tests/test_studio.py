@@ -208,6 +208,27 @@ def test_resolve_document_rejects_path_extends():
         resolve_document("!extends ./local/base.af\nH = top (box.center capHeight)")
 
 
+def test_build_view_extends_a_project_file_as_edited(font):
+    """A layer opened from the project folder (``file``) is a set ``!extends``
+    can name; the inheriting layer sees its current text, ahead of the search
+    path, and project files may extend each other (and the samples)."""
+    layers = [
+        {"name": "base", "file": "default.anchors", "text": "!extends default\nH = mine (box.left ascender)\n"},
+        {"name": "custom", "file": "custom.anchors", "text": "!extends default\nO += extra (0 0)\n"},
+    ]
+    view = build_view(font, layers)
+    assert view["ok"], view["problems"]
+    assert {a["name"] for a in view["glyphs"]["H"]["anchors"]} == {"mine"}   # the project's default
+    assert "extra" in {a["name"] for a in view["glyphs"]["O"]["anchors"]}
+
+
+def test_build_view_project_extends_cycle_is_a_problem(font):
+    layers = [{"name": "a", "file": "a.anchors", "text": "!extends b\n"},
+              {"name": "b", "file": "b.anchors", "text": "!extends a\n"}]
+    view = build_view(font, layers)
+    assert not view["ok"] and "cycle" in view["problems"][0]
+
+
 def test_build_view_reports_parse_error_without_raising(font):
     view = build_view(font, "H = top (this is not valid dsl")
     assert view["ok"] is False

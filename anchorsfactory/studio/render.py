@@ -88,11 +88,16 @@ def resolve_stack(layers, context=None) -> Document:
     font) — before the merge, which builds a plain document and would otherwise
     drop them. A condition that cannot be evaluated raises like a parse error,
     with the layer name and line.
+
+    A layer opened from a file of the project folder carries ``"file"``
+    (``"base.anchors"``); ``!extends base`` in any layer then inherits that
+    layer's *current* text (see :func:`project_sets`).
     """
+    project = project_sets(layers)
     merged = Document()
     for i, layer in enumerate(layers):
         try:
-            doc = resolve_document(layer.get("text", ""))
+            doc = resolve_document(layer.get("text", ""), project, own=_set_name(layer))
             if doc.has_conditionals:
                 doc = doc.resolve(context or RuleContext())
         except ValueError as exc:
@@ -125,15 +130,32 @@ def inactive_layer_lines(layers, context) -> dict:
     return out
 
 
-def resolve_document(rules_text: str) -> Document:
+def _set_name(layer) -> str | None:
+    file = layer.get("file") if isinstance(layer, dict) else None
+    if isinstance(file, str) and file.lower().endswith(".anchors"):
+        return file[:-len(".anchors")]
+    return None
+
+
+def project_sets(layers) -> dict[str, str]:
+    """``{set name: text}`` of the layers opened from ``.anchors`` files of the
+    project folder, so ``!extends <name>`` finds a sibling file (as edited)
+    before the rule sets on the search path."""
+    return {name: layer.get("text", "") for layer in layers if (name := _set_name(layer))}
+
+
+def resolve_document(rules_text: str, project=None, own=None, _seen=()) -> Document:
     """Parse the edited rules and resolve any ``!extends <name>`` so custom rules
     can inherit a whole set (e.g. ``!extends default`` then a few overrides).
     Bases are merged first (marked ``inherited`` by ``runner._merge``), the edited
     rules on top.
 
-    Only a **rule-set name on the studio's search path** may be inherited here —
-    the studio has no access to the user's file paths — so a path reference raises
-    a clear error. The path is configured once at startup (``--rules-path``);
+    Only a **rule-set name** may be inherited here — one of the opened project
+    files (*project*, see :func:`project_sets`; they come first and may extend
+    each other) or a set on the studio's search path. The studio has no access
+    to the user's file paths, so a path reference raises a clear error. A file
+    never inherits itself: in *own* (``default.anchors``), ``!extends default``
+    means the set on the search path. The path is configured once at startup (``--rules-path``);
     nothing is bundled with the package. Inherited rules keep the base's
     provenance but read as ``inherited=True`` (no jump into the edited text);
     ``resolve_stack`` then overwrites ``origin`` with the layer index.
@@ -141,15 +163,26 @@ def resolve_document(rules_text: str) -> Document:
     doc = parse_dsl(rules_text.splitlines())
     if not doc.extends:
         return doc
+    project = project or {}
+    sibling = lambda ref: ref in project and ref != own
     for ref in doc.extends:
-        if not is_preset(ref):
-            known = ", ".join(list_presets()) or "none configured — see --rules-path"
+        if not sibling(ref) and not is_preset(ref):
+            known = ", ".join([*(p for p in project if p != own), *list_presets()]) or "none configured — see --rules-path"
             raise DSLError(f"!extends {ref!r}: in studio only a rule-set name on the "
-                           f"search path can be inherited, not a file path "
-                           f"(available: {known})")
+                           f"search path or a .anchors file of the opened folder can be "
+                           f"inherited, not a file path (available: {known})")
     merged = Document()
     for ref in doc.extends:                          # bases first (each marked inherited by _merge)...
-        merged = _merge(merged, load_document(ref))
+        if sibling(ref):
+            if ref in _seen:
+                raise DSLError(f"!extends cycle: {' -> '.join([*_seen, ref])}")
+            try:
+                base = resolve_document(project[ref], project, own=ref, _seen=(*_seen, ref))
+            except DSLError as exc:
+                raise DSLError(f"!extends {ref!r} ({ref}.anchors): {exc}") from None
+        else:
+            base = load_document(ref)
+        merged = _merge(merged, base)
     return _merge(merged, doc)                        # ...edited rules on top
 
 

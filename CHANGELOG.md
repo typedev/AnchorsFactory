@@ -33,6 +33,14 @@ changed" without inferring it from a version number.
   glyph preview keep a fixed on-screen size (they were drawn in font units, a
   few pixels tall at a typical zoom).
 
+- **Studio: rules from the project folder, saved back.** Opening a project
+  folder also loads every `.anchors` and `.glyphsConstruction` at its top as
+  tabs on top of the current ones (bases before the files that `!extends`
+  them). `!extends <name>` inherits an opened `<name>.anchors` as edited.
+  **save** / Ctrl+S writes a tab back to its file (Chrome, Edge; elsewhere a
+  download), unsaved tabs show ●, layers can be closed. The construction pane
+  has tabs too, concatenated for the engine with errors mapped to their tab.
+
 ### Changed
 
 - The Studio's session and endpoints moved from `studio/server.py` to

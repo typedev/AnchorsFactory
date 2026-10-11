@@ -140,8 +140,11 @@ from the drop are listed, the rest open. A zip with several designspaces asks
 via `font/designspace` (the drop waits in `Studio.pending`). Masters of one drop
 share its temp dir until the last is removed. Still open:
 
-- **Rules:** open and save `.anchors` / `.glyphsConstruction` with file pickers
-  (localStorage already keeps the session).
+- **Rules: DONE (2026-10-11).** A project folder's top-level `.anchors` /
+  `.glyphsConstruction` load as tabs (construction tabs too), `!extends`
+  resolves opened project files, Save writes back through File System Access
+  (picker / download elsewhere). File links do not survive a reload yet
+  (handles would need IndexedDB, see below).
 - **Save anchors back (after v1, which is preview only):** `apply_document` on the font, then write **only the
   changed `.glif` files**. On Chromium they go into the original folder (File
   System Access); elsewhere a zip of the changed files is downloaded. The diffs

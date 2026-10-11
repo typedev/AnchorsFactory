@@ -81,6 +81,7 @@
         <select id="preset" class="mini" title="base preset (seeds the default layer)"></select>
         <div class="spacer" style="flex:1"></div>
         <button data-a="find" class="ghost mini-btn" title="find in rules (Ctrl+F)">find</button>
+        <button data-a="save-anchor" class="ghost mini-btn" title="save the active layer to its file (Ctrl+S); a new layer asks where">save</button>
         <button data-a="dl-anchor" class="ghost mini-btn" title="download the active layer">⤓ .anchors</button>
       </div>
       <div class="tabstrip" id="anchorTabs"></div>
@@ -92,9 +93,11 @@
         <span class="ln-name gc">construction</span><span class="ln-badge">glyphConstruction</span>
         <div class="spacer" style="flex:1"></div>
         <button data-a="find-gc" class="ghost mini-btn" title="find (Ctrl+F)">find</button>
-        <button data-a="dl-gc" class="ghost mini-btn" title="download constructions">⤓ .glyphConstruction</button>
+        <button data-a="save-gc" class="ghost mini-btn" title="save the active tab to its file (Ctrl+S); a new tab asks where">save</button>
+        <button data-a="dl-gc" class="ghost mini-btn" title="download the active tab">⤓ .glyphsConstruction</button>
       </div>
-      <div class="layer-ed" id="edGC"></div>
+      <div class="tabstrip" id="gcTabs"></div>
+      <div class="pane-body" id="edGC"></div>
     </div>
     <div class="split row" data-t="outh" title="drag to resize · double-click to reset"></div>
     <section class="output" id="output">
@@ -107,7 +110,7 @@
       </div>
       <div class="problems" id="problems"></div>
     </section>
-    <input id="rulesfile" type="file" accept=".anchors,.af,.dsl,.txt" hidden>
+    <input id="rulesfile" type="file" accept=".anchors,.af,.dsl,.txt,.glyphsConstruction,.glyphConstruction" multiple hidden>
   </section>
   <div class="split col" data-t="edw" title="drag to resize · double-click to reset"></div>
   <section class="stage">
