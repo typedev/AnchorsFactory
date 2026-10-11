@@ -5,7 +5,6 @@ Run it when you've decided the current state of `master` is worth publishing:
 
     make release                  # bump minor, tag, push -> CI publishes to PyPI
     make release ARGS=--no-bump   # release the current version as-is
-    make release-test             # CI publishes a .devN build to TestPyPI
 
 What it does, in order:
 
@@ -48,7 +47,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = ROOT / "pyproject.toml"
 CHANGELOG = ROOT / "CHANGELOG.md"
-ENV_FILE = ROOT / ".env"
 
 
 def run(cmd: list[str], **kw) -> subprocess.CompletedProcess:

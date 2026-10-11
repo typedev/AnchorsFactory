@@ -298,8 +298,7 @@ Releases are cut with `make release`: it bumps the minor version (`ARGS=--no-bum
 for a patch), promotes the [CHANGELOG](CHANGELOG.md)'s *Unreleased* section,
 checks the build, and pushes the tag `vX.Y.Z`. CI then tests, publishes to PyPI
 by trusted publishing (no token), creates the GitHub Release and deploys the
-web Studio to <https://typedev.github.io/AnchorsFactory/>. `make release-test`
-publishes a `.devN` build to TestPyPI.
+web Studio to <https://typedev.github.io/AnchorsFactory/>.
 
 ## License
 

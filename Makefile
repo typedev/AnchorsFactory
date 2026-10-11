@@ -2,12 +2,11 @@
 #
 # Publishing is intentionally manual and not wired to CI: the rules still need
 # tuning against GlyphConstruction before a real release. `make build` produces
-# the artifacts; `make publish` uploads them when you're ready (set a token —
-# see publish target).
+# the artifacts; `make release` tags a version and CI publishes it.
 
 PY := .venv/bin/python
 
-.PHONY: help venv browsers studio studio-save test build check publish-test publish release release-test web-dev web-build clean
+.PHONY: help venv browsers studio studio-save test build check release web-dev web-build clean
 
 help:
 	@echo "venv         create .venv and install the package (editable) + dev deps + browsers"
@@ -17,10 +16,7 @@ help:
 	@echo "test         run the test suite"
 	@echo "build        build sdist + wheel into dist/"
 	@echo "check        build, then validate the artifacts (twine check)"
-	@echo "publish-test upload to TestPyPI"
-	@echo "publish      upload to PyPI"
 	@echo "release      bump minor, promote CHANGELOG [Unreleased], check build, tag + push (CI publishes to PyPI)"
-	@echo "release-test have CI publish a .devN build of master to TestPyPI"
 	@echo "web-dev      run the web Studio (Pyodide, web/) on a Vite dev server"
 	@echo "web-build    build the web Studio into web/dist (what GitHub Pages serves)"
 	@echo "clean        remove build artifacts and caches"
@@ -75,21 +71,11 @@ check: build
 # Upload. Authenticate with a token, e.g.:
 #   export UV_PUBLISH_TOKEN=pypi-...        (PyPI)
 # or pass --token on the command line.
-publish-test: build
-	uv publish --publish-url https://test.pypi.org/legacy/ dist/*
-
-publish: build
-	uv publish dist/*
-
 # Release: bump minor, promote CHANGELOG, check the build, tag, push. The tag
 # starts .github/workflows/release.yml, which publishes to PyPI by trusted
 # publishing (no token). Pass extra flags via ARGS, e.g.  make release ARGS=--no-bump
-# (publish/publish-test above remain as a manual, token-based fallback).
 release:
 	$(PY) scripts/release.py $(ARGS)
-
-release-test:
-	gh workflow run release.yml --ref master
 
 clean:
 	rm -rf dist build *.egg-info anchorsfactory.egg-info
