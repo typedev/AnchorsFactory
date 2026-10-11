@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""One-shot release: bump the version, build, publish, tag, push.
+"""Cut a release: bump the version, check the build, tag, push. CI publishes.
 
 Run it when you've decided the current state of `master` is worth publishing:
 
-    make release            # bump minor, upload to PyPI
-    make release-test       # same, but upload to TestPyPI
-    make release ARGS=--no-bump   # publish the current version as-is
+    make release                  # bump minor, tag, push -> CI publishes to PyPI
+    make release ARGS=--no-bump   # release the current version as-is
+    make release-test             # CI publishes a .devN build to TestPyPI
 
 What it does, in order:
 
@@ -14,37 +14,30 @@ What it does, in order:
   2. Decides the new version. The very first release (no `v*` tags yet)
      publishes the version already in pyproject.toml; every release after
      that bumps the minor (0.1.0 -> 0.2.0 -> 0.3.0 ...).
-  3. Resolves the publish token (see Authentication) — before touching anything.
-  4. Writes the version into pyproject.toml and promotes the curated
+  3. Writes the version into pyproject.toml and promotes the curated
      `## [Unreleased]` CHANGELOG section to `## [version] - date`, leaving a
      fresh empty `## [Unreleased]`. That section is also the release notes.
      (Refuses if `## [Unreleased]` is empty — write your notes there as you go.)
-  5. Builds the sdist+wheel and runs `twine check`.
-  6. Uploads to PyPI (or TestPyPI with --test). This is the point of no return.
-  7. With --test this is a dry run: after the TestPyPI upload the working tree
-     is restored (version/CHANGELOG edits undone) and nothing is committed —
-     so a later `make release` bumps cleanly to the same version.
-  8. For a real (non --test) release: commits, tags `vX.Y.Z`, pushes the commit
-     and the tag, and creates a GitHub Release with the changelog section as
-     notes and the artifacts attached (best-effort — needs an authenticated
-     `gh`; a failure there leaves PyPI/tag intact). If anything before the
-     upload fails, the tree is restored and git history is left untouched.
+  4. Builds the sdist+wheel locally, runs `twine check` and inspects the wheel,
+     so a broken build fails here, before any tag exists. On failure the tree
+     is restored and git history is left untouched.
+  5. Commits, tags `vX.Y.Z`, pushes the commit and the tag.
 
-Authentication: the token is read from the environment, then from a (gitignored)
-`.env` in the repo root, and finally prompted interactively if neither has it.
-Variables: `PYPI_TOKEN` for a real release, `TEST_PYPI_TOKEN` with --test (a bare
-`UV_PUBLISH_TOKEN` is accepted as a fallback for either). Example `.env`:
+Publishing is not done here. The pushed tag starts `.github/workflows/release.yml`,
+which runs the tests, rebuilds, checks the wheel again, uploads to PyPI through
+**trusted publishing** (OIDC: no API token anywhere) and creates the GitHub
+Release with the CHANGELOG section as notes. If that workflow fails after the
+tag is pushed, fix the cause and re-run the failed jobs in Actions; the tag
+does not need to move unless the code does.
 
-    PYPI_TOKEN=pypi-...
-    TEST_PYPI_TOKEN=pypi-...
+CI also calls this script for small helpers: `--check-wheel WHEEL...`,
+`--notes VERSION` (print that CHANGELOG section) and `--print-version`.
 """
 
 from __future__ import annotations
 
 import argparse
 import datetime
-import getpass
-import os
 import re
 import shutil
 import subprocess
@@ -106,43 +99,6 @@ def latest_tag() -> str | None:
     return tags.splitlines()[0] if tags else None
 
 
-# --- tokens ---------------------------------------------------------------- #
-def load_env_file() -> dict[str, str]:
-    """Parse simple KEY=VALUE lines from a gitignored .env (no dependency)."""
-    env: dict[str, str] = {}
-    if ENV_FILE.exists():
-        for line in ENV_FILE.read_text().splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, val = line.partition("=")
-            env[key.strip()] = val.strip().strip('"').strip("'")
-    return env
-
-
-def resolve_token(test: bool) -> str:
-    """Find the publish token: real env, then .env, then an interactive prompt.
-
-    Looks at the target-specific variable first (TEST_PYPI_TOKEN / PYPI_TOKEN),
-    then a bare UV_PUBLISH_TOKEN, in both the environment and `.env`.
-    """
-    primary = "TEST_PYPI_TOKEN" if test else "PYPI_TOKEN"
-    names = (primary, "UV_PUBLISH_TOKEN")
-    file_env = load_env_file()
-    for source in (os.environ, file_env):
-        for name in names:
-            if source.get(name):
-                return source[name]
-    where = "TestPyPI" if test else "PyPI"
-    try:
-        token = getpass.getpass(f"  {where} token ({primary} not in env or .env): ")
-    except (EOFError, KeyboardInterrupt):
-        die("No token provided — aborted.")
-    if not token.strip():
-        die("No token provided — aborted.")
-    return token.strip()
-
-
 # --- changelog ------------------------------------------------------------- #
 def promote_unreleased(version: str, date: str) -> str:
     """Move the curated ``## [Unreleased]`` section to ``## [version] - date``,
@@ -164,6 +120,15 @@ def promote_unreleased(version: str, date: str) -> str:
     )
     CHANGELOG.write_text(new)
     return body
+
+
+def changelog_section(version: str) -> str:
+    """The body of ``## [version]`` in CHANGELOG.md (the release notes)."""
+    text = CHANGELOG.read_text()
+    m = re.search(rf"(?ms)^##\s*\[{re.escape(version)}\][^\n]*\n(.*?)(?=^##\s|\Z)", text)
+    if not m:
+        die(f"No '## [{version}]' section in CHANGELOG.md.")
+    return m.group(1).strip()
 
 
 class WheelContentsError(Exception):
@@ -209,41 +174,54 @@ def verify_wheel(path: str) -> None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Bump, build, publish, tag, push.")
-    ap.add_argument("--test", action="store_true", help="upload to TestPyPI")
+    ap = argparse.ArgumentParser(description="Bump, check, tag, push (CI publishes).")
     ap.add_argument(
         "--no-bump",
         action="store_true",
-        help="publish the current version without bumping",
+        help="release the current version without bumping",
     )
     ap.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
+    # helpers for CI (no git, no side effects)
+    ap.add_argument("--check-wheel", nargs="+", metavar="WHEEL",
+                    help="only inspect built wheel(s) for forbidden files")
+    ap.add_argument("--notes", metavar="VERSION",
+                    help="only print the CHANGELOG section of VERSION")
+    ap.add_argument("--print-version", action="store_true",
+                    help="only print the version in pyproject.toml")
     args = ap.parse_args()
+
+    if args.check_wheel:
+        try:
+            for wheel in args.check_wheel:
+                verify_wheel(wheel)
+        except WheelContentsError as exc:
+            die(str(exc))
+        return
+    if args.notes:
+        print(changelog_section(args.notes))
+        return
+    if args.print_version:
+        print(current_version())
+        return
 
     print("AnchorsFactory release\n----------------------")
     check_preconditions()
 
     cur = current_version()
-    prev_tag = latest_tag()
-    first_release = prev_tag is None
-    if first_release or args.no_bump:
-        new = cur
-    else:
-        new = bump_minor(cur)
+    first_release = latest_tag() is None
+    new = cur if first_release or args.no_bump else bump_minor(cur)
+    tag = f"v{new}"
+    if capture(["git", "tag", "--list", tag]):
+        die(f"Tag {tag} already exists.")
 
-    target = "TestPyPI" if args.test else "PyPI"
     print(f"\n  current version : {cur}")
     print(f"  release version : {new}")
-    print(f"  target          : {target}")
+    print("  publish         : by CI on tag push (trusted publishing to PyPI)")
 
     if not args.yes:
-        ans = input(f"\nPublish {new} to {target}? [y/N] ").strip().lower()
+        ans = input(f"\nTag and push {tag}? [y/N] ").strip().lower()
         if ans not in {"y", "yes"}:
             die("Aborted by user.")
-
-    # Resolve the token up front (may prompt) — before mutating anything, so a
-    # missing token aborts cleanly with the tree untouched.
-    token = resolve_token(args.test)
-    publish_env = {**os.environ, "UV_PUBLISH_TOKEN": token}
 
     date = datetime.date.today().isoformat()
 
@@ -255,16 +233,15 @@ def main() -> None:
     if n != 1:
         die("Could not find a single version line in pyproject.toml")
     PYPROJECT.write_text(new_pyproject)
-    body = promote_unreleased(new, date)
+    promote_unreleased(new, date)
 
     try:
-        print("\nBuilding artifacts ...")
-        # Start from an empty dist/ so we only ever publish what we just built
-        # (uv build does not clear stale or pre-existing artifacts itself), and
-        # from no build/ or *.egg-info either: setuptools reuses an existing
-        # egg-info's file list in preference to `packages` in pyproject.toml, so
-        # a stale one from an earlier editable install silently puts modules back
-        # into the wheel. That shipped the Studio in 0.5.0.
+        print("\nBuilding artifacts (local check; CI builds what it publishes) ...")
+        # Start from no dist/, build/ or *.egg-info: setuptools reuses an
+        # existing egg-info's file list in preference to `packages` in
+        # pyproject.toml, so a stale one from an earlier editable install
+        # silently puts modules back into the wheel. That shipped the Studio
+        # in 0.5.0.
         dist_dir = ROOT / "dist"
         clean_build_artifacts()
         run(["uv", "build"])
@@ -283,29 +260,8 @@ def main() -> None:
     except (subprocess.CalledProcessError, WheelContentsError) as exc:
         run(["git", "checkout", "--", str(PYPROJECT), str(CHANGELOG)])
         detail = f"\n  {exc}" if isinstance(exc, WheelContentsError) else ""
-        die(f"Build/check failed — working tree restored, nothing published.{detail}")
+        die(f"Build/check failed — working tree restored, nothing tagged.{detail}")
 
-    try:
-        print(f"\nUploading to {target} ...")
-        cmd = ["uv", "publish"]
-        if args.test:
-            cmd += ["--publish-url", "https://test.pypi.org/legacy/"]
-        cmd += dist_files
-        run(cmd, env=publish_env)
-    except subprocess.CalledProcessError:
-        run(["git", "checkout", "--", str(PYPROJECT), str(CHANGELOG)])
-        die("Upload failed — working tree restored, nothing committed.")
-
-    if args.test:
-        # TestPyPI is a dry run: undo the version/CHANGELOG edits so the real
-        # `make release` later bumps cleanly. Nothing is committed/tagged/pushed.
-        run(["git", "checkout", "--", str(PYPROJECT), str(CHANGELOG)])
-        print(f"\n✓ Uploaded {new} to TestPyPI. Working tree restored — "
-              "run `make release` for the real PyPI release.")
-        return
-
-    # --- real upload succeeded: now it's safe to record it in git ---
-    tag = f"v{new}"
     print(f"\nRecording release {tag} in git ...")
     run(["git", "add", str(PYPROJECT), str(CHANGELOG)])
     run(["git", "commit", "-m", f"Release {tag}"])
@@ -313,24 +269,9 @@ def main() -> None:
     run(["git", "push", "origin", "master"])
     run(["git", "push", "origin", tag])
 
-    # A real release also gets a GitHub Release, with the changelog section as
-    # notes and the built artifacts attached. Best-effort: a missing/unauth'd
-    # `gh` must not undo a successful PyPI publish, so just warn.
-    print(f"\nCreating GitHub release {tag} ...")
-    try:
-        run(
-            ["gh", "release", "create", tag, "--title", tag,
-             "--notes", body, *dist_files]
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        print(
-            f"  ! Could not create the GitHub release for {tag} "
-            "(is `gh` installed and authenticated?).\n"
-            "    The PyPI publish and the git tag are unaffected; create it\n"
-            f"    later with:  gh release create {tag} --notes \"...\""
-        )
-
-    print(f"\n✓ Published {new} to PyPI and pushed {tag}.")
+    print(f"\n✓ Pushed {tag}. CI now tests, builds and publishes it:\n"
+          f"    https://github.com/typedev/AnchorsFactory/actions\n"
+          f"  (or: gh run watch)")
 
 
 if __name__ == "__main__":

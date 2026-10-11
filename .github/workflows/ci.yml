@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_call:          # the release workflow runs the same suite first
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install
+        run: |
+          uv venv
+          uv pip install -e ".[dev]"
+      # The golden tests need the confidential fonts in ufo-test/ and the
+      # Studio UI tests a Playwright browser; neither exists here, so they skip.
+      - name: Test
+        run: .venv/bin/python -m pytest -q

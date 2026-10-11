@@ -19,8 +19,8 @@ help:
 	@echo "check        build, then validate the artifacts (twine check)"
 	@echo "publish-test upload to TestPyPI"
 	@echo "publish      upload to PyPI"
-	@echo "release      bump minor, promote CHANGELOG [Unreleased], build, upload to PyPI, tag + push"
-	@echo "release-test same as release, but upload to TestPyPI (token from .env or prompt)"
+	@echo "release      bump minor, promote CHANGELOG [Unreleased], check build, tag + push (CI publishes to PyPI)"
+	@echo "release-test have CI publish a .devN build of master to TestPyPI"
 	@echo "clean        remove build artifacts and caches"
 
 venv:
@@ -65,14 +65,15 @@ publish-test: build
 publish: build
 	uv publish dist/*
 
-# One-shot release: bump minor, build CHANGELOG, build, upload, tag, push.
-# Needs a token, e.g.  export UV_PUBLISH_TOKEN=pypi-...
-# Pass extra flags via ARGS, e.g.  make release ARGS=--no-bump
+# Release: bump minor, promote CHANGELOG, check the build, tag, push. The tag
+# starts .github/workflows/release.yml, which publishes to PyPI by trusted
+# publishing (no token). Pass extra flags via ARGS, e.g.  make release ARGS=--no-bump
+# (publish/publish-test above remain as a manual, token-based fallback).
 release:
 	$(PY) scripts/release.py $(ARGS)
 
 release-test:
-	$(PY) scripts/release.py --test $(ARGS)
+	gh workflow run release.yml --ref master
 
 clean:
 	rm -rf dist build *.egg-info anchorsfactory.egg-info
