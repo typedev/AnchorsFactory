@@ -7,7 +7,7 @@
 
 PY := .venv/bin/python
 
-.PHONY: help venv browsers studio studio-save test build check publish-test publish release release-test clean
+.PHONY: help venv browsers studio studio-save test build check publish-test publish release release-test web-dev web-build clean
 
 help:
 	@echo "venv         create .venv and install the package (editable) + dev deps + browsers"
@@ -21,12 +21,28 @@ help:
 	@echo "publish      upload to PyPI"
 	@echo "release      bump minor, promote CHANGELOG [Unreleased], check build, tag + push (CI publishes to PyPI)"
 	@echo "release-test have CI publish a .devN build of master to TestPyPI"
+	@echo "web-dev      run the web Studio (Pyodide, web/) on a Vite dev server"
+	@echo "web-build    build the web Studio into web/dist (what GitHub Pages serves)"
 	@echo "clean        remove build artifacts and caches"
 
 venv:
 	uv venv
 	VIRTUAL_ENV="$(CURDIR)/.venv" uv pip install -e ".[dev]"
 	$(MAKE) browsers
+
+# The web Studio (web/): the Studio's page with Python in a Pyodide worker.
+# Needs Node; the pinned wheels are fetched once into web/public/wheels.
+web/public/wheels/manifest.json: web/wheels.txt
+	python3 scripts/fetch_web_wheels.py
+
+web/node_modules: web/package-lock.json
+	cd web && npm ci --ignore-scripts
+
+web-dev: web/public/wheels/manifest.json web/node_modules
+	cd web && npm run dev
+
+web-build: web/public/wheels/manifest.json web/node_modules
+	cd web && npm run build
 
 # The studio UI test drives a headless chromium via Playwright; the test skips
 # cleanly if it's missing, so this is only needed to actually run that test.

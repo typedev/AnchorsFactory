@@ -1,0 +1,9 @@
+# Pure-Python wheels the web Studio installs into Pyodide, pinned.
+# scripts/fetch_web_wheels.py downloads them (sha256-checked against PyPI)
+# into web/public/wheels/. fonttools, lxml and pyclipper come from the
+# Pyodide distribution itself; anchorsfactory comes from this checkout.
+defcon==0.12.2
+fontMath==0.10.0
+fontPens==0.4.0
+booleanOperations==0.10.0
+fontParts==1.1.0

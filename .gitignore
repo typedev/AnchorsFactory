@@ -16,3 +16,8 @@ __pycache__
 /output
 # secrets — publish tokens for `make release` live here, never commit them
 .env
+
+# web Studio (web/): npm deps, build output, fetched wheels
+/web/node_modules
+/web/dist
+/web/public/wheels

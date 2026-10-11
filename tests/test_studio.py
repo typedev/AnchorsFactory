@@ -152,7 +152,7 @@ def test_studio_seeds_rules_when_nothing_is_on_the_search_path(caplog):
     """Nothing is bundled, so `-r default` with no configured path must open on a
     built-in seed rather than dying — and say so."""
     from anchorsfactory import presets
-    from anchorsfactory.studio.server import _DEFAULT_RULES, _seed_rules
+    from anchorsfactory.studio.api import _DEFAULT_RULES, _seed_rules
 
     before = presets.search_paths()
     presets.set_search_paths([])
@@ -164,7 +164,7 @@ def test_studio_seeds_rules_when_nothing_is_on_the_search_path(caplog):
 
 
 def test_studio_seed_rules_are_valid_and_place_anchors(font):
-    from anchorsfactory.studio.server import _DEFAULT_RULES
+    from anchorsfactory.studio.api import _DEFAULT_RULES
 
     view = build_view(font, _DEFAULT_RULES)
     assert view["ok"] and view["problems"] == []
@@ -354,7 +354,7 @@ def test_studio_holds_multiple_fonts():
     """add/activate/remove keep the font list + active pointer (and the `font`
     property) in sync, and never drop the last font."""
     from rulesets import rules_text
-    from anchorsfactory.studio.server import Studio
+    from anchorsfactory.studio.api import Studio
 
     f1, f2 = build_demo_font(), build_demo_font()
     st = Studio(f1, rules_text("default"), "Regular")

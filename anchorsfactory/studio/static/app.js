@@ -27,7 +27,11 @@ const allRulesText = () => anchorLayers.map(l => l.ed.getValue()).join("\n");
 const editorForLayer = i => (i === -1 ? gcEd : anchorLayers[i] ? anchorLayers[i].ed : null);
 
 async function boot(){
-  META = await (await fetch("/api/state")).json();
+  const status = $("#status");
+  studioApi.onStatus(text => { status.className = "pill"; status.textContent = text; });
+  try { META = await studioApi.call("state"); }
+  catch(err){ status.className = "pill bad"; status.textContent = "failed to start";
+    $("#fontmeta").textContent = String(err.message || err); throw err; }
   initVocabulary(META.vocabulary);
   setFontMeta();
   renderFontCards();
@@ -48,6 +52,7 @@ async function boot(){
 function setFontMeta(){
   let s = `${META.font}  ${META.unitsPerEm}upm  ital ${META.italicAngle}°`;
   if(META.save) s += `  · autosave → ${META.save}`;
+  if(studioApi.kind === "worker") s += `  · v${META.version}, runs in this tab: fonts are not uploaded`;
   $("#fontmeta").textContent = s;
 }
 
@@ -204,7 +209,7 @@ async function selectTab(tab){
 async function fetchAllGlyphs(){
   const cnt = $("#count"); cnt.textContent = "loading…";
   try {
-    const j = await (await fetch("/api/allglyphs")).json();
+    const j = await studioApi.call("allglyphs");
     ALLGLYPHS = j.glyphs || [];
   } catch(err){ ALLGLYPHS = []; }
   ALLMAP = {}; for(const g of ALLGLYPHS) ALLMAP[g.name] = g;
@@ -389,11 +394,11 @@ function highlightGC(line){
 function makeEditor(host, onChange, onFocus, highlight = highlightLine, complete = ANCHOR_COMPLETE){
   host.innerHTML =
     '<div class="ed"><div class="ed-gutter"><div class="gnums"></div></div>'+
-    '<div class="ed-body"><pre class="ed-hl" aria-hidden="true"></pre>'+
+    '<div class="ed-body"><pre class="ed-hl" aria-hidden="true"><div class="ed-hl-in"></div></pre>'+
     '<textarea class="ed-ta" spellcheck="false" autocomplete="off" autocapitalize="off" wrap="off"></textarea>'+
     '<div class="ac" hidden></div></div></div>';
-  const ta = host.querySelector(".ed-ta"), hl = host.querySelector(".ed-hl"),
-        gutter = host.querySelector(".ed-gutter"), gnums = host.querySelector(".gnums"),
+  const ta = host.querySelector(".ed-ta"), hl = host.querySelector(".ed-hl-in"),
+        gnums = host.querySelector(".gnums"),
         ac = host.querySelector(".ac");
   let errLines = new Set(), offLines = new Set(), acItems = [], acSel = 0, acStart = 0;
 
@@ -411,7 +416,13 @@ function makeEditor(host, onChange, onFocus, highlight = highlightLine, complete
     gnums.innerHTML = lines.map((_,i) => `<div class="gl${cls(i)}">${i+1}</div>`).join("");
     sync();
   }
-  function sync(){ hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft; gutter.scrollTop = ta.scrollTop; }
+  // Follow the textarea's scroll by translating, not by copying scrollTop: the
+  // textarea can scroll further than the overlay and gutter (its horizontal
+  // scrollbar shortens it), and a clamped overlay sat half a line off.
+  function sync(){
+    hl.style.transform = `translate(${-ta.scrollLeft}px,${-ta.scrollTop}px)`;
+    gnums.style.transform = `translateY(${-ta.scrollTop}px)`;
+  }
   function markErrors(set){ errLines = set || new Set(); refresh(); }
   // lines an `!if` block drops for the active master — dimmed, still editable
   function markInactive(set){ offLines = set || new Set(); refresh(); }
@@ -627,17 +638,10 @@ async function walkEntry(entry, prefix, out){
     do { batch = await new Promise((res,rej)=>reader.readEntries(res,rej)); for(const e of batch) await walkEntry(e, path, out); } while(batch.length); }
 }
 
-async function fileToB64(file){
-  const bytes = new Uint8Array(await file.arrayBuffer()); let bin=""; const step=0x8000;
-  for(let i=0;i<bytes.length;i+=step) bin += String.fromCharCode.apply(null, bytes.subarray(i, i+step));
-  return btoa(bin);
-}
-
 async function sendFont(name, collected){
   const status=$("#status"); status.className="pill"; status.textContent="loading font…";
-  const files=[]; for(const c of collected) files.push({path:c.path, data: await fileToB64(c.file)});
   let j;
-  try { j = await (await fetch("/api/font",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name, files})})).json(); }
+  try { j = await studioApi.loadFont(name, collected); }
   catch(err){ j = {ok:false, error:String(err)}; }
   if(!j.ok){ status.className="pill bad"; status.textContent="font error";
     $("#problems").innerHTML = `<div class="row err"><span class="tag">font</span><span>${escapeHtml(j.error||"load failed")}</span></div>`; return; }
@@ -688,8 +692,7 @@ async function setFontContext(i, card){
   const loc = card.querySelector(".fc-loc").value, style = card.querySelector(".fc-style").value;
   const err = card.querySelector(".fc-err");
   let j; try {
-    j = await (await fetch("/api/font/context", {method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({index: i, location: loc, styleName: style === "" ? null : style})})).json();
+    j = await studioApi.call("font/context", {index: i, location: loc, styleName: style === "" ? null : style});
   } catch(e){ j = {ok:false, error:String(e)}; }
   if(!j.ok){ err.textContent = j.error || "could not set the location"; err.hidden = false; return; }
   Object.assign(META, j.state); renderFontCards();
@@ -703,8 +706,7 @@ async function compareMasters(){
   box.innerHTML = `<div class="m-row muted">comparing…</div>`;
   const layers = anchorLayers.map(l => ({name: l.name, text: l.ed.getValue()}));
   let j; try {
-    j = await (await fetch("/api/masters", {method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({layers, gc: gcEd ? gcEd.getValue() : ""})})).json();
+    j = await studioApi.call("masters", {layers, gc: gcEd ? gcEd.getValue() : ""});
   } catch(e){ j = {ok:false, errors:[String(e)], warnings:[]}; }
   const rows = [
     ...(j.errors || []).map(m => `<div class="m-row err">${escapeHtml(m)}</div>`),
@@ -714,10 +716,9 @@ async function compareMasters(){
     : `<div class="m-row muted">masters are structurally identical</div>`;
 }
 
-async function fontOp(url, index){
+async function fontOp(method, index){
   let j; try {
-    j = await (await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({index})})).json();
+    j = await studioApi.call(method, {index});
   } catch(_){ j = {ok:false}; }
   if(!j.ok || !j.state) return null;
   Object.assign(META, j.state); setFontMeta(); renderFontCards();
@@ -728,11 +729,11 @@ async function fontOp(url, index){
 
 async function activateFont(i){
   const status = $("#status"); status.className="pill"; status.textContent="switching font…";
-  if(await fontOp("/api/font/activate", i)) compute();   // keep SELECTED → same glyph, new master
+  if(await fontOp("font/activate", i)) compute();   // keep SELECTED → same glyph, new master
 }
 
 async function removeFont(i){
-  if(await fontOp("/api/font/remove", i)){ if(!GLYPHS[SELECTED]){ SELECTED=null; HL_ANCHOR=null; } GLYPHS={}; compute(); }
+  if(await fontOp("font/remove", i)){ if(!GLYPHS[SELECTED]){ SELECTED=null; HL_ANCHOR=null; } GLYPHS={}; compute(); }
 }
 
 function downloadText(text, filename){
@@ -748,10 +749,10 @@ async function compute(){
   const layers = anchorLayers.map(l => ({name: l.name, text: l.ed.getValue()}));
   const gc = gcEd ? gcEd.getValue() : "";
   try {
-    const res = await fetch("/api/compute", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({layers, gc})});
-    VIEW = await res.json();
-  } catch(err) {                                    // server 500 / dropped connection / bad JSON
-    VIEW = {ok:false, problems:["studio server error — see terminal: "+String(err)], diagnostics:[], glyphs:{}, layers:[]};
+    VIEW = await studioApi.call("compute", {layers, gc});
+  } catch(err) {                                    // server 500 / dropped connection / Python error
+    const where = studioApi.kind === "http" ? "studio server error — see terminal: " : "studio error: ";
+    VIEW = {ok:false, problems:[where+String(err.message || err)], diagnostics:[], glyphs:{}, layers:[]};
   }
   markErrorLines();
   markInactiveLines();

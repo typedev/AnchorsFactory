@@ -11,6 +11,22 @@ changed" without inferring it from a version number.
 
 ## [Unreleased]
 
+### Added
+
+- **Web Studio** (`web/`, deployed to <https://typedev.github.io/AnchorsFactory/>
+  on each release): the Studio's page with the engine running in the browser
+  (Pyodide in a Web Worker), so fonts are read in the tab and never uploaded.
+  Preview only, like the local Studio; the sample rule sets are in the preset
+  menu. A dropped font's outlines are drawn while it loads, so the first view
+  is not slower than the next.
+
+### Changed
+
+- The Studio's session and endpoints moved from `studio/server.py` to
+  `studio/api.py` (`Studio.dispatch(method, body)`); the server is now an HTTP
+  adapter over it and the web worker calls it directly. The page talks to
+  either through `studioApi` (`static/api.js` is the HTTP one).
+
 ## [0.7.0] - 2026-10-11
 
 ### Added

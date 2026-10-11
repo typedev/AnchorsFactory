@@ -74,18 +74,27 @@ def load_uploaded_font(files, name: str = "font"):
             os.makedirs(os.path.dirname(dest), exist_ok=True)
             with open(dest, "wb") as fh:
                 fh.write(base64.b64decode(entry["data"]))
-        _expand_archives(tmp)
-        ufo = _find_ufo(tmp)
-        if ufo is None:
-            raise ValueError("no .ufo found — drop a .ufo folder or a .zip containing one")
-        # defcon/fontParts keys a UFO by its .ufo extension; give the fallback one.
-        if not ufo.lower().endswith(".ufo"):
-            renamed = ufo + ".ufo"
-            os.rename(ufo, renamed)
-            ufo = renamed
-        font = OpenFont(ufo)
-        family = getattr(font.info, "familyName", None) or os.path.basename(ufo)
+        font, family = open_font_tree(tmp)
         return font, family, tmp
     except Exception:
         shutil.rmtree(tmp, ignore_errors=True)
         raise
+
+
+def open_font_tree(root: str):
+    """Open the UFO in the file tree under *root*, expanding any ``.zip`` /
+    ``.ufoz`` there first. Returns ``(font, family_name)``; raises
+    ``ValueError`` when there is no UFO. (The web Studio writes the dropped
+    files under *root* itself and calls this directly.)"""
+    _expand_archives(root)
+    ufo = _find_ufo(root)
+    if ufo is None:
+        raise ValueError("no .ufo found — drop a .ufo folder or a .zip containing one")
+    # defcon/fontParts keys a UFO by its .ufo extension; give the fallback one.
+    if not ufo.lower().endswith(".ufo"):
+        renamed = ufo + ".ufo"
+        os.rename(ufo, renamed)
+        ufo = renamed
+    font = OpenFont(ufo)
+    family = getattr(font.info, "familyName", None) or os.path.basename(ufo)
+    return font, family

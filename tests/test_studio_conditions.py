@@ -11,7 +11,7 @@ from anchorsfactory.conditions import RuleContext
 from anchorsfactory.studio.compose import build_composite_view, masters_report
 from anchorsfactory.studio.demo import build_demo_font
 from anchorsfactory.studio.render import build_view
-from anchorsfactory.studio.server import (
+from anchorsfactory.studio.api import (
     Studio, _font_card, entry_context, location_text, parse_location_text,
 )
 

@@ -1,10 +1,11 @@
 """The Studio server: a dependency-free stdlib HTTP server that serves the
-single-page UI and two JSON endpoints (``/api/state``, ``/api/compute``).
+single-page UI and maps ``/api/<method>`` onto :meth:`.api.Studio.dispatch`.
 
-The font is opened once and kept in memory; rule text is sent from the browser
-on every edit, so the server is otherwise stateless — unless ``--save PATH`` is
-given, in which case each valid edit's base layer is written back to PATH. No
-font bytes ever leave the machine.
+The fonts are opened once and kept in memory; rule text is sent from the
+browser on every edit, so the server is otherwise stateless, unless ``--save
+PATH`` is given, in which case each valid edit's base layer is written back to
+PATH. No font bytes ever leave the machine. The web Studio runs the same
+:mod:`.api` in the browser instead (``web/``).
 """
 
 from __future__ import annotations
@@ -14,291 +15,27 @@ import json
 import logging
 import mimetypes
 import os
-import re
-import shutil
-import threading
-from dataclasses import replace
 from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
 
-from .. import speedups, vocabulary
-from .. import presets
-from ..presets import (construction_text, has_construction, is_preset,
-                       list_presets, preset_text, set_search_paths)
-from ..conditions import RuleContext, contexts_from_designspace
-from .compose import GC_LABEL, build_composite_view, gc_inactive_lines, masters_report
-from .demo import build_demo_font, font_metrics
-from .render import all_glyph_geometry, build_view
-from .upload import load_uploaded_font
+from .. import speedups
+from ..conditions import contexts_from_designspace
+from ..presets import construction_text, has_construction, is_preset, set_search_paths
+# re-exported: the session and its helpers lived here before api.py
+from .api import (  # noqa: F401
+    METHODS, Studio, _base_layer_text, _font_card, _font_state, _seed_rules,
+    entry_context, location_text, parse_location_text,
+)
+from .demo import build_demo_font
 
 log = logging.getLogger("anchorsfactory.studio")
 
 _STATIC = files("anchorsfactory.studio").joinpath("static")
 
-# Seed for the GC-constructions editor: a couple of composites the demo font can
-# assemble, so the "composites" tab has something to show on first open.
-_DEFAULT_GC = (
-    "# GlyphConstruction — assemble composites from the anchors above.\n"
-    "#   composite = base + mark@anchor\n"
-    "aacute = a + acute@top\n"
-    "odieresis = o + dieresis@top\n"
-)
-
-# Seed for the rules editor when `-r` names a set the search path can't answer
-# (the out-of-the-box case: nothing is bundled). Enough to show the pipeline
-# working on the demo font, and to be edited over.
-_DEFAULT_RULES = (
-    "# Anchor rules — `name ( X Y )`, one line per selector.\n"
-    "#   no rule sets ship with the package; point --rules-path at your own\n"
-    "#   (the samples live in examples/rules/ in the repository).\n"
-    "@ = top (box.center capHeight), bottom (box.center 0)\n"
-    "@mark = _top (outline.centroid 0), _bottom (outline.centroid capHeight)\n"
-    "{Lu} = @\n"
-    "{Ll} = top (box.center xHeight), bottom (box.center 0)\n"
-    "{Mn} = @mark\n"
-    "{Sk} = @mark                      # legacy spacing accents (acute, dieresis)\n"
-)
-
-
-def _seed_rules(rules: str) -> str:
-    """The editable rule text to open with: a named set's source, or a file's.
-
-    No rule sets ship with the package, so the default ``-r default`` resolves to
-    nothing until a search path is configured — that opens on a small built-in
-    seed rather than failing, the same way the constructions editor does.
-    """
-    if is_preset(rules):
-        return preset_text(rules)
-    if presets.is_name(rules):                  # a name nothing on the path answers
-        log.warning("no rule set %r on the search path (%s); opening a built-in seed. "
-                    "Point --rules-path at a directory of .anchors files — the "
-                    "samples are in examples/rules/ in the repository.",
-                    rules, ", ".join(presets.search_paths()) or "empty")
-        return _DEFAULT_RULES
-    with open(rules, encoding="utf-8") as fh:
-        return fh.read()
-
-
-def _base_layer_text(rules) -> str:
-    """The base (bottom) layer's source from a compute payload — a layer stack
-    ``[{name,text}, ...]`` bottom→top, or a bare rules string (single layer)."""
-    if isinstance(rules, str):
-        return rules
-    if rules:
-        first = rules[0]
-        return first.get("text", "") if isinstance(first, dict) else str(first)
-    return ""
-
-
-def _font_state(font, name: str) -> dict:
-    """The font-dependent slice of the client state (the *active* font)."""
-    return {
-        "font": name,
-        "unitsPerEm": float(getattr(font.info, "unitsPerEm", 1000) or 1000),
-        "italicAngle": float(font.info.italicAngle or 0),
-        "metrics": font_metrics(font),
-    }
-
-
-_LOC_TERM = re.compile(r"([A-Za-z_]\w*)\.(xvalue|uservalue)\s*=\s*(-?\d+(?:\.\d+)?|-?\.\d+)")
-
-
-def parse_location_text(text: str) -> tuple[dict, dict]:
-    """``"ital.xvalue=1, wght.uservalue = 700"`` -> ``(xvalues, uservalues)``.
-
-    Terms are separated by commas, semicolons or whitespace; anything else is a
-    ``ValueError`` naming the bad part, shown under the font card."""
-    xvalues, uservalues = {}, {}
-    pos, text = 0, text or ""
-    for m in _LOC_TERM.finditer(text):
-        gap = text[pos:m.start()]
-        if gap.strip(" \t\n,;"):
-            raise ValueError(f"cannot read {gap.strip()!r}; write AXIS.xvalue=N "
-                             f"or AXIS.uservalue=N")
-        axis, kind, value = m.groups()
-        (xvalues if kind == "xvalue" else uservalues)[axis] = float(value)
-        pos = m.end()
-    if text[pos:].strip(" \t\n,;"):
-        raise ValueError(f"cannot read {text[pos:].strip()!r}; write AXIS.xvalue=N "
-                         f"or AXIS.uservalue=N")
-    return xvalues, uservalues
-
-
-def _fmt(v: float) -> str:
-    return f"{v:g}"
-
-
-def location_text(context: RuleContext) -> str:
-    """A context's location in the form :func:`parse_location_text` reads."""
-    terms = [f"{a}.xvalue={_fmt(v)}" for a, v in context.xvalues.items()]
-    terms += [f"{a}.uservalue={_fmt(v)}" for a, v in context.uservalues.items()]
-    return ", ".join(terms)
-
-
-def entry_context(entry: dict) -> RuleContext:
-    """The master a loaded font stands for: its base context (a designspace
-    source's, or an empty one), with the location and style name typed into
-    the font card layered on top. A missing style name is filled from the font
-    at compute time (fontinfo, else "")."""
-    ctx = entry.get("base") or RuleContext()
-    if entry.get("location") is not None:
-        xvalues, uservalues = parse_location_text(entry["location"])
-        ctx = replace(ctx, xvalues=xvalues, uservalues=uservalues)
-    if entry.get("styleName") is not None:
-        ctx = replace(ctx, style_name=entry["styleName"])
-    return ctx
-
-
-def _font_card(font, name: str, entry: dict | None = None) -> dict:
-    """One entry of the loaded-font list (same as ``_font_state`` but keyed by
-    ``name`` instead of ``font``), plus the master it stands for: ``location``
-    (as typed, or the designspace's), ``styleName`` (the override, or the
-    designspace source's; ``None`` → fontinfo) and ``fontStyleName``."""
-    s = _font_state(font, name)
-    s["name"] = s.pop("font")
-    entry = entry or {}
-    base = entry.get("base") or RuleContext()
-    s["location"] = (entry["location"] if entry.get("location") is not None
-                     else location_text(base))
-    s["styleName"] = (entry["styleName"] if entry.get("styleName") is not None
-                      else base.style_name)
-    s["fontStyleName"] = getattr(font.info, "styleName", None) or ""
-    s["designspace"] = entry.get("base") is not None
-    return s
-
-
-class Studio:
-    """Holds the loaded fonts and the state a session starts from.
-
-    ``fonts`` is a list of ``{name, font, tmpdir, allglyphs}`` and ``active`` an
-    index into it; the *active* font drives compute and the grid. ``lock``
-    serialises the shared fonts across the threaded server (compute reads,
-    add/activate/remove mutate), so every access takes it. ``font`` is a property
-    onto the active entry so ``_compute``/``build_composite_view``/``all_glyphs`` need
-    no change.
-    """
-
-    def __init__(self, font, rules_text: str, font_name: str, save_path=None,
-                 gc_text: str | None = None, context: RuleContext | None = None):
-        self.fonts = [{"name": font_name, "font": font, "tmpdir": None, "allglyphs": None,
-                       "base": context, "location": None, "styleName": None, "paths": {}}]
-        self.active = 0
-        self.rules_text = rules_text
-        self.lock = threading.Lock()
-        # When set (--save PATH), the base layer is written back here on every
-        # valid compute, so edits survive across sessions and browsers.
-        self.save_path = Path(save_path) if save_path else None
-        self.state = {
-            **_font_state(font, font_name),
-            "fonts": [_font_card(font, font_name, self.fonts[0])],
-            "active": 0,
-            "presets": list_presets(),
-            "presetTexts": {name: preset_text(name) for name in list_presets()},
-            "rules": rules_text,
-            "gc": gc_text or _DEFAULT_GC,
-            # The DSL's surface words, straight from the library, so the editor's
-            # completion/highlight tables cannot drift from the parser.
-            "vocabulary": vocabulary.as_dict(),
-            "save": str(self.save_path) if self.save_path else None,
-        }
-
-    @property
-    def font(self):
-        return self.fonts[self.active]["font"]
-
-    @property
-    def paths(self) -> dict:
-        """The active font's ``{glyph: svg path}`` cache (outlines never change
-        during a session, whatever the rules)."""
-        return self.fonts[self.active].setdefault("paths", {})
-
-    @property
-    def context(self) -> RuleContext:
-        """The master the active font stands for (see :func:`entry_context`).
-        A location that does not parse is treated as none here; it is reported
-        when it is set (:meth:`set_context`)."""
-        try:
-            return entry_context(self.fonts[self.active])
-        except ValueError:
-            return self.fonts[self.active].get("base") or RuleContext()
-
-    def set_context(self, i: int, location, style_name):
-        """Set font *i*'s location text and style-name override (``None`` keeps
-        the designspace's / fontinfo's). Raises ``ValueError`` on a location
-        that does not parse, leaving the font unchanged."""
-        if not (0 <= i < len(self.fonts)):
-            raise ValueError(f"no font {i}")
-        entry = dict(self.fonts[i], location=location, styleName=style_name)
-        entry_context(entry)                       # validate before storing
-        self.fonts[i] = entry
-        self._sync_active()
-
-    def master_entries(self) -> list:
-        """``[(name, font, RuleContext), ...]`` for every loaded font."""
-        out = []
-        for e in self.fonts:
-            try:
-                ctx = entry_context(e)
-            except ValueError:
-                ctx = e.get("base") or RuleContext()
-            out.append((e["name"], e["font"], ctx))
-        return out
-
-    def _sync_active(self):
-        """Refresh the active-font slice + the font list in ``state``."""
-        e = self.fonts[self.active]
-        self.state.update(_font_state(e["font"], e["name"]))
-        self.state["fonts"] = [_font_card(x["font"], x["name"], x) for x in self.fonts]
-        self.state["active"] = self.active
-
-    def add_font(self, font, name: str, tmpdir=None, context: RuleContext | None = None):
-        """Append a font and make it active."""
-        self.fonts.append({"name": name, "font": font, "tmpdir": tmpdir, "allglyphs": None,
-                           "base": context, "location": None, "styleName": None,
-                           "paths": {}})
-        self.active = len(self.fonts) - 1
-        self._sync_active()
-
-    def activate(self, i: int):
-        if 0 <= i < len(self.fonts):
-            self.active = i
-            self._sync_active()
-
-    def remove_font(self, i: int):
-        """Drop a loaded font (never the last one), returning its tmpdir to clean
-        up outside the lock."""
-        if not (0 <= i < len(self.fonts)) or len(self.fonts) <= 1:
-            return None
-        entry = self.fonts.pop(i)
-        if self.active >= len(self.fonts):
-            self.active = len(self.fonts) - 1
-        elif self.active > i:
-            self.active -= 1
-        self._sync_active()
-        return entry.get("tmpdir")
-
-    def autosave(self, base_text: str) -> None:
-        """Persist the base-layer rules to ``save_path`` (a no-op if unset).
-
-        Only called for rules that resolved cleanly, so the file always stays
-        loadable via ``-r <path>``. A write failure is logged, not fatal — a
-        debugging session shouldn't die because the disk hiccuped."""
-        if not self.save_path:
-            return
-        try:
-            self.save_path.write_text(base_text, encoding="utf-8")
-        except OSError as exc:
-            log.warning("could not autosave rules to %s: %s", self.save_path, exc)
-
-    def all_glyphs(self) -> list:
-        """All-glyph geometry for the active font, computed once and cached on its
-        entry (caller holds the lock)."""
-        e = self.fonts[self.active]
-        if e["allglyphs"] is None:
-            e["allglyphs"] = all_glyph_geometry(e["font"], e.setdefault("paths", {}))
-        return e["allglyphs"]
+# read-only methods answer GET; everything else is a POST with a JSON body
+_GET = {"state", "allglyphs"}
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -319,21 +56,37 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _method(self) -> str | None:
+        """``/api/font/activate`` -> ``"font/activate"`` (None if not an API path)."""
+        if not self.path.startswith("/api/"):
+            return None
+        method = self.path[len("/api/"):].split("?", 1)[0]
+        return method if method in METHODS else None
+
     def do_GET(self):
         if self.path in ("/", "/index.html"):
             self._send_static("index.html", "text/html; charset=utf-8")
-        elif self.path == "/api/state":
-            self._send_json(self.studio.state)
-        elif self.path == "/api/allglyphs":
-            with self.studio.lock:
-                glyphs = self.studio.all_glyphs()
-            self._send_json({"glyphs": glyphs})
         elif self.path.startswith("/static/"):
             rel = self.path[len("/static/"):].split("?", 1)[0]
             ctype = mimetypes.guess_type(rel)[0] or "application/octet-stream"
             self._send_static(rel, ctype)
+        elif self._method() in _GET:
+            self._send_json(*reversed(self.studio.dispatch(self._method())))
         else:
             self._send_json({"error": "not found"}, status=404)
+
+    def do_POST(self):
+        method = self._method()
+        if method is None or method in _GET:
+            self._send_json({"error": "not found"}, status=404)
+            return
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length) if length else b"{}")
+        except ValueError:
+            body = []                      # not an object: dispatch answers 400
+        status, out = self.studio.dispatch(method, body)
+        self._send_json(out, status)
 
     def _send_static(self, rel, ctype):
         """Serve a file from the package's ``static/`` dir (traversal-safe)."""
@@ -355,133 +108,6 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
-
-    def _read_json(self):
-        length = int(self.headers.get("Content-Length", 0))
-        raw = self.rfile.read(length) if length else b"{}"
-        return json.loads(raw)
-
-    def do_POST(self):
-        if self.path == "/api/compute":
-            self._compute()
-        elif self.path == "/api/font":
-            self._load_font()
-        elif self.path == "/api/font/activate":
-            self._font_op(lambda body: self.studio.activate(int(body.get("index", 0))))
-        elif self.path == "/api/font/remove":
-            self._remove_font()
-        elif self.path == "/api/font/context":
-            self._set_context()
-        elif self.path == "/api/masters":
-            self._masters()
-        else:
-            self._send_json({"error": "not found"}, status=404)
-
-    def _compute(self):
-        try:
-            body = self._read_json()
-        except (ValueError, AttributeError):
-            self._send_json({"ok": False, "problems": ["malformed request body"],
-                             "diagnostics": [], "glyphs": {}}, status=400)
-            return
-        # a layer stack (bottom → top) or, for back-compat, a single rules string
-        rules = body.get("layers") if isinstance(body.get("layers"), list) else body.get("rules", "")
-        gc_text = body.get("gc", "")
-        with self.studio.lock:
-            # the master the active font stands for: what `!if` blocks see
-            context = self.studio.context.for_font(self.studio.font)
-            view = build_view(self.studio.font, rules, context, self.studio.paths)
-            view["gcInactive"] = gc_inactive_lines(gc_text, context)
-            view["gcLabel"] = GC_LABEL
-            # GlyphConstruction preview: assemble composites from the anchors just
-            # computed (on a copy of the font — see compose.build_composite_view).
-            if view.get("ok") and isinstance(rules, list) and gc_text.strip():
-                comp = build_composite_view(self.studio.font, rules, gc_text, context,
-                                            self.studio.paths)
-                view["composites"] = comp["composites"]
-                view["uncovered"] = comp.get("uncovered", [])
-                if comp["problems"]:
-                    view["problems"] = view.get("problems", []) + comp["problems"]
-        # Autosave the base (bottom) layer only, and only when the rules are
-        # valid — so the saved file is always reloadable.
-        if view.get("ok"):
-            self.studio.autosave(_base_layer_text(rules))
-        self._send_json(view)
-
-    def _load_font(self):
-        """Accept a dropped UFO (files reconstructed from the browser) and ADD it
-        as a new active font (previously loaded fonts are kept)."""
-        try:
-            payload = self._read_json()
-            font, name, tmp = load_uploaded_font(payload.get("files", []),
-                                                 payload.get("name", "font"))
-        except ValueError as exc:                       # empty / non-UFO / malformed
-            self._send_json({"ok": False, "error": str(exc)}, status=400)
-            return
-        except Exception as exc:                        # OpenFont / IO failure
-            log.warning("font upload failed: %s", exc)
-            self._send_json({"ok": False, "error": f"could not open font: {exc}"},
-                            status=400)
-            return
-        with self.studio.lock:
-            self.studio.add_font(font, name, tmp)
-        self._send_json({"ok": True, "state": self.studio.state})
-
-    def _font_op(self, op):
-        """Run a font-list mutation under the lock and return the fresh state."""
-        try:
-            body = self._read_json()
-        except (ValueError, AttributeError):
-            self._send_json({"ok": False, "error": "malformed request body"}, status=400)
-            return
-        with self.studio.lock:
-            op(body)
-        self._send_json({"ok": True, "state": self.studio.state})
-
-    def _set_context(self):
-        """Set a font's master location / style name (from its card)."""
-        try:
-            body = self._read_json()
-        except (ValueError, AttributeError):
-            self._send_json({"ok": False, "error": "malformed request body"}, status=400)
-            return
-        location = body.get("location")
-        style = body.get("styleName")
-        try:
-            with self.studio.lock:
-                self.studio.set_context(int(body.get("index", 0)),
-                                        location if isinstance(location, str) else None,
-                                        style if isinstance(style, str) else None)
-        except ValueError as exc:
-            self._send_json({"ok": False, "error": str(exc)}, status=400)
-            return
-        self._send_json({"ok": True, "state": self.studio.state})
-
-    def _masters(self):
-        """Compare every loaded master's anchors/composites (on demand: it
-        computes the whole stack once per font)."""
-        try:
-            body = self._read_json()
-        except (ValueError, AttributeError):
-            self._send_json({"ok": False, "error": "malformed request body"}, status=400)
-            return
-        layers = body.get("layers") if isinstance(body.get("layers"), list) else []
-        with self.studio.lock:
-            report = masters_report(self.studio.master_entries(), layers,
-                                    body.get("gc", "") or "")
-        self._send_json(report)
-
-    def _remove_font(self):
-        try:
-            body = self._read_json()
-        except (ValueError, AttributeError):
-            self._send_json({"ok": False, "error": "malformed request body"}, status=400)
-            return
-        with self.studio.lock:
-            tmp = self.studio.remove_font(int(body.get("index", 0)))
-        if tmp:
-            shutil.rmtree(tmp, ignore_errors=True)
-        self._send_json({"ok": True, "state": self.studio.state})
 
 
 def serve(studio: Studio, host: str, port: int):

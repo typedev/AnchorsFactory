@@ -26,3 +26,20 @@ jobs:
       # Studio UI tests a Playwright browser; neither exists here, so they skip.
       - name: Test
         run: .venv/bin/python -m pytest -q
+
+  # The web Studio (web/): type-check and bundle it. Python never runs here;
+  # the e2e check of the site needs a browser and Pyodide from the CDN.
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run build

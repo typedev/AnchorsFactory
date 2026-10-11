@@ -10,6 +10,11 @@ anchors consistently across hundreds of glyphs, so a tool like
 [GlyphConstruction](https://github.com/typemytype/GlyphConstruction) can then
 assemble composite glyphs by snapping mark anchors to base anchors.
 
+**Try the rules in your browser:** [AnchorsFactory Studio](https://typedev.github.io/AnchorsFactory/)
+shows where every anchor lands and why, live as you edit, with composites
+assembled from them. It runs entirely in the tab: a font you drop in is never
+uploaded. See [docs/studio.md](docs/studio.md).
+
 ## Install
 
 ```bash
@@ -285,13 +290,16 @@ gets the former and offers a token the parser rejects.
 make venv      # create .venv, install the package (editable) + dev deps, via uv
 make test      # run the test suite
 make build     # build sdist + wheel into dist/
-make release   # bump minor, update CHANGELOG, build, upload to PyPI, tag + push
+make release   # bump minor, promote the CHANGELOG, check the build, tag + push
+make web-dev   # the web Studio (web/, needs Node) on a Vite dev server
 ```
 
-Releases are cut with `make release`: it bumps the minor version, fills in a
-[CHANGELOG](CHANGELOG.md) section from the commit log, publishes to PyPI, and
-tags `vX.Y.Z`. Set `UV_PUBLISH_TOKEN` first; use `make release-test` to rehearse
-against TestPyPI.
+Releases are cut with `make release`: it bumps the minor version (`ARGS=--no-bump`
+for a patch), promotes the [CHANGELOG](CHANGELOG.md)'s *Unreleased* section,
+checks the build, and pushes the tag `vX.Y.Z`. CI then tests, publishes to PyPI
+by trusted publishing (no token), creates the GitHub Release and deploys the
+web Studio to <https://typedev.github.io/AnchorsFactory/>. `make release-test`
+publishes a `.devN` build to TestPyPI.
 
 ## License
 

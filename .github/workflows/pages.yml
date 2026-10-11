@@ -1,0 +1,51 @@
+name: Web Studio
+
+# Builds web/ and deploys it to GitHub Pages
+# (https://typedev.github.io/AnchorsFactory/) on every release tag, so the
+# site runs the released engine. Run it by hand to redeploy.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      # the pinned pure-Python wheels (sha256-checked against PyPI)
+      - run: python3 scripts/fetch_web_wheels.py
+      # no install scripts: nothing here needs them, and a compromised
+      # package could otherwise tamper with the build
+      - run: npm ci --ignore-scripts
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

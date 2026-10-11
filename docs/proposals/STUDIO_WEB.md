@@ -89,7 +89,32 @@ our geometry:
 Target: real font `build_view` ≤ 0.3 s in CPython (≤ 0.7 s in Pyodide).
 Composites ≤ 1 s. Golden must stay identical.
 
-## Phase 1: one API, two transports
+## Phase 1: one API, two transports: DONE (2026-10-11)
+
+Done as planned, with three simplifications:
+
+- **One frontend, not a port.** The page stays in `anchorsfactory/studio/static/`
+  as plain JS and the local server keeps serving it unbuilt (no Node for the
+  local Studio). `web/` is a Vite + TS project that imports `app.js`/`app.css`
+  as they are, takes the markup from `static/index.html` through a small Vite
+  plugin, and supplies only the worker transport (`web/src/transport.ts`) and
+  the worker (`web/src/worker/python.worker.ts`).
+- **`Studio.dispatch(method, body)`** in `studio/api.py` is the whole API; the
+  HTTP routes and the worker calls are the same method names. The worker adds
+  `open_font_tree(root, warm=True)` for dropped files, which it writes into
+  MEMFS itself (no base64), and draws all outlines during the load.
+- **The engine comes from the checkout**, not the PyPI wheel: the site is built
+  from a release tag, so it is the same code, and `web/` stays usable on
+  unreleased changes. Only the five pure dependencies are pinned wheels
+  (`web/wheels.txt`, fetched sha256-checked by `scripts/fetch_web_wheels.py`).
+
+Measured in Chromium against the production build (cold browser cache):
+start + first view of the demo 2.5 s; a 3060-glyph UFO load 4.3 s with every
+outline drawn; an edit to the rules → updated view and composites about 1.2 s
+(0.3 s of it the editor's debounce). Results match the local Studio
+(161 composites).
+
+The original plan:
 
 - Extract `anchorsfactory/studio/api.py`, a facade with one function per
   endpoint that returns JSON-ready dicts. `server.py` becomes an HTTP adapter
@@ -117,6 +142,11 @@ Composites ≤ 1 s. Golden must stay identical.
 - Later: IndexedDB session autosave with a "changed on disk" warning.
 
 ## Phase 3: deploy
+
+Done in Phase 1 in a simpler form: `.github/workflows/pages.yml` builds `web/`
+on each release tag (or by hand) and deploys it to GitHub Pages; `ci.yml`
+type-checks and bundles `web/` on every push. No service worker yet. The plan
+was:
 
 - `scripts/build_web.py` builds `web/dist/` from the static files, the Studio
   sources and pinned wheels in `web/wheels/` with a manifest, so nothing is

@@ -111,6 +111,7 @@ button.icon{padding:5px 8px;line-height:1;font-size:13px}
   white-space:pre;overflow:hidden;
 }
 .ed-hl{pointer-events:none;color:var(--ink);z-index:1}
+.ed-hl-in{width:max-content;min-width:100%}
 .ed-hl .ln{display:block;min-height:var(--lh)}
 .ed-hl .ln.err{background:color-mix(in srgb,var(--err) 13%,transparent);box-shadow:inset 2px 0 var(--err)}
 .ed-ta{overflow:auto;background:transparent;color:transparent;caret-color:var(--ink);z-index:2;resize:none;outline:0}

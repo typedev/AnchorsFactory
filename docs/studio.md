@@ -5,11 +5,23 @@ against it live, and shows **why** each anchor landed where it did — the
 scanline it sampled, the ink stems it found, the centroid it measured — with a
 click-through from every anchor back to the rule line that placed it.
 
-It is a small local web app: a stdlib HTTP server on your machine serving a
-single page. The font is opened once and kept in memory; rule text is sent from
-the browser on every edit. **No font bytes ever leave the machine, and Studio
+It comes in two forms with the same page and the same Python behind it:
+
+- **In the browser**, at <https://typedev.github.io/AnchorsFactory/>. Nothing
+  to install: the engine runs in the tab (Pyodide, in a Web Worker), so a
+  dropped font is read by the page and **never uploaded**. The first visit
+  downloads Python and the font libraries; the browser caches them.
+  It opens on a small demo font with the sample rule sets in the preset menu.
+- **Locally**, as a stdlib HTTP server on your machine serving that page (from
+  a checkout; the Studio is not in the PyPI wheel). This is the development
+  mode, and the one that can open fonts from the command line, open a whole
+  designspace, and autosave rules to a file.
+
+Either way the font is opened once and kept in memory, and rule text is sent
+to Python on every edit. **No font bytes ever leave the machine, and Studio
 never writes anything into the font** — it is a read-only debugger. To actually
-place anchors, use the `anchorsfactory` CLI.
+place anchors, use the `anchorsfactory` CLI. Rules and constructions can be
+downloaded from their editors.
 
 ## Launching
 
@@ -230,8 +242,9 @@ Besides the command-line argument, you can load a font from the browser:
   the page;
 - or click **load .ufoz** in the header to pick a `.ufoz`/`.zip` file.
 
-The files are sent to the local server, reconstructed in a temporary directory,
-and opened as a **new active font** — any fonts already loaded are kept, so you
+The files are handed to Python (the local server, or the worker in the
+browser), reconstructed in a temporary directory, and opened as a **new active
+font** — any fonts already loaded are kept, so you
 can hold a Regular and its Italic (or several masters) at once and switch between
 them. Your original font on disk is never touched. The sidebar shows a card per
 loaded font (family name, UPM, italic angle); click one to make it active, or
