@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio Pyodide spike</title>
+<style>
+  body{font:13px/1.5 ui-monospace,monospace;margin:16px;background:#f5f2ea;color:#23201b}
+  pre{white-space:pre-wrap}
+</style>
+</head>
+<body>
+<h1>AnchorsFactory engine in Pyodide: spike</h1>
+<p>Phase 0 of docs/proposals/STUDIO_WEB.md. Everything runs in a Web Worker in this tab.</p>
+<pre id="log">booting…</pre>
+<script>
+  // Query: ?font=<url of a zipped .ufo> to also measure a real font.
+  const params = new URLSearchParams(location.search);
+  const log = document.getElementById("log");
+  const worker = new Worker("worker.js", {type: "module"});
+  window.__result = null;
+  worker.onmessage = ({data}) => {
+    if(data.type === "log"){ log.textContent += "\n" + data.text; }
+    if(data.type === "done"){ window.__result = data.result; log.textContent += "\n\nDONE\n" + JSON.stringify(data.result, null, 2); }
+    if(data.type === "error"){ window.__result = {error: data.error}; log.textContent += "\n\nERROR\n" + data.error; }
+  };
+  worker.postMessage({font: params.get("font")});
+</script>
+</body>
+</html>
