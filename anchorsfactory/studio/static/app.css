@@ -246,6 +246,57 @@ button.icon{padding:5px 8px;line-height:1;font-size:13px}
 }
 #drop .big{font-size:20px;color:var(--ink);font-weight:600;margin-bottom:6px}
 #drop .small{font-family:var(--mono);font-size:12px;color:var(--muted)}
+/* ---- start screen: shown until a font is opened (web, or a local run without one) ---- */
+header{position:relative;z-index:45}
+#start{
+  position:fixed;left:0;right:0;bottom:0;top:var(--hdr,45px);z-index:40;overflow:auto;
+  display:flex;flex-direction:column;align-items:center;padding:24px;background:var(--canvas);
+}
+#start[hidden]{display:none}
+.st-col{margin:auto 0;width:100%;max-width:576px;padding-top:24px}
+.st-title{text-align:center;margin-bottom:40px}
+.st-title h1{
+  margin:0;font-size:clamp(2.75rem,8vw,4.25rem);font-weight:600;line-height:1;
+  letter-spacing:-.035em;color:var(--ink);
+}
+.st-mark{position:relative;display:inline-block}
+.st-anchor{
+  position:absolute;left:50%;bottom:calc(100% + 2px);transform:translateX(-50%);
+  display:flex;flex-direction:column-reverse;align-items:center;gap:3px;
+  font-size:11px;font-weight:500;letter-spacing:normal;color:var(--anchor);font-family:var(--mono);
+}
+.st-anchor i{width:9px;height:9px;border-radius:50%;background:var(--anchor);display:block}
+.st-title p{margin:56px auto 0;max-width:28rem;font-size:15px;line-height:1.6;color:var(--muted)}
+.st-zone{
+  border:1.5px dashed color-mix(in srgb,var(--muted) 55%,transparent);border-radius:16px;
+  padding:40px 32px;text-align:center;font-size:13px;
+  background:color-mix(in srgb,var(--panel) 60%,transparent);transition:border-color .15s,background .15s;
+}
+.st-zone.over{border-color:var(--anchor);background:color-mix(in srgb,var(--anchor) 10%,var(--canvas))}
+.st-zone p{margin:0}
+.st-big{font-size:15px;font-weight:500;color:var(--ink)}
+.st-small{margin-top:4px!important;color:var(--muted)}
+.st-btns{margin-top:16px;display:flex;justify-content:center;gap:12px}
+.st-btns button{height:36px;padding:0 16px;border-radius:8px;font:500 13px var(--ui);cursor:pointer}
+.st-primary{background:var(--anchor);color:#fff;border:0}
+.st-primary:hover{filter:brightness(1.1)}
+.st-secondary{background:var(--panel);color:var(--text);border:1px solid var(--line)}
+.st-secondary:hover{background:var(--panel2)}
+.st-opening p{font-size:13px;color:var(--text)}
+.st-opening .st-bar{max-width:24rem;margin:12px auto 0}
+.st-barlbl{margin-top:6px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.st-bar{height:4px;border-radius:4px;overflow:hidden;background:var(--panel2)}
+.st-bar>div{height:100%;width:5%;background:var(--anchor);transition:width .4s}
+.st-error{margin:16px 0 0;padding:8px 12px;border-radius:8px;font-size:13px;color:var(--err);
+  background:color-mix(in srgb,var(--err) 12%,transparent)}
+.st-runtime{margin-top:16px;font-size:12px;color:var(--muted)}
+.st-runtime .st-bar{margin-top:4px}
+.st-runtime.ready .st-bar{display:none}
+.st-privacy{margin:32px 0 0;font-size:14px;line-height:1.6;color:var(--muted)}
+.st-privacy b{color:var(--ink);font-weight:500}
+.st-credits{margin-top:40px;display:flex;flex-wrap:wrap;justify-content:center;gap:4px 12px;font-size:12px;color:var(--muted)}
+.st-credits a{color:var(--text);text-decoration:none}
+.st-credits a:hover{color:var(--anchor)}
 /* ---- svg element classes ---- */
 .metric{stroke:var(--metric);stroke-width:1;stroke-dasharray:2 5;vector-effect:non-scaling-stroke}
 .metric-lbl{fill:var(--metric);font-family:var(--mono);font-size:11px}
@@ -300,3 +351,12 @@ button.icon{padding:5px 8px;line-height:1;font-size:13px}
 .masters .m-row.warn{color:var(--stem)}
 .masters .m-row.err{color:var(--err)}
 .masters .m-row.muted{color:var(--muted)}
+
+/* ---- designspace picker (a dropped folder with several) ---- */
+#dspick{border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);
+  padding:16px;min-width:min(420px,90vw);max-width:90vw;font-family:var(--mono);font-size:12px}
+#dspick::backdrop{background:rgba(0,0,0,.45)}
+.dp-title{margin-bottom:12px}
+.dp-list{display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow:auto}
+.dp-item{text-align:left;padding:7px 10px}
+.dp-foot{display:flex;justify-content:flex-end;margin-top:12px}

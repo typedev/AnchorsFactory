@@ -20,6 +20,8 @@ window.studioApi = window.studioApi || {
   },
   // startup progress (the worker reports Python loading; nothing to say here)
   onStatus(){},
+  // the server is up by the time the page loads (no worker start-up to report)
+  onReady(fn){ fn(null); },
 };
 
 async function fileToB64(file){

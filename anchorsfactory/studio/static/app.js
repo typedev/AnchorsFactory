@@ -29,6 +29,9 @@ const editorForLayer = i => (i === -1 ? gcEd : anchorLayers[i] ? anchorLayers[i]
 async function boot(){
   const status = $("#status");
   studioApi.onStatus(text => { status.className = "pill"; status.textContent = text; });
+  // the web start screen and its drop zone work while Python is still loading
+  if(studioApi.kind === "worker") showStart();
+  setupFontDrop();
   try { META = await studioApi.call("state"); }
   catch(err){ status.className = "pill bad"; status.textContent = "failed to start";
     $("#fontmeta").textContent = String(err.message || err); throw err; }
@@ -41,18 +44,20 @@ async function boot(){
   setupGrid();
   setupTheme();
   setupFind();
-  setupFontDrop();
   setupSplitters();
   setupView();
   $("#outbar").addEventListener("click", () => $("#output").classList.toggle("open"));
   $("#compareMasters").addEventListener("click", compareMasters);
+  // locally, the start screen only when no font was given (the demo is up)
+  if(studioApi.kind !== "worker" && META.font === "demo" && (META.fonts || []).length <= 1) showStart();
   compute();
+  bootResolve();
 }
 
 function setFontMeta(){
-  let s = `${META.font}  ${META.unitsPerEm}upm  ital ${META.italicAngle}°`;
+  let s = placeholderFont ? "" : `${META.font}  ${META.unitsPerEm}upm  ital ${META.italicAngle}°`;
   if(META.save) s += `  · autosave → ${META.save}`;
-  if(studioApi.kind === "worker") s += `  · v${META.version}, runs in this tab: fonts are not uploaded`;
+  if(studioApi.kind === "worker") s += `${s ? "  · " : ""}v${META.version}, runs in this tab: fonts are not uploaded`;
   $("#fontmeta").textContent = s;
 }
 
@@ -601,51 +606,298 @@ function setupSplitters(){
  *  Font loading: drag a font/.anchors, or pick a file
  * ===================================================================== */
 function setupFontDrop(){
-  const overlay = $("#drop");
+  const overlay = $("#drop"), zone = $("#stzone");
   let depth = 0;
-  addEventListener("dragenter", e => { e.preventDefault(); if(depth++ === 0) overlay.classList.add("on"); });
+  // on the start screen its drop zone lights up; over the workspace, the overlay
+  const target = () => startShown() ? zone : overlay;
+  addEventListener("dragenter", e => { e.preventDefault(); if(depth++ === 0) target().classList.add(startShown() ? "over" : "on"); });
   addEventListener("dragover", e => e.preventDefault());
-  addEventListener("dragleave", e => { e.preventDefault(); if(--depth <= 0){ depth=0; overlay.classList.remove("on"); } });
-  addEventListener("drop", async e => {
-    e.preventDefault(); depth=0; overlay.classList.remove("on");
-    const roots=[];
-    for(const it of e.dataTransfer.items){ const en = it.webkitGetAsEntry && it.webkitGetAsEntry(); if(en) roots.push(en); }
-    if(!roots.length) return;
-    const collected=[];
-    for(const r of roots) await walkEntry(r, "", collected);
-    if(collected.length === 1 && /\.(anchors|af|dsl|txt)$/i.test(collected[0].path)){   // a rules file → a new anchor layer
-      const nm = collected[0].path.replace(/.*\//, "").replace(/\.(anchors|af|dsl|txt)$/i, "");
-      addAnchorLayer(nm, await collected[0].file.text(), {activate: true});
-      persist(); SELECTED = null; HL_ANCHOR = null; compute(); return;
-    }
-    await sendFont(roots[0].name, collected);
+  addEventListener("dragleave", e => { e.preventDefault(); if(--depth <= 0){ depth=0; overlay.classList.remove("on"); zone.classList.remove("over"); } });
+  addEventListener("drop", e => {
+    e.preventDefault(); depth=0; overlay.classList.remove("on"); zone.classList.remove("over");
+    // the DataTransfer empties after the event: take the entries now
+    const entries = [...e.dataTransfer.items].filter(i => i.kind === "file")
+      .map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+    if(entries.length) guarded(openEntries(entries));
   });
   $("#loadfont").addEventListener("click", () => $("#fontfile").click());
   $("#addfont").addEventListener("click", () => $("#fontfile").click());
-  $("#fontfile").addEventListener("change", async e => {
-    const list=[...e.target.files]; if(!list.length) return;
-    const collected=list.map(f => ({path: f.webkitRelativePath || f.name, file: f}));
-    const first=list[0];
-    const name=(first.webkitRelativePath ? first.webkitRelativePath.split("/")[0] : first.name) || "font";
-    await sendFont(name, collected); e.target.value="";
+  $("#addfolder").addEventListener("click", pickFolder);
+  $("#stfolder").addEventListener("click", pickFolder);
+  $("#stufoz").addEventListener("click", () => $("#fontfile").click());
+  // without the File System Access API: a directory <input>, read whole
+  // (its browser prompt calls this local read an "upload")
+  $("#folderfile").addEventListener("change", e => {
+    const list = [...e.target.files].filter(f => !f.webkitRelativePath.split("/").some(p => p.startsWith(".")));
+    e.target.value = "";
+    if(list.length) guarded(sendFont(list[0].webkitRelativePath.split("/")[0] || "font",
+                                     list.map(f => ({path: f.webkitRelativePath, file: f}))));
+  });
+  $("#fontfile").addEventListener("change", e => {
+    const list = [...e.target.files]; e.target.value = "";
+    if(list.length) guarded(sendFont(list[0].name, list.map(f => ({path: f.name, file: f}))));
   });
 }
 
-async function walkEntry(entry, prefix, out){
-  const path = prefix ? prefix+"/"+entry.name : entry.name;
-  if(entry.isFile){ out.push({path, file: await new Promise((res,rej)=>entry.file(res,rej))}); }
-  else if(entry.isDirectory){ const reader = entry.createReader(); let batch;
-    do { batch = await new Promise((res,rej)=>reader.readEntries(res,rej)); for(const e of batch) await walkEntry(e, path, out); } while(batch.length); }
+const RULES_FILE = /\.(anchors|af|dsl|txt)$/i;
+const unsupported = name => new Error(`${name}: drop a .ufo folder, a .ufoz file or a folder with a .designspace.`);
+const guarded = promise => promise.catch(err => fontError(err));
+
+/** A folder: the File System Access picker (Chrome asks to *view* the files),
+ *  else a directory <input>. */
+async function pickFolder(){
+  if(!window.showDirectoryPicker){ $("#folderfile").click(); return; }
+  let dir;
+  try { dir = await showDirectoryPicker({id: "font", mode: "read"}); }
+  catch(err){ return; }                              // the picker was dismissed
+  await guarded(openFolder(handleFolder(dir)));
+}
+
+async function openEntries(entries){
+  if(entries.length > 1) throw new Error("Drop one font at a time.");
+  const entry = entries[0];
+  if(entry.isDirectory) return openFolder(entryFolder(entry));
+  const file = await readRetrying(() => new Promise((res, rej) => entry.file(res, rej)), entry.name);
+  if(RULES_FILE.test(entry.name)){                   // a rules file → a new anchor layer
+    await bootDone;                                  // (on the start screen: ready for the font)
+    addAnchorLayer(entry.name.replace(RULES_FILE, ""), await file.text(), {activate: true});
+    persist(); SELECTED = null; HL_ANCHOR = null; compute(); return;
+  }
+  if(!/\.(ufoz|zip)$/i.test(entry.name)) throw unsupported(entry.name);
+  return sendFont(entry.name, [{path: entry.name, file}]);
+}
+
+/* -- folders: drop entries and picker handles behind one interface -------- */
+
+function entryFolder(dir){
+  return {
+    name: dir.name,
+    async list(){
+      const reader = dir.createReader(), all = []; let batch;
+      do { batch = await new Promise((res, rej) => reader.readEntries(res, rej)); all.push(...batch); } while(batch.length);
+      return all.map(e => e.isFile
+        ? {kind: "file", name: e.name, file: () => new Promise((res, rej) => e.file(res, rej))}
+        : {kind: "directory", name: e.name, folder: entryFolder(e)});
+    },
+    sub: path => new Promise((res, rej) => dir.getDirectory(path, {}, d => res(entryFolder(d)), rej)),
+  };
+}
+
+function handleFolder(dir){
+  return {
+    name: dir.name,
+    async list(){
+      const out = [];
+      for await (const h of dir.values()) out.push(h.kind === "file"
+        ? {kind: "file", name: h.name, file: () => h.getFile()}
+        : {kind: "directory", name: h.name, folder: handleFolder(h)});
+      return out;
+    },
+    async sub(path){ let d = dir; for(const part of path.split("/")) d = await d.getDirectoryHandle(part); return handleFolder(d); },
+  };
+}
+
+async function listRetrying(folder, path){
+  for(let attempt = 1; ; attempt++){
+    try { return await folder.list(); }
+    catch(err){ if(attempt >= 4) throw new Error(`${path}/: ${err.message || err}`);
+      await new Promise(r => setTimeout(r, 50 * attempt)); }
+  }
+}
+
+/** Every file under a folder (names only, nothing read yet), hidden ones skipped. */
+async function collect(folder, rel, out){
+  for(const node of await listRetrying(folder, rel)){
+    if(node.name.startsWith(".")) continue;          // .git, .DS_Store: never part of a font
+    const path = `${rel}/${node.name}`;
+    if(node.kind === "file") out.push({path, get: node.file}); else await collect(node.folder, path, out);
+  }
+  return out;
+}
+
+// A failed read is retried on a fresh handle: on a large folder Chrome now and
+// then refuses a perfectly readable file (NotReadableError), and one such file
+// would otherwise fail the whole font. The bytes are kept as an ArrayBuffer, not
+// a Blob: Chrome pages large Blob totals out to disk, and reading them back can
+// fail the same way.
+const inMemory = bytes => ({arrayBuffer: async () => bytes, text: async () => new TextDecoder().decode(bytes)});
+async function readRetrying(getFile, path){
+  for(let attempt = 1; ; attempt++){
+    try { return inMemory(await (await getFile()).arrayBuffer()); }
+    catch(err){ if(attempt >= 4) throw new Error(`${path}: ${err.message || err}`);
+      await new Promise(r => setTimeout(r, 50 * attempt)); }
+  }
+}
+
+async function readPending(pending){
+  const out = [];
+  for(let i = 0; i < pending.length; i += 64){
+    progress("Reading files", i, pending.length);
+    out.push(...await Promise.all(pending.slice(i, i + 64).map(async ({path, get}) => ({path, file: await readRetrying(get, path)}))));
+  }
+  return out;
+}
+
+/** UFO paths a designspace's <source>s reference, in order, deduplicated. */
+function designspaceSources(xml){
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  return [...new Set([...doc.querySelectorAll("sources > source[filename]")].map(s => s.getAttribute("filename")))];
+}
+
+/** `a/./b/../c` → `a/c`; null when the path leaves the folder or is absolute. */
+function normalizeRelative(path){
+  if(path.startsWith("/") || /^[a-z]:/i.test(path)) return null;
+  const parts = [];
+  for(const p of path.replace(/\\/g, "/").split("/")){
+    if(!p || p === ".") continue;
+    if(p === ".."){ if(!parts.length) return null; parts.pop(); } else parts.push(p);
+  }
+  return parts.length ? parts.join("/") : null;
+}
+
+/**
+ * A dropped or picked folder. A .ufo is read whole. A project folder: pick one
+ * of the .designspace files at its top, then read only that file and the UFOs
+ * it references (projects hold builds, proofs and other masters too). A source
+ * outside the folder or missing from it is left for Python to report.
+ */
+async function openFolder(folder){
+  progress("Listing the files", 0, 0);
+  if(/\.ufo$/i.test(folder.name))
+    return sendFont(folder.name, await readPending(await collect(folder, folder.name, [])));
+  const top = await listRetrying(folder, folder.name);
+  const found = top.filter(n => n.kind === "file" && /\.designspace$/i.test(n.name))
+                   .sort((a, b) => a.name.localeCompare(b.name));
+  if(!found.length){
+    const ufo = top.filter(n => n.kind === "directory" && /\.ufo$/i.test(n.name))
+                   .sort((a, b) => a.name.localeCompare(b.name))[0];
+    if(!ufo) throw new Error(`${folder.name}: no .designspace or .ufo at the top of this folder.`);
+    return sendFont(ufo.name, await readPending(await collect(ufo.folder, `${folder.name}/${ufo.name}`, [])));
+  }
+  let chosen = found[0];
+  if(found.length > 1){
+    progress("Choose a designspace", 0, 0);
+    const name = await chooseDesignspace(found.map(n => n.name));
+    if(!name){ progressDone(); return; }
+    chosen = found.find(n => n.name === name);
+  }
+  const ds = await readRetrying(chosen.file, chosen.name);
+  const sources = designspaceSources(await ds.text());
+  const pending = [];
+  for(const [i, source] of sources.entries()){
+    progress("Listing the masters", i, sources.length);
+    const rel = normalizeRelative(source);
+    let ufo = null;
+    if(rel) try { ufo = await folder.sub(rel); } catch(err){ /* reported by Python */ }
+    if(ufo) await collect(ufo, `${folder.name}/${rel}`, pending);
+  }
+  const files = [{path: `${folder.name}/${chosen.name}`, file: ds}, ...await readPending(pending)];
+  return sendFont(folder.name, files);
+}
+
+// Which designspace of a dropped folder to open: resolves to its path, or null.
+function chooseDesignspace(choices){
+  const dlg = $("#dspick"), list = dlg.querySelector(".dp-list");
+  list.innerHTML = "";
+  return new Promise(resolve => {
+    const done = v => { dlg.close(); resolve(v); };
+    for(const c of choices){
+      const b = document.createElement("button"); b.className = "ghost dp-item"; b.textContent = c;
+      b.addEventListener("click", () => done(c)); list.appendChild(b);
+    }
+    dlg.querySelector(".dp-cancel").onclick = () => done(null);
+    dlg.oncancel = e => { e.preventDefault(); done(null); };     // Esc
+    dlg.showModal();
+  });
+}
+
+/* -- start screen and progress ------------------------------------------- */
+
+let bootDone, bootResolve, pythonReady = false;
+bootDone = new Promise(r => bootResolve = r);
+const startShown = () => !$("#start").hidden;
+
+/** Shown until a font opens: always on the web, locally when no font was given.
+ *  The session's placeholder font (the demo) is dropped when the first one opens. */
+let placeholderFont = false;
+function showStart(){
+  const start = $("#start");
+  placeholderFont = true;
+  start.style.setProperty("--hdr", $("header").offsetHeight + "px");
+  start.hidden = false;
+  if(studioApi.kind !== "worker"){
+    $("#stprivacy").textContent = "The Studio runs on this computer as a local server: nothing is sent anywhere. " +
+      "The font is only read; rules are saved by downloading an .anchors file.";
+  }
+  const STAGES = {"starting Python…": .15, "loading font libraries…": .5, "starting the Studio…": .85};
+  studioApi.onStatus(text => {
+    if(pythonReady || !(text in STAGES)) return;
+    $("#strtlbl").textContent = text[0].toUpperCase() + text.slice(1);
+    $("#strtbar").style.width = `${STAGES[text] * 100}%`;
+  });
+  studioApi.onReady(info => {
+    pythonReady = true;
+    $("#struntime").classList.add("ready");
+    $("#strtlbl").textContent = info
+      ? `Ready · Python ${info.versions.python} · started in ${(info.ms / 1000).toFixed(1)} s`
+      : `Ready · local server · v${META.version || ""}`;
+    if(info) $("#strtlbl").title = JSON.stringify(info.versions);
+  });
+}
+
+function hideStart(){ $("#start").hidden = true; progressDone(); }
+
+/** Opening progress: the status pill, and the start screen's bar while it is up. */
+function progress(label, done, total){
+  const status = $("#status"); status.className = "pill";
+  status.textContent = total ? `${label.toLowerCase()} ${done}/${total}` : `${label.toLowerCase()}…`;
+  if(!startShown()) return;
+  $("#sterror").hidden = true; $("#stidle").hidden = true; $("#stopening").hidden = false;
+  $("#stopenlbl").textContent = pythonReady ? `${label}…` : `${label}… (waiting for Python)`;
+  $("#stopenbar").style.width = total ? `${Math.max(5, 100 * done / total)}%` : "5%";
+  $("#stopencount").textContent = total ? `${done} / ${total}` : "";
+}
+
+function progressDone(){ $("#stidle").hidden = false; $("#stopening").hidden = true; }
+
+function fontError(err){
+  const status = $("#status"); status.className = "pill bad"; status.textContent = "font error";
+  const text = err ? String(err.message || err) : "load failed";
+  if(startShown()){ progressDone(); const box = $("#sterror"); box.textContent = text; box.hidden = false; return; }
+  $("#problems").innerHTML = `<div class="row err"><span class="tag">font</span><span>${escapeHtml(text)}</span></div>`;
 }
 
 async function sendFont(name, collected){
-  const status=$("#status"); status.className="pill"; status.textContent="loading font…";
+  progress("Opening the font", 0, 0);
+  await bootDone;
+  const status = $("#status");
   let j;
   try { j = await studioApi.loadFont(name, collected); }
-  catch(err){ j = {ok:false, error:String(err)}; }
-  if(!j.ok){ status.className="pill bad"; status.textContent="font error";
-    $("#problems").innerHTML = `<div class="row err"><span class="tag">font</span><span>${escapeHtml(j.error||"load failed")}</span></div>`; return; }
+  catch(err){ j = {ok:false, error:String(err.message || err)}; }
+  // a zip with several designspaces: ask which one (the drop waits in Python)
+  if(j.ok && j.choose){
+    status.textContent = "choose a designspace…";
+    const path = await chooseDesignspace(j.choose);
+    if(path) progress("Loading the masters", 0, 0);
+    try { j = await studioApi.call("font/designspace", {path}); }
+    catch(err){ j = {ok:false, error:String(err.message || err)}; }
+    if(j.ok && !path){ progressDone(); compute(); return; }   // cancelled
+  }
+  if(!j.ok) return fontError(j.error);
+  if(placeholderFont){                               // the first real font: drop the placeholder
+    placeholderFont = false;
+    try { const r = await studioApi.call("font/remove", {index: 0}); if(r.ok && r.state) j.state = r.state; }
+    catch(_){ /* keep it listed */ }
+  }
+  hideStart();
   Object.assign(META, j.state); setFontMeta(); renderFontCards();
+  // a designspace opened: say which, and which sources were not in the drop
+  const box = $("#masters");
+  if(j.designspace){
+    box.hidden = false;
+    box.innerHTML = `<div class="m-row muted">${escapeHtml(j.designspace)}: ${j.masters} master${j.masters === 1 ? "" : "s"}</div>` +
+      (j.problems || []).map(m => `<div class="m-row warn">${escapeHtml(m)}</div>`).join("");
+  }
   SELECTED = null; HL_ANCHOR = null; GLYPHS = {};    // the new font becomes active
   ALLGLYPHS = null; ALLMAP = {};                     // …its all-glyphs geometry is fresh
   for(const k in lastPos) delete lastPos[k];
@@ -986,6 +1238,15 @@ function stableViewBox(midX, canvasEl){
   return {x0: midX - W/2, y0: -yc - H/2, W, H};   // screen coords (Y points down)
 }
 
+// Font units per screen pixel in the inspector, so labels keep a fixed on-screen
+// size whatever the font's UPM, the canvas size or the zoom.
+const pxUnits = (H, canvasEl) => H / ((canvasEl && canvasEl.clientHeight) || 600);
+// An SVG label `px` screen pixels tall, offset (dx, dy) screen pixels from (x, y).
+function label(text, x, y, px, u, {cls=null, dx=0, dy=0}={}){
+  const t = el("text", {x: x + dx*u, y: y + dy*u}); if(cls) t.setAttribute("class", cls);
+  t.style.fontSize = `${px*u}px`; t.textContent = text; return t;
+}
+
 // Outline class for a path: filled ink, or a stroked outline (marks tinted).
 function inkClass(mark){ return RENDER_MODE === "outline" ? ("ink-outline" + (mark?" mark":"")) : "ink"; }
 
@@ -1034,11 +1295,12 @@ function drawGlyph(g, {small=false, canvasEl=null}={}){
     const vb = stableViewBox(inkMidX(g), canvasEl); x0=vb.x0; minY=vb.y0; W=vb.W; H=vb.H;
   }
   const svg = el("svg", {viewBox:`${x0} ${minY} ${W} ${H}`, preserveAspectRatio:"xMidYMid meet"});
+  const u = pxUnits(H, canvasEl);
   if(!small){
     const order=[["descender","descender"],["baseline","baseline"],["xHeight","x-height"],["capHeight","cap-height"],["ascender","ascender"]];
     for(const [key,lbl] of order){ const h = META.metrics[key]; if(h===undefined) continue;
       svg.appendChild(el("line",{class:"metric", x1:x0, y1:-h, x2:x0+W, y2:-h}));
-      const t=el("text",{class:"metric-lbl", x:x0+6, y:-h-4}); t.textContent=lbl; svg.appendChild(t); }
+      svg.appendChild(label(lbl, x0, -h, 11, u, {cls:"metric-lbl", dx:6, dy:-4})); }
     if(g.bounds){ const [bx0,by0,bx1,by1]=g.bounds; svg.appendChild(el("rect",{class:"bbox", x:bx0, y:-by1, width:bx1-bx0, height:by1-by0})); }
   }
   const flip = el("g",{transform:"matrix(1 0 0 -1 0 0)"});
@@ -1064,7 +1326,7 @@ function drawGlyph(g, {small=false, canvasEl=null}={}){
     const grp = el("g",{class:"anchor-g"+(warn?" warn":""), "data-name":a.name});
     grp.appendChild(el("circle",{class:"ring", cx:0, cy:0, r:small?9:16}));
     grp.appendChild(el("circle",{cx:0, cy:0, r:small?3:5}));
-    if(!small){ const t=el("text",{x:12, y:-10}); t.textContent=`${a.name} (${Math.round(a.x)}, ${Math.round(a.y)})`; grp.appendChild(t); }
+    if(!small) grp.appendChild(label(`${a.name} (${Math.round(a.x)}, ${Math.round(a.y)})`, 0, 0, 15, u, {dx:10, dy:-9}));
     const target=`translate(${a.x}px, ${-a.y}px)`;
     if(!small && !REDUCED && store[a.name]){ const p=store[a.name]; grp.style.transform=`translate(${p.x}px, ${-p.y}px)`;
       requestAnimationFrame(()=>requestAnimationFrame(()=>{ grp.style.transform=target; })); }
@@ -1087,11 +1349,12 @@ function drawComposite(c, {small=false, canvasEl=null}={}){
     const vb = stableViewBox(inkMidX({bounds:c.bounds, advance:c.advance}), canvasEl); x0=vb.x0; minY=vb.y0; W=vb.W; H=vb.H;
   }
   const svg = el("svg", {viewBox:`${x0} ${minY} ${W} ${H}`, preserveAspectRatio:"xMidYMid meet"});
+  const u = pxUnits(H, canvasEl);
   if(!small){
     const order=[["descender","descender"],["baseline","baseline"],["xHeight","x-height"],["capHeight","cap-height"],["ascender","ascender"]];
     for(const [key,lbl] of order){ const h = META.metrics[key]; if(h===undefined) continue;
       svg.appendChild(el("line",{class:"metric", x1:x0, y1:-h, x2:x0+W, y2:-h}));
-      const t=el("text",{class:"metric-lbl", x:x0+6, y:-h-4}); t.textContent=lbl; svg.appendChild(t); }
+      svg.appendChild(label(lbl, x0, -h, 11, u, {cls:"metric-lbl", dx:6, dy:-4})); }
   }
   const flip = el("g",{transform:"matrix(1 0 0 -1 0 0)"});
   (c.components||[]).forEach((comp, i) => {
@@ -1105,7 +1368,7 @@ function drawComposite(c, {small=false, canvasEl=null}={}){
       const grp = el("g",{class:"join-g"});
       grp.appendChild(el("circle",{cx:j.x, cy:-j.y, r:14}));
       grp.appendChild(el("circle",{class:"dot", cx:j.x, cy:-j.y, r:4}));
-      const t=el("text",{x:j.x+12, y:-j.y-10}); t.textContent=j.anchor; grp.appendChild(t);
+      grp.appendChild(label(j.anchor, j.x, -j.y, 15, u, {dx:10, dy:-9}));
       svg.appendChild(grp);
     }
   }

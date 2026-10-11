@@ -1,10 +1,10 @@
-"""Reconstruct a dropped UFO on the server side.
+"""Reconstruct a dropped font on the server side.
 
 A UFO is a *directory* (a bundle of plists + one ``.glif`` per glyph), so the
 browser sends every file with its relative path; here we write them back into a
-fresh temp dir, expand any dropped ``.zip``/``.ufoz``, locate the ``.ufo`` root,
-and open it. Everything stays local — the temp dir lives only for the session
-and is replaced on the next drop.
+fresh temp dir, expand any dropped ``.zip``/``.ufoz``, then open either one
+UFO or the sources of a ``.designspace`` found in the tree. Everything stays
+local; the temp dir lives as long as a font opened from it.
 
 Paths coming from the browser are untrusted, so every write and every zip member
 is confined to the temp dir (no ``..`` escape / zip-slip).
@@ -54,14 +54,11 @@ def _find_ufo(root: str) -> str | None:
     return fallback
 
 
-def load_uploaded_font(files, name: str = "font"):
-    """Rebuild and open a UFO from browser-uploaded *files*.
-
-    *files* is a list of ``{"path": <relative path>, "data": <base64>}``. Returns
-    ``(font, family_name, tmpdir)``; the caller owns *tmpdir* and should remove it
-    when the font is replaced. Raises ``ValueError`` on an empty / malformed /
-    non-UFO upload (the temp dir is cleaned up first).
-    """
+def write_upload(files) -> str:
+    """Write browser-uploaded *files* (``{"path": <relative path>, "data":
+    <base64>}``) into a fresh temp dir and return it. The caller owns the dir.
+    Raises ``ValueError`` on an empty upload or a path that escapes the dir
+    (the dir is removed first)."""
     if not files:
         raise ValueError("no files received")
     tmp = os.path.realpath(tempfile.mkdtemp(prefix="afstudio-"))
@@ -74,11 +71,67 @@ def load_uploaded_font(files, name: str = "font"):
             os.makedirs(os.path.dirname(dest), exist_ok=True)
             with open(dest, "wb") as fh:
                 fh.write(base64.b64decode(entry["data"]))
+        return tmp
+    except Exception:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
+
+
+def load_uploaded_font(files, name: str = "font"):
+    """Rebuild and open a UFO from browser-uploaded *files* (see
+    :func:`write_upload`). Returns ``(font, family_name, tmpdir)``; the caller
+    owns *tmpdir*. Raises ``ValueError`` on an empty / malformed / non-UFO
+    upload (the temp dir is cleaned up first)."""
+    tmp = write_upload(files)
+    try:
         font, family = open_font_tree(tmp)
         return font, family, tmp
     except Exception:
         shutil.rmtree(tmp, ignore_errors=True)
         raise
+
+
+def find_designspaces(root: str) -> list:
+    """The ``.designspace`` files under *root* (archives expanded first), as
+    sorted paths relative to *root*. Dot-directories are skipped."""
+    _expand_archives(root)
+    found = []
+    for dirpath, dirs, files in os.walk(root):
+        dirs[:] = sorted(d for d in dirs if not d.startswith(".") and not d.lower().endswith(".ufo"))
+        found += [os.path.relpath(os.path.join(dirpath, f), root)
+                  for f in files if f.lower().endswith(".designspace")]
+    return sorted(found)
+
+
+def open_designspace(path: str):
+    """Open every source UFO of the designspace at *path* as a master.
+
+    Returns ``(masters, problems)``: ``masters`` is ``[(font, name, context)]``
+    in source order, ``name`` being ``"<family> <style>"``; ``problems`` says
+    which sources could not be opened (missing from the drop, or unreadable).
+    Sparse-layer sources are skipped (see :func:`contexts_from_designspace`).
+    """
+    from ..conditions import contexts_from_designspace
+    try:
+        contexts = contexts_from_designspace(path)
+    except Exception as exc:
+        raise ValueError(f"cannot read {os.path.basename(path)}: {exc}") from exc
+    masters, problems = [], []
+    base = os.path.dirname(os.path.abspath(path))
+    for ufo, context in contexts.items():
+        rel = os.path.relpath(ufo, base)
+        if not os.path.isdir(ufo):
+            problems.append(f"{rel}: not found next to the designspace")
+            continue
+        try:
+            font = OpenFont(ufo)
+        except Exception as exc:
+            problems.append(f"{rel}: could not open ({exc})")
+            continue
+        family = getattr(font.info, "familyName", None) or os.path.splitext(os.path.basename(ufo))[0]
+        style = context.style_name or getattr(font.info, "styleName", None) or ""
+        masters.append((font, f"{family} {style}".strip(), context))
+    return masters, problems
 
 
 def open_font_tree(root: str):

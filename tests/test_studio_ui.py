@@ -51,6 +51,8 @@ def page(studio_url):
         pg.add_init_script("try{localStorage.clear()}catch(e){}")
         pg.goto(studio_url, wait_until="networkidle")
         pg.wait_for_selector(".thumb", timeout=8000)   # grid rendered → first compute done
+        pg.evaluate("hideStart()")                      # no font given: the tests use the demo
+        pg.wait_for_selector("#start", state="hidden")
         yield pg
         browser.close()
 

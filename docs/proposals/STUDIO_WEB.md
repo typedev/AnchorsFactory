@@ -127,11 +127,19 @@ The original plan:
 
 ## Phase 2: fonts and files in the browser
 
-- **Open:** a `.ufo` folder, `.ufoz`/zip, or a folder with a `.designspace`.
-  Port `files.ts` from `groups-control-web`: `webkitGetAsEntry` /
-  `showDirectoryPicker`, `normalizeRelative` against `..`, and read only the
-  UFOs the designspace references. Files go into MEMFS. Masters and their
-  `!if` contexts come from `contexts_from_designspace` (already in 0.6.0).
+**Done (2026-10-11):** opening fonts, in both Studios. A start screen with a
+drop zone (as in `groups-control-web`) is shown until the first font opens;
+the placeholder demo font is then dropped. The page ports `files.ts`'s folder
+reading: drop entries and `showDirectoryPicker` handles behind one interface,
+a designspace chosen at the top of a project folder, `normalizeRelative`
+against `..`, and **only the UFOs it references** are read; reads are retried
+and kept as ArrayBuffers (Chrome sporadically fails file and paged-out Blob
+reads on large folders). Python opens the designspace
+(`upload.open_designspace`, masters with their `!if` contexts); sources missing
+from the drop are listed, the rest open. A zip with several designspaces asks
+via `font/designspace` (the drop waits in `Studio.pending`). Masters of one drop
+share its temp dir until the last is removed. Still open:
+
 - **Rules:** open and save `.anchors` / `.glyphsConstruction` with file pickers
   (localStorage already keeps the session).
 - **Save anchors back (after v1, which is preview only):** `apply_document` on the font, then write **only the

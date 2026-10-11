@@ -12,6 +12,9 @@ type Pending = { resolve: (v: unknown) => void; reject: (e: Error) => void }
 const worker = new Worker(new URL('./worker/python.worker.ts', import.meta.url), { type: 'module' })
 const pending = new Map<number, Pending>()
 const listeners = new Set<(text: string) => void>()
+type ReadyInfo = { versions: Record<string, string>; ms: number }
+const readyListeners = new Set<(info: ReadyInfo | null) => void>()
+let ready: ReadyInfo | null = null
 let nextId = 1
 let lastStatus = 'starting…'
 
@@ -26,7 +29,9 @@ worker.onmessage = (e: MessageEvent<WorkerMessage>) => {
     if (msg.type === 'status') setStatus(msg.text)
     else if (msg.type === 'ready') {
       console.info(`[studio] Python ready in ${msg.ms} ms`, msg.versions)
+      ready = { versions: msg.versions, ms: msg.ms }
       setStatus('ready')
+      readyListeners.forEach((fn) => fn(ready))
     } else {
       setStatus('failed to start Python')
       pending.forEach((p) => p.reject(new Error(msg.error)))
@@ -66,6 +71,11 @@ const studioApi = {
   onStatus(fn: (text: string) => void) {
     listeners.add(fn)
     fn(lastStatus)
+  },
+  /** Called once Python is up, with its versions and start-up time. */
+  onReady(fn: (info: ReadyInfo | null) => void) {
+    if (ready) fn(ready)
+    else readyListeners.add(fn)
   },
 }
 

@@ -19,6 +19,19 @@ changed" without inferring it from a version number.
   Preview only, like the local Studio; the sample rule sets are in the preset
   menu. A dropped font's outlines are drawn while it loads, so the first view
   is not slower than the next.
+- **Studio: drop a designspace.** A dropped (or picked, **+ folder**) folder or
+  zip with a `.designspace` opens all its sources as masters, each with its
+  location and style name for `!if` blocks; sources missing from the drop are
+  listed and the rest still open. With several designspaces in the folder,
+  Studio asks which one, then reads only it and the UFOs it references.
+  Works in the local and the web Studio alike.
+- **Studio: start screen.** The web Studio (and a local one started without a
+  font) opens on a drop zone with **Open folder…** / **Open .ufoz…**, the
+  Python start-up status; the demo font is no longer shown. Reading a folder
+  shows progress, and a file the browser fails to read once is retried.
+- **Studio: readable anchor names.** Anchor, join and metric labels in the
+  glyph preview keep a fixed on-screen size (they were drawn in font units, a
+  few pixels tall at a typical zoom).
 
 ### Changed
 
@@ -26,6 +39,12 @@ changed" without inferring it from a version number.
   `studio/api.py` (`Studio.dispatch(method, body)`); the server is now an HTTP
   adapter over it and the web worker calls it directly. The page talks to
   either through `studioApi` (`static/api.js` is the HTTP one).
+
+### Removed
+
+- Token-based and TestPyPI publishing: `make publish`, `make publish-test`,
+  `make release-test`, the TestPyPI job in `release.yml` and `.env.example`.
+  Releases go only through `make release` and trusted publishing.
 
 ## [0.7.0] - 2026-10-11
 

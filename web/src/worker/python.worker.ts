@@ -75,12 +75,13 @@ speedups.enable()
 presets.set_search_paths(["/rules"])
 _studio = Studio(build_demo_font(), _seed_rules("default"), "demo",
                  gc_text=construction_text("default") if has_construction("default") else None)
+_studio.warm_on_load = True    # draw outlines while the font loads, not on the first edit
 
 def _call(method, body):
     return json.dumps(_studio.dispatch(method, json.loads(body))[1])
 
 def _open_tree(root):
-    return json.dumps(_studio.open_font_tree(root, warm=True)[1])
+    return json.dumps(_studio.open_font_tree(root)[1])
 `)
   call = py.globals.get('_call')
   openTree = py.globals.get('_open_tree')
@@ -101,7 +102,7 @@ function loadFont(files: FontFile[]): unknown {
     const rel = f.path.split('/').filter((p) => p && p !== '.' && p !== '..').join('/')
     if (rel) write(`${root}/${rel}`, new Uint8Array(f.bytes))
   }
-  status('drawing outlines…')
+  status('opening the font…')
   return JSON.parse(openTree(root))
 }
 

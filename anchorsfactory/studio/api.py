@@ -10,6 +10,7 @@ directly, so the browser app and the local app cannot drift apart.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import shutil
 import threading
@@ -172,6 +173,10 @@ class Studio:
         self.fonts = [{"name": font_name, "font": font, "tmpdir": None, "allglyphs": None,
                        "base": context, "location": None, "styleName": None, "paths": {}}]
         self.active = 0
+        self.pending = None           # a drop with several designspaces, until one is chosen
+        # draw every outline of a newly loaded font during the load (the web
+        # worker sets this: the load already shows progress, a compute does not)
+        self.warm_on_load = False
         self.rules_text = rules_text
         self.lock = threading.Lock()
         # When set (--save PATH), the base layer is written back here on every
@@ -256,7 +261,9 @@ class Studio:
 
     def remove_font(self, i: int):
         """Drop a loaded font (never the last one), returning its tmpdir to clean
-        up outside the lock."""
+        up outside the lock, unless another loaded font still reads from it (the
+        masters of one dropped designspace share it, and defcon loads glyphs
+        lazily)."""
         if not (0 <= i < len(self.fonts)) or len(self.fonts) <= 1:
             return None
         entry = self.fonts.pop(i)
@@ -265,7 +272,8 @@ class Studio:
         elif self.active > i:
             self.active -= 1
         self._sync_active()
-        return entry.get("tmpdir")
+        tmp = entry.get("tmpdir")
+        return None if any(e.get("tmpdir") == tmp for e in self.fonts) else tmp
 
     def autosave(self, base_text: str) -> None:
         """Persist the base-layer rules to ``save_path`` (a no-op if unset).
@@ -336,38 +344,95 @@ class Studio:
         return 200, view
 
     def _api_font(self, body):
-        """Add a dropped UFO (its files, base64, as the browser sent them) as
-        the new active font; previously loaded fonts are kept."""
-        from .upload import load_uploaded_font
+        """Add a dropped font (its files, base64, as the browser sent them):
+        one UFO, or the masters of a designspace (see :meth:`_open_tree`)."""
+        from .upload import write_upload
         try:
-            font, name, tmp = load_uploaded_font(body.get("files", []), body.get("name", "font"))
-        except ValueError as exc:                       # empty / non-UFO / malformed
+            root = write_upload(body.get("files", []))
+        except ValueError as exc:                       # empty / unsafe paths
+            return 400, {"ok": False, "error": str(exc)}
+        return self._open_tree(root)
+
+    def open_font_tree(self, root: str) -> tuple[int, dict]:
+        """Add the font(s) dropped under directory *root*. Not an HTTP
+        endpoint: the web worker writes the dropped files into its own file
+        system and calls this."""
+        return self._open_tree(root)
+
+    def _open_tree(self, root: str) -> tuple[int, dict]:
+        """Open what was dropped under *root* (which the session then owns).
+
+        A tree with one ``.designspace`` opens all its sources as masters, each
+        with its location and style name for ``!if`` blocks. With several, the
+        answer is ``{"ok": True, "choose": [paths]}`` and the tree waits in
+        ``pending`` for ``font/designspace``. Without one, the first UFO opens
+        as before."""
+        from .upload import find_designspaces, open_font_tree
+        try:
+            designspaces = find_designspaces(root)
+            if len(designspaces) > 1:
+                with self.lock:
+                    self._drop_pending()
+                    self.pending = {"root": root, "choices": designspaces}
+                return 200, {"ok": True, "choose": designspaces, "state": self.state}
+            if designspaces:
+                return self._add_designspace(root, designspaces[0])
+            font, name = open_font_tree(root)
+        except ValueError as exc:                       # no UFO / unreadable designspace
+            shutil.rmtree(root, ignore_errors=True)
             return 400, {"ok": False, "error": str(exc)}
         except Exception as exc:                        # OpenFont / IO failure
             log.warning("font upload failed: %s", exc)
-            return 400, {"ok": False, "error": f"could not open font: {exc}"}
-        with self.lock:
-            self.add_font(font, name, tmp)
-        return 200, {"ok": True, "state": self.state}
-
-    def open_font_tree(self, root: str, warm: bool = False) -> tuple[int, dict]:
-        """Add the UFO found under directory *root* (a ``.ufo`` folder or a
-        ``.zip``/``.ufoz``) as the active font. Not an HTTP endpoint: the web
-        worker writes the dropped files into its own file system and calls
-        this. *warm* draws every outline now, so the first compute after the
-        load is fast."""
-        from .upload import open_font_tree
-        try:
-            font, name = open_font_tree(root)
-        except ValueError as exc:
-            return 400, {"ok": False, "error": str(exc)}
-        except Exception as exc:
+            shutil.rmtree(root, ignore_errors=True)
             return 400, {"ok": False, "error": f"could not open font: {exc}"}
         with self.lock:
             self.add_font(font, name, root)
-            if warm:
+            if self.warm_on_load:
                 self.all_glyphs()
         return 200, {"ok": True, "state": self.state}
+
+    def _add_designspace(self, root: str, rel: str) -> tuple[int, dict]:
+        """Add every source of designspace *rel* (under *root*) as a master;
+        the first becomes active. Sources that cannot be opened are listed in
+        ``problems`` without failing the rest."""
+        from .upload import open_designspace
+        masters, problems = open_designspace(os.path.join(root, rel))
+        if not masters:
+            shutil.rmtree(root, ignore_errors=True)
+            detail = "; ".join(problems) or "it has no sources"
+            return 400, {"ok": False, "error": f"{rel}: no master could be opened: {detail}"}
+        with self.lock:
+            first = len(self.fonts)
+            for font, name, context in masters:
+                self.add_font(font, name, root, context=context)
+            self.activate(first)
+            if self.warm_on_load:
+                self.all_glyphs()
+        return 200, {"ok": True, "state": self.state, "designspace": rel,
+                     "masters": len(masters), "problems": problems}
+
+    def _api_designspace(self, body):
+        """Answer a ``choose``: open designspace ``path`` from the pending drop,
+        or (``path`` null) discard the drop."""
+        with self.lock:
+            pending, self.pending = self.pending, None
+        if pending is None:
+            return 400, {"ok": False, "error": "no dropped folder is waiting for a choice"}
+        rel = body.get("path")
+        if rel is None:
+            shutil.rmtree(pending["root"], ignore_errors=True)
+            return 200, {"ok": True, "state": self.state}
+        if rel not in pending["choices"]:
+            with self.lock:
+                self.pending = pending                  # still waiting
+            return 400, {"ok": False, "error": f"{rel!r} is not one of the dropped designspaces"}
+        return self._add_designspace(pending["root"], rel)
+
+    def _drop_pending(self):
+        """Discard a drop still waiting for a designspace choice (lock held)."""
+        if self.pending:
+            shutil.rmtree(self.pending["root"], ignore_errors=True)
+            self.pending = None
 
     def _api_activate(self, body):
         with self.lock:
@@ -414,6 +479,7 @@ _METHODS = {
     "allglyphs": Studio._api_allglyphs,
     "compute": Studio._api_compute,
     "font": Studio._api_font,
+    "font/designspace": Studio._api_designspace,
     "font/activate": Studio._api_activate,
     "font/remove": Studio._api_remove,
     "font/context": Studio._api_context,

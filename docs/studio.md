@@ -11,7 +11,8 @@ It comes in two forms with the same page and the same Python behind it:
   to install: the engine runs in the tab (Pyodide, in a Web Worker), so a
   dropped font is read by the page and **never uploaded**. The first visit
   downloads Python and the font libraries; the browser caches them.
-  It opens on a small demo font with the sample rule sets in the preset menu.
+  It opens on a start screen: drop or pick a font; the sample rule sets are
+  in the preset menu.
 - **Locally**, as a stdlib HTTP server on your machine serving that page (from
   a checkout; the Studio is not in the PyPI wheel). This is the development
   mode, and the one that can open fonts from the command line, open a whole
@@ -46,14 +47,14 @@ opens it in a Playwright-driven Chromium window (needs the dev browser —
 `make browsers`); closing the window or `Ctrl-C` stops the server:
 
 ```bash
-make studio                              # demo font
+make studio                              # start screen: drop a font
 make studio ARGS="MyFont.ufo -r my.anchors"   # a UFO + your rules
 # or directly: python scripts/studio_dev.py [ufo] [-r rules] [--port N] [--headless]
 ```
 
 | option | meaning |
 |--------|---------|
-| `ufo` (positional, optional) | a `.ufo` to debug; omitted → a built-in synthetic demo font |
+| `ufo` (positional, optional) | a `.ufo` to debug; omitted → the start screen |
 | `-r`, `--rules NAME_OR_PATH` | the rule text to open with: a path to a `.anchors` file, or a set name resolved on the search path (default: `default`; if nothing answers, Studio opens on a small built-in seed) |
 | `--rules-path DIR` | where to resolve bare set names (repeatable; defaults to `$ANCHORSFACTORY_RULES_PATH`). No rule sets ship with the package — `make studio` points this at the repository's `examples/rules/` |
 | `--save PATH` | autosave the base-layer rules to `PATH` on every valid edit — a file-backed working copy that survives across sessions and browsers; reopen with `-r PATH` to resume (see [Autosaving to a file](#autosaving-to-a-file)) |
@@ -61,11 +62,10 @@ make studio ARGS="MyFont.ufo -r my.anchors"   # a UFO + your rules
 | `--port PORT` | port (default `8765`) |
 | `-v`, `--verbose` | log requests to the terminal |
 
-With no font argument Studio builds a small in-memory demo font (schematic
-`H O A n o a e` plus `acute`/`dieresis` marks and an `aacute` composite for
-`!propagate`) — deliberately crude shapes, but real outlines, so every overlay
-kind has something to show. You can drop a real font onto the page at any time
-(see below).
+With no font argument Studio opens on the start screen (see "Loading a
+font"). Behind it the session holds a small in-memory placeholder font, which
+is dropped as soon as the first real font opens. You can drop another font
+onto the page at any time.
 
 ## The window
 
@@ -222,10 +222,11 @@ are resolved for the active one:
   tag or name). `style` overrides the styleName that conditions see; leave it
   empty to use the font's fontinfo `styleName`. Press Enter to apply. A location
   that cannot be read is shown on the card, and the font keeps its previous one.
-- **`--designspace PATH`** opens every source of a designspace as a master, with
-  its location and source `stylename` already filled in (the card says
-  `designspace`). With a designspace, a condition naming an axis it does not
-  define is an error.
+- **A designspace** opens every source as a master, with its location and
+  source `stylename` already filled in (the card says `designspace`): drop or
+  pick the folder holding it and its UFOs (see "Loading a font"), or start the
+  local server with `--designspace PATH`. With a designspace, a condition
+  naming an axis it does not define is an error.
 - **Dimmed branches.** In both editors, the lines a block drops for the active
   master are dimmed. They stay editable, and switching fonts re-dims them. An
   axis condition with no location for the active font is reported in Output
@@ -236,11 +237,27 @@ are resolved for the active one:
 
 ## Loading a font
 
-Besides the command-line argument, you can load a font from the browser:
+The web Studio, and a local one started without a font, opens on a **start
+screen**: drop a font on its drop zone, or use **Open folder…** /
+**Open .ufoz…**. Later, a font
+can be added from the workspace:
 
-- **drop** a `.ufo` folder, or a `.zip`/`.ufoz` containing one, anywhere on
-  the page;
-- or click **load .ufoz** in the header to pick a `.ufoz`/`.zip` file.
+- **drop** a `.ufo` folder, a project folder, or a `.zip`/`.ufoz` anywhere on
+  the page (one at a time);
+- or click **load .ufoz** in the header (or **+ load** on the fonts pane) to
+  pick a `.ufoz`/`.zip` file, or **+ folder** to pick a folder. In Chrome and
+  Edge the folder picker asks to *view* the files; other browsers fall back to
+  a directory upload prompt, which is still a local read.
+
+**A project folder with a `.designspace`** at its top opens as masters: when
+there are several, Studio asks which one, then reads **only that designspace
+and the UFOs it references** (a project folder may hold other masters, builds
+and proofs). Every source becomes a font card with its location and style
+name, and the first is made active. Sources outside the folder or missing from
+it are listed under the font cards, and the rest still open. Sparse-layer
+sources are skipped. A folder with no designspace opens the first `.ufo` at
+its top. Hidden files such as `.git` are never read. (A `.zip` is read whole;
+with several designspaces inside, the same question is asked.)
 
 The files are handed to Python (the local server, or the worker in the
 browser), reconstructed in a temporary directory, and opened as a **new active
@@ -248,7 +265,7 @@ font** — any fonts already loaded are kept, so you
 can hold a Regular and its Italic (or several masters) at once and switch between
 them. Your original font on disk is never touched. The sidebar shows a card per
 loaded font (family name, UPM, italic angle); click one to make it active, or
-remove it (which discards just that font's temp dir). The command line also
+remove it (its temp dir goes with the last font opened from it). The command line also
 takes more than one UFO up front — `… server Regular.ufo Italic.ufo`.
 
 ## Typical workflows
