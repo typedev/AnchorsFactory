@@ -11,6 +11,8 @@ changed" without inferring it from a version number.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-11
+
 ### Added
 
 - **Conditional blocks, evaluated per master.** `!if` / `!elif` / `!else` /
