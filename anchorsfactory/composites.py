@@ -32,6 +32,8 @@ from ._vendor.glyphconstruction import (       # noqa: F401  (re-exported)
     shouldCheckGlyphExists,
 )
 
+from .conditions import RuleContext, blank_inactive, has_conditionals
+
 _IDENT = re.compile(r"[A-Za-z_][\w.]*")
 
 
@@ -243,7 +245,25 @@ def _emitted_line_numbers(gc_text: str) -> list[int]:
     return kept
 
 
-def parse_constructions(gc_text: str, glyphset=None) -> list[Construction]:
+def resolve_conditionals(gc_text: str, context=None, glyphset=None) -> str:
+    """*gc_text* for one master: ``!if``/``!elif``/``!else``/``!endif`` blocks
+    (see :mod:`anchorsfactory.conditions`) resolved against *context*, the
+    untaken branches and the directive lines **blanked** rather than removed, so
+    every construction keeps its source line. Text with no block is returned
+    unchanged.
+
+    With no *context*, a ``RuleContext`` is built from *glyphset*'s fontinfo
+    ``styleName`` (axis conditions then need a real context). A ``!`` that opens
+    a line is unambiguous here: GlyphConstruction's own ``!`` (mark colour)
+    only ever follows a glyph name.
+    """
+    if not has_conditionals(gc_text):
+        return gc_text
+    ctx = (context or RuleContext()).for_font(glyphset)
+    return blank_inactive(gc_text, ctx)
+
+
+def parse_constructions(gc_text: str, glyphset=None, context=None) -> list[Construction]:
     """Parse *gc_text* into constructions, each tagged with its source line.
 
     The vendored parser returns one entry per line it keeps — a construction
@@ -254,7 +274,11 @@ def parse_constructions(gc_text: str, glyphset=None) -> list[Construction]:
 
     ``U+XXXX`` references are resolved first (see :func:`resolve_unicode_refs`);
     pass *glyphset* so they resolve against the font's own names.
+
+    Conditional blocks are resolved for *context* first (see
+    :func:`resolve_conditionals`); lines stay those of the original text.
     """
+    gc_text = resolve_conditionals(gc_text, context, glyphset)
     gc_text = resolve_unicode_refs(gc_text, glyphset)
     constructions = ParseGlyphConstructionListFromString(gc_text, None)
     lines = _emitted_line_numbers(gc_text)
@@ -313,7 +337,7 @@ class Composite:
     problems: tuple = ()
 
 
-def build_composites(glyphset, gc_text: str) -> dict:
+def build_composites(glyphset, gc_text: str, context=None) -> dict:
     """Assemble every construction in *gc_text* against *glyphset*.
 
     *glyphset* is any font/glyphset the vendored builder can read — ``name in
@@ -328,9 +352,14 @@ def build_composites(glyphset, gc_text: str) -> dict:
     recorded problem, never an exception, so one bad line can't sink the batch.
     Each surviving :class:`ConstructionGlyph` gets ``.font = glyphset`` (some
     consumers read ``glyph.font`` when drawing).
+
+    *context* (a :class:`~anchorsfactory.conditions.RuleContext`) picks the
+    master that ``!if`` blocks in *gc_text* are resolved for; a condition that
+    cannot be evaluated raises :class:`~anchorsfactory.conditions.ConditionError`
+    (a whole-file error, not one bad line).
     """
     out: dict[str, Composite] = {}
-    for c in parse_constructions(gc_text, glyphset):
+    for c in parse_constructions(gc_text, glyphset, context):
         parsed = parse_construction(c.text)
         base, marks = (parsed[1], parsed[2]) if parsed else (None, [])
         try:

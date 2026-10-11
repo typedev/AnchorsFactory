@@ -12,6 +12,7 @@ from __future__ import annotations
 from fontTools.pens.recordingPen import DecomposingRecordingPen
 from fontTools.pens.svgPathPen import SVGPathPen
 
+from ..conditions import RuleContext, inactive_lines
 from ..apply import (Propagated, accumulate_provenance, propagate_seed,
                      substitute_anchor_refs, validate_document)
 from ..dsl import DSLError, parse_dsl
@@ -58,7 +59,7 @@ def _anchor_payload(font, target, spec, gname, diagnostics, shift_x, layer, line
     return info
 
 
-def resolve_stack(layers) -> Document:
+def resolve_stack(layers, context=None) -> Document:
     """Merge an ordered list of rule *layers* (bottom → top) into one Document.
 
     Each layer is ``{"name": str, "text": str}``; later layers override earlier
@@ -68,11 +69,20 @@ def resolve_stack(layers) -> Document:
     maps that index back to the right editor pane (line stays each rule's own; a
     preset-inherited rule keeps ``inherited=True``). A layer that fails to parse
     raises, prefixed with its name.
+
+    ``!if`` blocks (in a layer or in a rule set it inherits) are resolved for
+    *context* — the master being viewed (a
+    :class:`~anchorsfactory.conditions.RuleContext`, already filled from the
+    font) — before the merge, which builds a plain document and would otherwise
+    drop them. A condition that cannot be evaluated raises like a parse error,
+    with the layer name and line.
     """
     merged = Document()
     for i, layer in enumerate(layers):
         try:
             doc = resolve_document(layer.get("text", ""))
+            if doc.has_conditionals:
+                doc = doc.resolve(context or RuleContext())
         except ValueError as exc:
             raise DSLError(f"{layer.get('name') or f'layer {i}'}: {exc}")
         doc = _restamp(doc, origin=str(i))           # tag every rule with its layer index
@@ -85,6 +95,22 @@ def resolve_stack(layers) -> Document:
             propagate=doc.propagate if doc.propagate != "none" else merged.propagate,
         )
     return merged
+
+
+def inactive_layer_lines(layers, context) -> dict:
+    """``{layer index: [line, ...]}`` — the lines of each layer that the
+    ``!if`` blocks drop for *context*, for the editor to dim. A layer whose
+    blocks cannot be evaluated is left out; its error is reported by
+    :func:`resolve_stack`."""
+    out = {}
+    for i, layer in enumerate(layers):
+        try:
+            lines = inactive_lines(layer.get("text", ""), context)
+        except ValueError:
+            continue
+        if lines:
+            out[str(i)] = sorted(lines)
+    return out
 
 
 def resolve_document(rules_text: str) -> Document:
@@ -144,7 +170,7 @@ def all_glyph_geometry(font) -> list[dict]:
     return out
 
 
-def build_view(font, rules) -> dict:
+def build_view(font, rules, context=None) -> dict:
     """Compute everything the UI needs for *rules* against *font*.
 
     *rules* is either a rules string (a single layer) or a list of layers
@@ -153,14 +179,20 @@ def build_view(font, rules) -> dict:
     glyph name to ``{name, advance, bounds, path, anchors}`` and each anchor
     carries its ``(layer, line)`` provenance. Parse/validation errors come back
     as ``problems`` (never an exception), so the editor can show them inline.
+
+    *context* is the master the ``!if`` blocks resolve for (its missing style
+    name is filled from *font*); ``inactive`` maps each layer index to the
+    lines those blocks drop, so the editor can dim them.
     """
     layers = [{"name": "rules", "text": rules}] if isinstance(rules, str) else list(rules)
     names = [l.get("name") for l in layers]
+    context = (context or RuleContext()).for_font(font)
+    inactive = inactive_layer_lines(layers, context)
     try:
-        doc = resolve_stack(layers)                  # merge layers, resolve each layer's !extends
+        doc = resolve_stack(layers, context)         # merge layers, resolve each layer's !extends
     except ValueError as exc:                        # DSLError / !extends cycle subclass this
         return {"ok": False, "problems": [str(exc)], "diagnostics": [],
-                "glyphs": {}, "layers": names}
+                "glyphs": {}, "layers": names, "inactive": inactive}
 
     problems = validate_document(doc)
     if problems:
@@ -169,7 +201,7 @@ def build_view(font, rules) -> dict:
         # accumulate() raise mid-glyph and 500 the request. The editor shows these
         # inline; the user is usually mid-edit, so this fires on nearly every keystroke.
         return {"ok": False, "problems": problems, "diagnostics": [],
-                "glyphs": {}, "layers": names}
+                "glyphs": {}, "layers": names, "inactive": inactive}
 
     diagnostics: list[dict] = []
     glyphs: dict[str, dict] = {}
@@ -240,4 +272,5 @@ def build_view(font, rules) -> dict:
             fallback += 1
 
     return {"ok": not problems, "problems": problems,
-            "diagnostics": diagnostics, "glyphs": glyphs, "layers": names}
+            "diagnostics": diagnostics, "glyphs": glyphs, "layers": names,
+            "inactive": inactive}

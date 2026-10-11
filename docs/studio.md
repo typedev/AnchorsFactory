@@ -199,6 +199,29 @@ no editor line to jump to.) Two badges flag non-rule origins: **propagated**
 (`↳ inherited from <component>`) for an anchor a composite got via `!propagate`,
 and **↦ %ref** for a `%name` derived anchor.
 
+## Masters and conditional blocks
+
+Each loaded font stands for a **master**. Rule files and constructions with
+`!if` blocks (see "Conditional blocks" in [anchor-rules.md](anchor-rules.md))
+are resolved for the active one:
+
+- **Location and style on the font card.** `location` takes
+  `ital.xvalue=1, wght.uservalue=700` (design `xvalue`, user `uservalue`; an axis
+  tag or name). `style` overrides the styleName that conditions see; leave it
+  empty to use the font's fontinfo `styleName`. Press Enter to apply. A location
+  that cannot be read is shown on the card, and the font keeps its previous one.
+- **`--designspace PATH`** opens every source of a designspace as a master, with
+  its location and source `stylename` already filled in (the card says
+  `designspace`). With a designspace, a condition naming an axis it does not
+  define is an error.
+- **Dimmed branches.** In both editors, the lines a block drops for the active
+  master are dimmed. They stay editable, and switching fonts re-dims them. An
+  axis condition with no location for the active font is reported in Output
+  with its line, never treated as false.
+- **compare** (fonts header, with two or more fonts) computes every master with
+  its own location and lists glyphs whose anchor names or composite components
+  differ. Such differences are allowed, so they are listed as warnings.
+
 ## Loading a font
 
 Besides the command-line argument, you can load a font from the browser:

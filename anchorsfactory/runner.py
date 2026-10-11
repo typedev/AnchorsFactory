@@ -11,14 +11,12 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import replace
-
 from fontParts.world import OpenFont
 
 from . import presets
 from .apply import apply_document
 from .dsl import parse_dsl, parse_dsl_file
-from .model import Document, RuleSource
+from .model import Document, merge_documents, restamp
 from .parser import parse_file
 
 log = logging.getLogger(__name__)
@@ -26,45 +24,11 @@ log = logging.getLogger(__name__)
 ANCHORED_SUFFIX = "_anchored.ufo"
 
 
-def _restamp(doc: Document, **changes) -> Document:
-    """Return *doc* with every rule's :class:`RuleSource` updated by *changes*
-    (a fresh ``RuleSource`` is created for rules that carry none)."""
-    rules = [replace(r, source=replace(r.source or RuleSource(), **changes))
-             for r in doc.rules]
-    return replace(doc, rules=rules)
-
-
-def _merge(base: Document, child: Document) -> Document:
-    """Layer *child* on top of *base*: child labels/variables win, rules concatenate.
-
-    *base*'s rules are marked ``inherited=True`` — from *child*'s vantage point
-    they come from a base (via ``!extends``), so an editor can tell inherited
-    rules from the ones authored in the top document. *child*'s rules keep their
-    own provenance (their ``inherited`` flag is left as-is)."""
-    base = _restamp(base, inherited=True)
-    return Document(
-        labels={**base.labels, **child.labels},
-        variables={**base.variables, **child.variables},
-        rules=base.rules + child.rules,
-        shift_x=child.shift_x or base.shift_x,
-        # replay base directives then the child's: `=` in the child resets, while
-        # `+=`/`-=` build on the inherited set (resolve_suffixes does the replay).
-        suffix_ops=base.suffix_ops + child.suffix_ops,
-        # last non-default wins, so a child can override an inherited !propagate.
-        propagate=child.propagate if child.propagate != "none" else base.propagate,
-    )
-
-
-def merge_documents(base: Document, child: Document) -> Document:
-    """Layer *child* on top of *base* (child labels/variables/rules win), the
-    public form of the ``!extends`` merge.
-
-    *base*'s rules are marked ``inherited=True`` so an editor can tell inherited
-    rules from the ones authored in *child*; provenance (:class:`RuleSource`) is
-    preserved on both sides. Lets a consumer build a layered document without
-    reaching into private helpers.
-    """
-    return _merge(base, child)
+# The merge itself is pure data and lives with the IR (so `Document.resolve` can
+# re-merge per-master layers without importing the IO layer); these names stay
+# here for existing callers.
+_restamp = restamp
+_merge = merge_documents
 
 
 def _abs(ref: str, base_dir) -> str:
@@ -177,13 +141,26 @@ def process_ufo(
     round_coords: bool = True,
     document=None,
     search_paths=None,
+    context=None,
 ) -> str:
     """Apply rules to *ufo_path* and save. Returns the saved path.
 
     Pass a pre-loaded *document* to skip loading (e.g. when processing many
     fonts with the same rules); otherwise *rules_path* is loaded, with
-    *search_paths* resolving it if it is a bare set name.
+    *search_paths* resolving it if it is a bare set name. *context* (a
+    :class:`~anchorsfactory.conditions.RuleContext`) is the master that
+    ``!if`` blocks resolve for; by default only the font's fontinfo
+    ``styleName`` is known.
     """
+    return _process_ufo(ufo_path, rules_path, output=output, in_place=in_place,
+                        backup_dir=backup_dir, clear=clear, replace=replace,
+                        round_coords=round_coords, document=document,
+                        search_paths=search_paths, context=context)[0]
+
+
+def _process_ufo(ufo_path, rules_path, *, output, in_place, backup_dir, clear,
+                 replace, round_coords, document, search_paths, context):
+    """:func:`process_ufo`, also returning what was placed: ``(path, result)``."""
     font = OpenFont(ufo_path)
     doc = (document if document is not None
            else load_document(rules_path, search_paths=search_paths))
@@ -197,7 +174,8 @@ def process_ufo(
             f.write(dump_existing_anchors(font))
         log.info("Backed up existing anchors to %s", backup_path)
 
-    apply_document(font, doc, clear=clear, replace=replace, round_coords=round_coords)
+    placed = apply_document(font, doc, clear=clear, replace=replace,
+                            round_coords=round_coords, context=context)
 
     out = _output_path(ufo_path, output, in_place)
     if out is None:
@@ -206,4 +184,4 @@ def process_ufo(
     else:
         font.save(out)
     log.info("Saved %s", out)
-    return out
+    return out, placed

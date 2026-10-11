@@ -575,3 +575,79 @@ class Document:
     # each covered glyph's accumulator is *seeded* with anchors inherited from its
     # components (see apply.propagate_seed) before the first rule runs.
     propagate: str = "none"
+    # Conditional blocks (`!if … !endif`, see :mod:`anchorsfactory.conditions`).
+    # A document parsed from text with conditional blocks keeps its source here,
+    # so :meth:`resolve` can re-parse it with the inactive branches blanked out;
+    # its other fields then hold only the **unconditional** lines. ``None`` for
+    # a document with no conditionals (or one built by hand).
+    conditional: Optional["ConditionalSource"] = field(default=None, compare=False)
+    # The per-file documents a merged (``!extends``) document was built from,
+    # base first — so a merged document whose base has conditionals can still be
+    # resolved per master. Empty for a document parsed from one file.
+    layers: tuple = field(default=(), compare=False)
+
+    @property
+    def has_conditionals(self) -> bool:
+        """Whether this document (or any merged layer) has ``!if`` blocks, i.e.
+        must be :meth:`resolve`\\ d against a :class:`~anchorsfactory.conditions.
+        RuleContext` before it describes one master."""
+        return (self.conditional is not None
+                or any(layer.has_conditionals for layer in self.layers))
+
+    def resolve(self, context) -> "Document":
+        """A flat document for one master: inactive branches dropped, active
+        lines kept in source order, ``!extends`` layers re-merged. A document
+        with no conditionals is returned unchanged. See
+        :func:`anchorsfactory.conditions.resolve_document`."""
+        from .conditions import resolve_document
+        return resolve_document(self, context)
+
+
+@dataclass(frozen=True)
+class ConditionalSource:
+    """The raw text of a rule file that holds conditional blocks.
+
+    ``lines`` are the file's lines as parsed (1-based line *n* is
+    ``lines[n-1]``); ``origin`` mirrors :attr:`RuleSource.origin` so rules
+    re-parsed at :meth:`Document.resolve` keep their provenance."""
+    lines: tuple
+    origin: Optional[str] = None
+
+
+def restamp(doc: Document, **changes) -> Document:
+    """Return *doc* with every rule's :class:`RuleSource` updated by *changes*
+    (a fresh ``RuleSource`` is created for rules that carry none). An ``origin``
+    change also reaches the document's :class:`ConditionalSource`."""
+    from dataclasses import replace
+    rules = [replace(r, source=replace(r.source or RuleSource(), **changes))
+             for r in doc.rules]
+    out = replace(doc, rules=rules)
+    if doc.conditional is not None and "origin" in changes:
+        out = replace(out, conditional=replace(doc.conditional,
+                                               origin=changes["origin"]))
+    return out
+
+
+def merge_documents(base: Document, child: Document) -> Document:
+    """Layer *child* on top of *base*: child labels/variables win, rules concatenate.
+
+    *base*'s rules are marked ``inherited=True`` — from *child*'s vantage point
+    they come from a base (via ``!extends``), so an editor can tell inherited
+    rules from the ones authored in the top document. *child*'s rules keep their
+    own provenance (their ``inherited`` flag is left as-is). Both sides' layers
+    are kept (:attr:`Document.layers`) so a conditional base can still be
+    resolved per master after the merge."""
+    layers = (base.layers or (base,)) + (child.layers or (child,))
+    base = restamp(base, inherited=True)
+    return Document(
+        labels={**base.labels, **child.labels},
+        variables={**base.variables, **child.variables},
+        rules=base.rules + child.rules,
+        shift_x=child.shift_x or base.shift_x,
+        # replay base directives then the child's: `=` in the child resets, while
+        # `+=`/`-=` build on the inherited set (resolve_suffixes does the replay).
+        suffix_ops=base.suffix_ops + child.suffix_ops,
+        # last non-default wins, so a child can override an inherited !propagate.
+        propagate=child.propagate if child.propagate != "none" else base.propagate,
+        layers=layers,
+    )

@@ -13,6 +13,11 @@ from .apply import (
     ComputeResult, ComputeDiagnostic, ExplainResult, PlacedAnchor,
 )
 from .geometry import resolve, explain
+from .conditions import (
+    RuleContext, ConditionError, StructureDiff, contexts_from_designspace,
+    parse_location, active_lines, inactive_lines, blank_inactive,
+    structure_diff,
+)
 from .model import Rule, RuleSource
 from .query import (
     parse_selectors, glyphs_for_selector, rules_for_glyph, explain_glyph,
@@ -24,6 +29,8 @@ from .vocabulary import (
     FRAMES, X_ALIGNS, Y_EDGES, RUNS, METRICS, CENTROID, FRACTIONAL_FRAMES,
     DIRECTIVES, PROPAGATE_VALUES, SUFFIX_KEYWORDS, OPERATORS, SIGILS,
     COMPONENT_PATTERN, AT_X_EDGES, AT_Y_SIDES,
+    CONDITIONAL_DIRECTIVES, CONDITION_KEYWORDS, CONDITION_OPERATORS,
+    CONDITION_FIELDS, AXIS_VALUE_KINDS,
     aligns_for, completions_after_dot, completions_for_slot,
 )
 from .convert import convert_file, render_document, verify_conversion
@@ -32,7 +39,7 @@ from .presets import (list_presets, preset_text, is_preset, is_name,
                       RuleSetNotFound)
 from .runner import process_ufo, load_document, merge_documents, resolve_ref
 from .composites import (
-    build_composites, parse_constructions, parse_construction,
+    build_composites, parse_constructions, parse_construction, resolve_conditionals,
     composites_in_glyph_order, uncovered_precomposed,
     Composite, Construction, ConstructionGlyph,
     GlyphConstructionBuilder, ParseGlyphConstructionListFromString, GlyphBuilderError,
@@ -83,6 +90,21 @@ __all__ = [
     "COMPONENT_PATTERN",
     "AT_X_EDGES",
     "AT_Y_SIDES",
+    "CONDITIONAL_DIRECTIVES",
+    "CONDITION_KEYWORDS",
+    "CONDITION_OPERATORS",
+    "CONDITION_FIELDS",
+    "AXIS_VALUE_KINDS",
+    "RuleContext",
+    "ConditionError",
+    "StructureDiff",
+    "contexts_from_designspace",
+    "parse_location",
+    "active_lines",
+    "inactive_lines",
+    "blank_inactive",
+    "structure_diff",
+    "resolve_conditionals",
     "aligns_for",
     "completions_after_dot",
     "completions_for_slot",

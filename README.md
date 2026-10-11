@@ -199,6 +199,18 @@ GlyphConstruction not reading such a file — call
 text back. Files with no `U+` token are untouched, so name-based constructions
 keep working unchanged.
 
+Both rule files and constructions accept **per-master conditional blocks**
+(`!if ital.xvalue == 1` … `!else` … `!endif`). Pass the master as a context:
+
+```python
+from anchorsfactory import RuleContext, contexts_from_designspace
+ctx = contexts_from_designspace("Family.designspace")["/abs/path/Italic.ufo"]
+apply_document(font, doc, context=ctx)
+build_composites(font, gc_text, context=ctx)
+```
+
+See "Conditional blocks" in [`docs/anchor-rules.md`](docs/anchor-rules.md).
+
 ### Compute without mutating (preview)
 
 `compute_document` is the functional core: it returns the anchors a rule

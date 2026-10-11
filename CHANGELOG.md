@@ -11,6 +11,54 @@ changed" without inferring it from a version number.
 
 ## [Unreleased]
 
+### Added
+
+- **Conditional blocks, evaluated per master.** `!if` / `!elif` / `!else` /
+  `!endif` in `.anchors` rule files **and** `.glyphsConstruction` text, nestable.
+  Conditions read `<axis>.xvalue` (design) and `<axis>.uservalue` (user)
+  coordinates, with the axis given by tag or name, and `styleName`, using
+  `== != < <= > >=`, `in`/`not in`, `not`, `and`, `or` and parentheses. They
+  are parsed by a small grammar (no `eval`) and type-checked in every branch.
+  A taken branch keeps its lines in source order, so the usual last-wins and
+  `=`/`+=`/`-=` semantics apply unchanged. See "Conditional blocks" in
+  `docs/anchor-rules.md`.
+  - `parse_dsl` keeps every branch (an error in any of them is a parse error);
+    `Document.resolve(context)` returns one master's flat document, including
+    conditions inside `!extends` bases. Rule line numbers stay those of the file.
+  - `RuleContext(style_name, xvalues, uservalues, axis_aliases, axes)`,
+    `contexts_from_designspace(path)` (design→user mapping through the axis
+    maps; styleName from the source stylename, then fontinfo, then `""`), and
+    `parse_location()`.
+  - `compute_document` / `explain_document` / `apply_document` /
+    `process_ufo` / `validate_document` take `context=`. A conditional document
+    used without one sees only the font's fontinfo `styleName`.
+  - `parse_constructions(..., context=)`, `build_composites(..., context=)` and
+    `resolve_conditionals(text, context)`. Untaken lines are blanked, so
+    construction source lines survive.
+  - `active_lines()` / `inactive_lines()` / `blank_inactive()` for editors.
+  - `structure_diff(anchors=…, composites=…)` reports anchor-set and
+    component differences between masters. They are warnings, not errors.
+  - CLI: `--designspace` (with no UFO arguments it processes every source),
+    `--location AXIS.xvalue=N`, and `--style-name`. With several masters it
+    logs structural differences as warnings.
+  - `vocabulary`: `CONDITIONAL_DIRECTIVES`, `CONDITION_KEYWORDS`,
+    `CONDITION_OPERATORS`, `CONDITION_FIELDS` and `AXIS_VALUE_KINDS`, also in
+    `as_dict()`.
+
+- **Studio (repository only): masters.** Each loaded font has a location
+  and style name on its card. `--designspace` opens every source with its
+  own. Lines that `!if` blocks drop for the active master are dimmed in both
+  editors, and a **compare** button lists structural differences across
+  masters. This also fixes the Studio silently ignoring every rule inside
+  an `!if` block: its layer merge rebuilt a plain document.
+
+### Changed
+
+- `apply_document` now returns the `ComputeResult` it wrote (it returned
+  `None`). `merge_documents` moved to `anchorsfactory.model`; it is still
+  importable from `anchorsfactory.runner`. `parse_dsl` also accepts a single
+  string.
+
 ## [0.5.1] - 2026-07-20
 
 ### Fixed

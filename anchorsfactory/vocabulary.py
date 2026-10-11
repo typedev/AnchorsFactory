@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import re
 
+from .conditions import KEYWORDS as _COND_KEYWORDS
 from .model import Axis, FONT_METRICS, Frame, HAlign, Run, VEdge
 
 # --------------------------------------------------------------------------- #
@@ -58,6 +59,24 @@ _X_ONLY_FRAMES = (Frame.ADVANCE.value,)
 
 #: Document directives, with their leading ``!``.
 DIRECTIVES = ("!extends", "!suffixes", "!shiftx", "!propagate")
+
+#: Conditional-block directives (``!if cond`` … ``!endif``), each alone on its
+#: line, in the order a block uses them. Shared by rule files and
+#: ``.glyphsConstruction`` text. Kept apart from :data:`DIRECTIVES`, which take
+#: ``= value``; these take a condition (or nothing).
+CONDITIONAL_DIRECTIVES = tuple("!" + k for k in _COND_KEYWORDS)
+
+#: Words that join or negate conditions, and the substring test.
+CONDITION_KEYWORDS = ("and", "or", "not", "in")
+
+#: Comparison operators a condition accepts (``not in`` is two words).
+CONDITION_OPERATORS = ("==", "!=", "<", "<=", ">", ">=", "in", "not in")
+
+#: Names a condition reads directly (a string: the master's style name).
+CONDITION_FIELDS = ("styleName",)
+
+#: What follows ``<axis>.`` in a condition: design / user coordinate.
+AXIS_VALUE_KINDS = ("xvalue", "uservalue")
 
 #: Values ``!propagate`` accepts.
 PROPAGATE_VALUES = ("none", "composites", "all")
@@ -208,4 +227,9 @@ def as_dict() -> dict:
                                for axis in (None, Axis.X.value, Axis.Y.value)},
         "atXEdges": list(AT_X_EDGES),
         "atYSides": list(AT_Y_SIDES),
+        "conditionalDirectives": list(CONDITIONAL_DIRECTIVES),
+        "conditionKeywords": list(CONDITION_KEYWORDS),
+        "conditionOperators": list(CONDITION_OPERATORS),
+        "conditionFields": list(CONDITION_FIELDS),
+        "axisValueKinds": list(AXIS_VALUE_KINDS),
     }

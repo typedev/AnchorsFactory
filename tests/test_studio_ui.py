@@ -182,3 +182,38 @@ def test_sidebar_lists_fonts_above_the_readout(page):
     assert page.locator("#fontcards .fontcard").count() >= 1
     assert page.locator(".sidebar #fontcards").count() == 1
     assert page.locator(".sidebar #readout").count() == 1
+
+
+def _post_context(page, location, style=None):
+    """Set the active font's master location through its card, as a user would."""
+    card = page.locator(".fontcard").first
+    with page.expect_response(lambda r: "/api/compute" in r.url, timeout=8000):
+        card.locator(".fc-loc").fill(location)
+        card.locator(".fc-loc").press("Enter")
+    page.wait_for_timeout(200)
+
+
+def test_if_branches_dim_and_follow_the_font_location(page):
+    _set_rules(page, "H = top (100 700)\n!if ital.xvalue == 1\nH += extra (50 0)\n!endif")
+    # no location yet: the axis condition is an error with its line, not a silent false
+    assert "line 2: no xvalue for axis 'ital'" in page.inner_text("#output")
+
+    _post_context(page, "ital.xvalue=0")
+    off = page.locator("#anchorEditors .lhost.active .ed-hl .ln.off")
+    assert off.count() == 1 and "extra" in off.first.inner_text()
+    assert "extra" not in page.inner_text("#readout")
+
+    _post_context(page, "ital.xvalue=1")
+    assert page.locator("#anchorEditors .lhost.active .ed-hl .ln.off").count() == 0
+    # the !if line is highlighted as a condition (directive + axis kind)
+    hl = page.locator("#anchorEditors .lhost.active .ed-hl .ln").nth(1)
+    assert hl.locator(".t-dir").inner_text() == "!if"
+    assert hl.locator(".t-kw").first.inner_text() == ".xvalue"
+
+
+def test_bad_location_is_shown_on_the_card(page):
+    card = page.locator(".fontcard").first
+    card.locator(".fc-loc").fill("ital=1")
+    card.locator(".fc-loc").press("Enter")
+    page.wait_for_selector(".fc-err:not([hidden])", timeout=4000)
+    assert "cannot read" in card.locator(".fc-err").inner_text()

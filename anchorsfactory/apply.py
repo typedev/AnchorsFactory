@@ -18,6 +18,7 @@ from dataclasses import dataclass, replace
 
 from fontTools.misc.transform import Transform
 
+from .conditions import ConditionError, RuleContext, all_branches
 from .geometry import resolve, _dependent
 from .model import (
     Document, Op, LabelRef, VarRef, AnchorRef, AnchorSpec, resolve_suffixes,
@@ -201,7 +202,23 @@ def selector_matches(selector, name: str, unicodes) -> bool:
 _matches = selector_matches            # internal alias (kept for the engine's call sites)
 
 
-def validate_document(doc: Document) -> list[str]:
+def _for_font(doc: Document, font, context) -> Document:
+    """*doc* resolved for *font*'s master. A conditional document is resolved
+    against *context* — or, with none, against the font alone (its fontinfo
+    ``styleName``; no axis location) — after filling a missing style name from
+    the font. A flat document passes through untouched."""
+    if not doc.has_conditionals:
+        return doc
+    return doc.resolve((context or RuleContext()).for_font(font))
+
+
+def _require_flat(doc: Document):
+    if doc.has_conditionals:
+        raise ValueError("this document has !if blocks; resolve it for one master "
+                         "first (doc.resolve(RuleContext(...)))")
+
+
+def validate_document(doc: Document, context=None) -> list[str]:
     """Pre-flight check (font-independent): every @label and &variable resolves.
 
     Returns a list of human-readable problems (empty = ok). Catches, up front
@@ -210,7 +227,17 @@ def validate_document(doc: Document) -> list[str]:
     merging); and a variable used on the wrong axis (an X expression where Y is
     required, or vice versa); and an anchor whose X and Y both sample the
     outline with no ``@`` fix (a circular axis dependency).
+
+    A document with conditional blocks is checked as resolved for *context*
+    (a :class:`~anchorsfactory.conditions.RuleContext`); with no context, with
+    **every** branch kept, so a label one branch defines and another uses is not
+    reported (a per-master check then catches what only one master lacks).
     """
+    if doc.has_conditionals:
+        try:
+            doc = doc.resolve(context) if context is not None else all_branches(doc)
+        except ConditionError as e:
+            return [str(e)]
     problems = []
     for lname, items in doc.labels.items():
         for it in items:
@@ -257,6 +284,7 @@ def accumulate(doc: Document, name: str, unicodes, *, seed=()) -> list:
     components under ``!propagate`` (see :func:`propagate_seed`). A ``=`` rule
     wipes it, ``+=`` extends it, ``-=`` drops from it, all for free.
     """
+    _require_flat(doc)
     acc: list = list(seed)
     for rule in doc.rules:
         selector, op, items = rule.selector, rule.op, rule.items
@@ -288,6 +316,7 @@ def accumulate_provenance(doc: Document, name: str, unicodes, *, seed=()) -> lis
     (propagated component anchors); their provenance is a :class:`Propagated`
     marker rather than a ``Rule``, which consumers render specially.
     """
+    _require_flat(doc)
     acc: list = list(seed)                     # (spec, Rule | Propagated)
     for rule in doc.rules:
         selector, op, items = rule.selector, rule.op, rule.items
@@ -536,7 +565,7 @@ def propagate_seed(font, glyph, doc, memo, stack=(), *, round_coords=True) -> li
 
 
 def compute_document(font, doc: Document, *, replace=True, round_coords=True,
-                     on_error="raise", names=None) -> ComputeResult:
+                     on_error="raise", names=None, context=None) -> ComputeResult:
     """Compute the anchors *doc* describes for *font*, without mutating it.
 
     Returns a :class:`ComputeResult` — a ``dict`` of
@@ -572,7 +601,12 @@ def compute_document(font, doc: Document, *, replace=True, round_coords=True,
     not the base glyph). ``None`` (default) computes every matched glyph; an empty
     iterable computes nothing. Besides scoping the result, the filter skips
     :func:`resolve` for non-selected glyphs, so it is also a perf win.
+
+    ``context`` (a :class:`~anchorsfactory.conditions.RuleContext`) picks the
+    master a document with ``!if`` blocks is resolved for; without it, the
+    font's own fontinfo ``styleName`` is the only thing a condition can see.
     """
+    doc = _for_font(doc, font, context)
     if on_error not in ("raise", "collect"):
         raise ValueError(f"on_error must be 'raise' or 'collect', got {on_error!r}")
     keep = None if names is None else set(names)
@@ -631,7 +665,7 @@ class ExplainResult(dict):
 
 
 def explain_document(font, doc: Document, *, replace=True, round_coords=True,
-                     names=None) -> ExplainResult:
+                     names=None, context=None) -> ExplainResult:
     """Like :func:`compute_document`, but every placed anchor carries provenance.
 
     Returns an :class:`ExplainResult` — ``{target_glyph: [PlacedAnchor, ...]}``
@@ -640,8 +674,9 @@ def explain_document(font, doc: Document, *, replace=True, round_coords=True,
     back to the rule that produced it (:class:`PlacedAnchor.source`), its
     ``%``-references, and any ``!propagate`` origin. Never raises on a resolve
     failure (it runs ``on_error='collect'``); skipped anchors show up only in
-    ``.diagnostics``.
+    ``.diagnostics``. ``context`` is as for :func:`compute_document`.
     """
+    doc = _for_font(doc, font, context)
     keep = None if names is None else set(names)
     sfx_spec = resolve_suffixes(doc.suffix_ops)
     font_names = {g.name for g in font} if sfx_spec.all else None
@@ -695,7 +730,7 @@ def explain_document(font, doc: Document, *, replace=True, round_coords=True,
 
 
 def apply_document(font, doc: Document, *, clear=True, replace=True,
-                   round_coords=True, names=None):
+                   round_coords=True, names=None, context=None):
     """Place all anchors described by *doc* onto *font* (in place).
 
     ``round_coords`` rounds placed anchors to whole units (the usual choice for
@@ -707,9 +742,13 @@ def apply_document(font, doc: Document, *, clear=True, replace=True,
     subset of target (suffixed) glyphs. With ``clear=True`` only glyphs in the
     filtered result are cleared and rewritten — **non-selected glyphs are left
     untouched** (the "apply only to selected" behaviour an editor wants).
+
+    ``context`` resolves a conditional document for this master (see
+    :func:`compute_document`). Returns the :class:`ComputeResult` it wrote.
     """
     placed = compute_document(font, doc, replace=replace,
-                              round_coords=round_coords, names=names)
+                              round_coords=round_coords, names=names,
+                              context=context)
     for gname, anchors in placed.items():
         glyph = font[gname]
         if clear:
@@ -719,6 +758,7 @@ def apply_document(font, doc: Document, *, clear=True, replace=True,
             if not clear and replace:
                 _remove_named(glyph, name)
             glyph.appendAnchor(name, (x, y))
+    return placed
 
 
 def _remove_named(glyph, name):

@@ -18,8 +18,12 @@ import os
 import sys
 from datetime import datetime
 
+from dataclasses import replace
+
 from .apply import validate_document
-from .runner import load_document, process_ufo
+from .conditions import (RuleContext, contexts_from_designspace, parse_location,
+                         structure_diff)
+from .runner import _process_ufo, load_document
 
 log = logging.getLogger("anchorsfactory")
 
@@ -55,7 +59,9 @@ def build_parser() -> argparse.ArgumentParser:
         prog="anchorsfactory",
         description="Place anchors in UFO fonts from a rule file.",
     )
-    p.add_argument("ufo", nargs="+", help="UFO file(s) or a directory of UFOs")
+    p.add_argument("ufo", nargs="*",
+                   help="UFO file(s) or a directory of UFOs (optional with "
+                        "--designspace: every source is processed)")
     p.add_argument("-r", "--rules", required=True,
                    help="anchor rules: a file path, or a bare set name looked up "
                         "in --rules-path")
@@ -63,6 +69,18 @@ def build_parser() -> argparse.ArgumentParser:
                    help="directory to resolve bare rule-set names in (repeatable; "
                         "defaults to $ANCHORSFACTORY_RULES_PATH). No rule sets ship "
                         "with the package — see examples/rules/ in the repository")
+    cond = p.add_argument_group("conditional blocks (!if … !endif)")
+    cond.add_argument("--designspace", metavar="PATH",
+                      help="take each UFO's master location and style name from "
+                           "this designspace (its sources, when no UFO is given)")
+    cond.add_argument("--location", action="append", metavar="AXIS.xvalue=N",
+                      default=None,
+                      help="set an axis coordinate for conditions, e.g. "
+                           "ital.xvalue=1 or wght.uservalue=700 (repeatable; "
+                           "overrides the designspace)")
+    cond.add_argument("--style-name", metavar="NAME",
+                      help="the styleName conditions see (default: the "
+                           "designspace source stylename, else fontinfo)")
     out = p.add_mutually_exclusive_group()
     out.add_argument("-o", "--output", help="output UFO path (single input only)")
     out.add_argument("--in-place", action="store_true", help="overwrite the source UFO")
@@ -79,7 +97,22 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     _setup_console_logging(args.verbose)
 
+    try:
+        xvalues, uservalues = parse_location(args.location)
+    except ValueError as e:
+        log.error("%s", e)
+        return 2
+    ds_contexts = None
+    if args.designspace:
+        try:
+            ds_contexts = contexts_from_designspace(args.designspace)
+        except Exception as e:  # noqa: BLE001
+            log.error("cannot read designspace %s: %s", args.designspace, e)
+            return 2
+
     inputs = _expand_inputs(args.ufo)
+    if not inputs and ds_contexts is not None:
+        inputs = list(ds_contexts)
     if not inputs:
         log.error("no UFO inputs found")
         return 2
@@ -100,21 +133,39 @@ def main(argv: list[str] | None = None) -> int:
             log.error("rules: %s", msg)
         return 2
 
+    def context_for(ufo):
+        ctx = RuleContext()
+        if ds_contexts is not None:
+            ctx = ds_contexts.get(os.path.abspath(ufo.rstrip(os.sep)))
+            if ctx is None:
+                raise ValueError(f"{ufo} is not a source of {args.designspace}")
+        if xvalues or uservalues:
+            ctx = replace(ctx, xvalues={**ctx.xvalues, **xvalues},
+                          uservalues={**ctx.uservalues, **uservalues})
+        if args.style_name is not None:
+            ctx = replace(ctx, style_name=args.style_name)
+        return ctx
+
     failures = 0
+    results = {}
     for ufo in inputs:
         fh = _font_log_handler(args.log_dir, ufo) if args.log_dir else None
         if fh:
             log.addHandler(fh)
         try:
-            process_ufo(
+            _out, placed = _process_ufo(
                 ufo, args.rules,
                 output=args.output,
                 in_place=args.in_place,
                 backup_dir=args.backup_dir,
                 clear=not args.keep_existing,
                 round_coords=not args.no_round,
+                replace=True,
                 document=document,
+                search_paths=args.rules_path,
+                context=context_for(ufo),
             )
+            results[os.path.basename(ufo.rstrip(os.sep))] = placed
         except Exception as e:  # noqa: BLE001 — report per-font, continue the batch
             log.error("Failed on %s: %s", ufo, e)
             failures += 1
@@ -122,6 +173,16 @@ def main(argv: list[str] | None = None) -> int:
             if fh:
                 log.removeHandler(fh)
                 fh.close()
+
+    # Branches may give masters different anchor sets — allowed (the designer
+    # may build composites and strip anchors before interpolating), but worth
+    # a warning, since it breaks interpolation if left in place.
+    if document.has_conditionals and len(results) > 1:
+        notes = structure_diff(anchors=results).warnings()
+        for msg in notes[:50]:
+            log.warning("masters differ: %s", msg)
+        if len(notes) > 50:
+            log.warning("masters differ: … and %d more glyphs", len(notes) - 50)
 
     return 1 if failures else 0
 

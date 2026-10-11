@@ -23,7 +23,8 @@ const round = v => Math.round(v*10)/10;
 const escapeHtml = s => String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const debounce = (fn, ms) => { let t; return (...a)=>{clearTimeout(t); t=setTimeout(()=>fn(...a), ms);}; };
 const allRulesText = () => anchorLayers.map(l => l.ed.getValue()).join("\n");
-const editorForLayer = i => (anchorLayers[i] ? anchorLayers[i].ed : null);
+// layer index -1 is the constructions editor (problems prefixed "constructions:")
+const editorForLayer = i => (i === -1 ? gcEd : anchorLayers[i] ? anchorLayers[i].ed : null);
 
 async function boot(){
   META = await (await fetch("/api/state")).json();
@@ -40,6 +41,7 @@ async function boot(){
   setupSplitters();
   setupView();
   $("#outbar").addEventListener("click", () => $("#output").classList.toggle("open"));
+  $("#compareMasters").addEventListener("click", compareMasters);
   compute();
 }
 
@@ -218,7 +220,8 @@ function presetOf(text){ return META.presets.find(p => META.presetTexts[p] === t
 let KW = new Set(), METRICS = [], METRIC_SET = new Set(), DIRECTIVES = new Set(),
     FRAMES = [], ALIGNS = [], EDGES = [], RUNS = [], RUN_SET = new Set(),
     CENTROID = "centroid", AFTER_DOT = {}, FOR_SLOT = {}, FRAME_SET = new Set(),
-    COMP_HEAD_RE = /^comp(\d+|last)$/;
+    COMP_HEAD_RE = /^comp(\d+|last)$/,
+    COND_DIRS = new Set(), COND_KW = [], COND_FIELDS = [], AXIS_KINDS = [];
 let CHAR_W = 0;
 
 function initVocabulary(v){
@@ -230,6 +233,46 @@ function initVocabulary(v){
   DIRECTIVES = new Set(v.directives);
   KW = new Set([...FRAMES, ...ALIGNS, ...EDGES, ...RUNS, CENTROID]);
   COMP_HEAD_RE = new RegExp("^" + v.componentHeadPattern + "$");
+  COND_DIRS = new Set(v.conditionalDirectives || []);
+  COND_KW = v.conditionKeywords || []; COND_FIELDS = v.conditionFields || [];
+  AXIS_KINDS = v.axisValueKinds || [];
+}
+
+// `!if` / `!elif` lines hold a condition (a language of its own, shared by both
+// editors): `ital.xvalue == 1 and "Bold" in styleName`.
+const COND_LINE_RE = /^\s*!(if|elif)\b/;
+const isCondDirective = line => /^\s*!(if|elif|else|endif)\b/.test(line);
+
+// Completion on a directive line: `!…` → the block words; after `axis.` →
+// xvalue/uservalue; otherwise the condition's own words.
+function condComplete({word, head, line}){
+  if(word[0] === "!") return line.trim() === word ? _mk([...COND_DIRS], "dir") : [];
+  if(!COND_LINE_RE.test(line)) return null;
+  if(head != null) return _mk(AXIS_KINDS, "axis");
+  return [..._mk(COND_FIELDS, "field"), ..._mk(COND_KW, "kw")];
+}
+
+function highlightCond(line){
+  let out = "";
+  const hash = line.indexOf("#");
+  let code = line, tail = "";
+  if(hash >= 0){ code = line.slice(0, hash); tail = line.slice(hash); }
+  const re = /(!\w+)|("[^"]*"?)|([A-Za-z_]\w*)(\.(?:xvalue|uservalue))|(-?\d+(?:\.\d+)?)|(==|!=|<=|>=|<|>|\(|\))|([A-Za-z_]\w*)/g;
+  let m, last = 0;
+  const put = (cls, txt) => { out += cls ? `<span class="t-${cls}">${escapeHtml(txt)}</span>` : escapeHtml(txt); };
+  while((m = re.exec(code))){
+    if(m.index > last) put(null, code.slice(last, m.index));
+    if(m[1]) put("dir", m[1]);
+    else if(m[2]) put("str", m[2]);
+    else if(m[3]){ put("var", m[3]); put("kw", m[4]); }      // axis . xvalue|uservalue
+    else if(m[5]) put("num", m[5]);
+    else if(m[6]) put("op", m[6]);
+    else if(m[7]) put(COND_KW.includes(m[7]) ? "kw" : COND_FIELDS.includes(m[7]) ? "metric" : null, m[7]);
+    last = re.lastIndex;
+  }
+  if(last < code.length) put(null, code.slice(last));
+  if(tail) put("comment", tail);
+  return out || "&nbsp;";
 }
 
 // ---- completion providers (one per editor language) ------------------------
@@ -251,7 +294,10 @@ function anchorNames(baseOnly){
 }
 
 // The anchor DSL: keywords, @labels, &vars, %anchors, and after-a-dot positions.
-function ANCHOR_COMPLETE({word, head, seg, axis}){
+function ANCHOR_COMPLETE({word, head, seg, axis, line}){
+  if(word[0] === "!") return line.trim() === word ? _mk([...DIRECTIVES, ...COND_DIRS], "dir") : [];
+  const cond = condComplete({word, head, line});
+  if(cond) return cond;
   if(word[0] === "@"){ const s=new Set(); for(const x of allRulesText().matchAll(/@[\w.]+/g)) s.add(x[0]); return _mk([...s],"label"); }
   if(word[0] === "&"){ const s=new Set(); for(const x of allRulesText().matchAll(/&\w+/g)) s.add(x[0]); return _mk([...s],"var"); }
   if(word[0] === "%"){                                   // another anchor's position on this glyph
@@ -273,7 +319,9 @@ function ANCHOR_COMPLETE({word, head, seg, axis}){
 }
 
 // GlyphConstruction: @anchor names, otherwise glyph names.
-function GC_COMPLETE({word}){
+function GC_COMPLETE({word, head, line}){
+  const cond = condComplete({word, head, line});
+  if(cond) return cond;
   if(word[0] === "@") return _mk(anchorNames(true).map(n=>"@"+n),"anchor");
   const names = ALLGLYPHS ? ALLGLYPHS.map(g=>g.name)
               : [...new Set([...Object.keys(GLYPHS), ...Object.keys(COMPOSITES||{})])];
@@ -281,6 +329,7 @@ function GC_COMPLETE({word}){
 }
 
 function highlightLine(line){
+  if(isCondDirective(line)) return highlightCond(line);
   let out = "";
   const hash = line.indexOf("#");
   let code = line, tail = "";
@@ -311,6 +360,7 @@ function highlightLine(line){
 // GlyphConstruction syntax (a different language from the anchor DSL):
 //   name = base + mark@anchor [| 0xNN] [^metrics]   ·   $var / {var}   ·   ?skip-if-exists
 function highlightGC(line){
+  if(isCondDirective(line)) return highlightCond(line);
   let out = "";
   const hash = line.indexOf("#");
   let code = line, tail = "";
@@ -345,7 +395,7 @@ function makeEditor(host, onChange, onFocus, highlight = highlightLine, complete
   const ta = host.querySelector(".ed-ta"), hl = host.querySelector(".ed-hl"),
         gutter = host.querySelector(".ed-gutter"), gnums = host.querySelector(".gnums"),
         ac = host.querySelector(".ac");
-  let errLines = new Set(), acItems = [], acSel = 0, acStart = 0;
+  let errLines = new Set(), offLines = new Set(), acItems = [], acSel = 0, acStart = 0;
 
   if(!CHAR_W){
     const probe = document.createElement("span");
@@ -356,12 +406,15 @@ function makeEditor(host, onChange, onFocus, highlight = highlightLine, complete
 
   function refresh(){
     const lines = ta.value.split("\n");
-    hl.innerHTML = lines.map((l,i) => `<div class="ln${errLines.has(i+1)?" err":""}">${highlight(l)}</div>`).join("");
-    gnums.innerHTML = lines.map((_,i) => `<div class="gl${errLines.has(i+1)?" err":""}">${i+1}</div>`).join("");
+    const cls = i => (errLines.has(i+1) ? " err" : "") + (offLines.has(i+1) ? " off" : "");
+    hl.innerHTML = lines.map((l,i) => `<div class="ln${cls(i)}">${highlight(l)}</div>`).join("");
+    gnums.innerHTML = lines.map((_,i) => `<div class="gl${cls(i)}">${i+1}</div>`).join("");
     sync();
   }
   function sync(){ hl.scrollTop = ta.scrollTop; hl.scrollLeft = ta.scrollLeft; gutter.scrollTop = ta.scrollTop; }
   function markErrors(set){ errLines = set || new Set(); refresh(); }
+  // lines an `!if` block drops for the active master — dimmed, still editable
+  function markInactive(set){ offLines = set || new Set(); refresh(); }
 
   // Which slot of `name ( X Y )` the caret sits in — the anchor DSL uses one
   // grammar for both axes but a different alignment table per axis, so knowing
@@ -376,21 +429,22 @@ function makeEditor(host, onChange, onFocus, highlight = highlightLine, complete
   }
   function currentWord(){
     const pos = ta.selectionStart, upto = ta.value.slice(0, pos);
-    const m = /[@&%$]?[\w.]*$/.exec(upto);
+    const m = /[@&%$!]?[\w.]*$/.exec(upto);
     const word = m ? m[0] : "";
     // split at the last dot: `outline.ce` → head "outline", seg "ce"; complete only seg
     const dot = word.lastIndexOf(".");
     const head = dot >= 0 ? word.slice(0, dot) : null;
     const seg = dot >= 0 ? word.slice(dot + 1) : word;
     const start = dot >= 0 ? pos - seg.length : pos - word.length;
-    return { word, head, seg, start, pos, axis: slotAxis(upto) };
+    const line = upto.slice(upto.lastIndexOf("\n") + 1);
+    return { word, head, seg, start, pos, axis: slotAxis(upto), line };
   }
   function acUpdate(){
-    const {word, head, seg, start, pos, axis} = currentWord();
+    const {word, head, seg, start, pos, axis, line} = currentWord();
     // require ≥1 char normally, but pop immediately right after a dot (empty seg ok)
     if((head == null && seg.length < 1) || pos !== ta.selectionStart) return acHide();
     const lower = seg.toLowerCase();
-    acItems = complete({word, head, seg, axis})
+    acItems = complete({word, head, seg, axis, line})
       .filter(c => c.v.toLowerCase().startsWith(head != null ? lower : word.toLowerCase()) && c.v !== word)
       .slice(0, 12);
     if(!acItems.length) return acHide();
@@ -438,7 +492,7 @@ function makeEditor(host, onChange, onFocus, highlight = highlightLine, complete
   }
 
   return { getValue: () => ta.value, setValue: v => { ta.value = v; markErrors(new Set()); },
-           refresh, markErrors, gotoLine, focus: () => ta.focus(), ta };
+           refresh, markErrors, markInactive, gotoLine, focus: () => ta.focus(), ta };
 }
 
 /* ===================================================================== *
@@ -510,7 +564,7 @@ function setupSplitters(){
     outh:  {sel:".editor",    axis:"y", sign:-1, min: 44, def:150, max:()=>$(".editor").clientHeight*0.6},
     gridh: {sel:".stage",     axis:"y", sign: 1, min: 90, def:200, max:()=>$(".stage").clientHeight*0.72},
     sidew: {sel:"main",       axis:"x", sign:-1, min:220, def:300, max:()=>innerWidth*0.42},
-    fonth: {sel:".sidebar",   axis:"y", sign: 1, min: 80, def:220, max:()=>$(".sidebar").clientHeight*0.7},
+    fonth: {sel:".sidebar",   axis:"y", sign: 1, min: 80, def:320, max:()=>$(".sidebar").clientHeight*0.7},
   };
   let saved = {}; try { saved = JSON.parse(localStorage.getItem("af.splits") || "{}"); } catch(_){}
   const targetOf = t => document.querySelector(defs[t].sel);
@@ -606,15 +660,58 @@ function renderFontCards(){
   fonts.forEach((f, i) => {
     const card = document.createElement("div");
     card.className = "fontcard" + (i === active ? " sel" : "");
+    const style = f.styleName != null ? f.styleName : "";
     card.innerHTML =
       `<div class="fc-body"><div class="fc-name">${escapeHtml(f.name)}</div>`+
-      `<div class="fc-meta">${Math.round(f.unitsPerEm)}upm · ital ${Math.round(f.italicAngle)}°</div></div>`+
+      `<div class="fc-meta">${Math.round(f.unitsPerEm)}upm · ital ${Math.round(f.italicAngle)}°`+
+      (f.designspace ? ` · designspace` : "") + `</div>`+
+      // the master this font stands for — what `!if` blocks see
+      `<label class="fc-field" title="axis location for !if conditions: AXIS.xvalue=N (design) / AXIS.uservalue=N (user)">`+
+      `<span>location</span><input class="fc-loc" spellcheck="false" placeholder="ital.xvalue=1, wght.uservalue=700" value="${escapeHtml(f.location || "")}"></label>`+
+      `<label class="fc-field" title="styleName for !if conditions (empty → the font's fontinfo styleName)">`+
+      `<span>style</span><input class="fc-style" spellcheck="false" placeholder="${escapeHtml(f.fontStyleName || "(fontinfo)")}" value="${escapeHtml(style)}"></label>`+
+      `<div class="fc-err" hidden></div></div>`+
       (fonts.length > 1 ? `<button class="fc-x" title="remove this font">✕</button>` : "");
-    card.addEventListener("click", () => { if(i !== active) activateFont(i); });
+    card.addEventListener("click", e => { if(i !== active && !e.target.closest("input")) activateFont(i); });
     const x = card.querySelector(".fc-x");
     if(x) x.addEventListener("click", e => { e.stopPropagation(); removeFont(i); });
+    for(const inp of card.querySelectorAll("input")){
+      inp.addEventListener("keydown", e => { if(e.key === "Enter") inp.blur(); });
+      inp.addEventListener("change", () => setFontContext(i, card));
+    }
     box.appendChild(card);
   });
+  $("#compareMasters").hidden = fonts.length < 2;
+}
+
+async function setFontContext(i, card){
+  const loc = card.querySelector(".fc-loc").value, style = card.querySelector(".fc-style").value;
+  const err = card.querySelector(".fc-err");
+  let j; try {
+    j = await (await fetch("/api/font/context", {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({index: i, location: loc, styleName: style === "" ? null : style})})).json();
+  } catch(e){ j = {ok:false, error:String(e)}; }
+  if(!j.ok){ err.textContent = j.error || "could not set the location"; err.hidden = false; return; }
+  Object.assign(META, j.state); renderFontCards();
+  if(i === (META.active ?? 0)) compute();            // the active master changed → re-resolve
+}
+
+// Every loaded master computed with its own location: which glyphs end up with
+// different anchor names or composite components (allowed, but worth knowing).
+async function compareMasters(){
+  const box = $("#masters"); box.hidden = false;
+  box.innerHTML = `<div class="m-row muted">comparing…</div>`;
+  const layers = anchorLayers.map(l => ({name: l.name, text: l.ed.getValue()}));
+  let j; try {
+    j = await (await fetch("/api/masters", {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({layers, gc: gcEd ? gcEd.getValue() : ""})})).json();
+  } catch(e){ j = {ok:false, errors:[String(e)], warnings:[]}; }
+  const rows = [
+    ...(j.errors || []).map(m => `<div class="m-row err">${escapeHtml(m)}</div>`),
+    ...(j.warnings || []).map(m => `<div class="m-row warn">${escapeHtml(m)}</div>`),
+  ];
+  box.innerHTML = rows.length ? rows.join("")
+    : `<div class="m-row muted">masters are structurally identical</div>`;
 }
 
 async function fontOp(url, index){
@@ -657,6 +754,7 @@ async function compute(){
     VIEW = {ok:false, problems:["studio server error — see terminal: "+String(err)], diagnostics:[], glyphs:{}, layers:[]};
   }
   markErrorLines();
+  markInactiveLines();
   renderProblems();
   // Freeze the last valid preview while rules are mid-edit / invalid: the server
   // returns no glyphs for a broken document, so re-rendering would blank the grid
@@ -688,15 +786,29 @@ async function compute(){
 // "<layer>: line 3: ..." / "line 3: ..." → {layer index, line} (layer by name)
 function problemLoc(p){
   let m = /^([^:]+): line (\d+):/.exec(p);
-  if(m){ const idx = anchorLayers.findIndex(l => l.name === m[1]); if(idx >= 0) return {layer: idx, line: +m[2]}; }
+  if(m){
+    if(m[1] === (VIEW.gcLabel || "constructions")) return {layer: -1, line: +m[2]};
+    const idx = anchorLayers.findIndex(l => l.name === m[1]); if(idx >= 0) return {layer: idx, line: +m[2]};
+  }
   m = /^line (\d+):/.exec(p);
   return m ? {layer: 0, line: +m[1]} : null;
 }
 
 function markErrorLines(){
-  const sets = anchorLayers.map(() => new Set());
-  for(const p of VIEW.problems||[]){ const loc = problemLoc(p); if(loc && sets[loc.layer]) sets[loc.layer].add(loc.line); }
+  const sets = anchorLayers.map(() => new Set()), gcSet = new Set();
+  for(const p of VIEW.problems||[]){
+    const loc = problemLoc(p); if(!loc) continue;
+    if(loc.layer === -1) gcSet.add(loc.line); else if(sets[loc.layer]) sets[loc.layer].add(loc.line);
+  }
   anchorLayers.forEach((l, idx) => l.ed.markErrors(sets[idx]));
+  if(gcEd) gcEd.markErrors(gcSet);
+}
+
+// dim what the `!if` blocks drop for the active master (sent on every compute)
+function markInactiveLines(){
+  const inactive = VIEW.inactive || {};
+  anchorLayers.forEach((l, idx) => l.ed.markInactive(new Set(inactive[idx] || [])));
+  if(gcEd) gcEd.markInactive(new Set(VIEW.gcInactive || []));
 }
 
 function renderProblems(){

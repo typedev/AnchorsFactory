@@ -105,9 +105,11 @@
       <div class="pane-head">
         <span class="ln-name">fonts</span>
         <div class="spacer" style="flex:1"></div>
+        <button id="compareMasters" class="ghost mini-btn" hidden title="compute every loaded master with its own location and list structural differences">compare</button>
         <button id="addfont" class="ghost mini-btn" title="load another .ufoz/.zip (or drop it) — added, not replaced">+ load</button>
       </div>
       <div class="fontcards" id="fontcards"></div>
+      <div class="masters" id="masters" hidden></div>
     </section>
     <div class="split row" data-t="fonth" title="drag to resize · double-click to reset"></div>
     <aside class="readout" id="readout"></aside>

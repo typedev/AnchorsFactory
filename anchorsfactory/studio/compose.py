@@ -21,7 +21,12 @@ from fontTools.pens.svgPathPen import SVGPathPen
 from ..apply import apply_document, validate_document
 from ..composites import (_anchor_pos, build_composites as _build_composites,
                           uncovered_precomposed)
+from ..conditions import RuleContext, inactive_lines, structure_diff
 from .render import resolve_stack
+
+#: How construction-text problems are prefixed, so the client can route a
+#: "constructions: line N: …" problem to the constructions editor.
+GC_LABEL = "constructions"
 
 
 @contextlib.contextmanager
@@ -115,19 +120,32 @@ def _serialize(composite, work) -> dict:
     }
 
 
-def build_composite_view(font, layers, gc_text: str) -> dict:
+def gc_inactive_lines(gc_text: str, context) -> list:
+    """Lines of *gc_text* its ``!if`` blocks drop for *context* (for dimming);
+    empty when they cannot be evaluated (that error is reported on compute)."""
+    try:
+        return sorted(inactive_lines(gc_text or "", context))
+    except ValueError:
+        return []
+
+
+def build_composite_view(font, layers, gc_text: str, context=None) -> dict:
     """Assemble the composites *gc_text* describes from the anchors *layers* place,
     serialized for the browser.
 
     *font* is the shared Studio font — it is **copied**, never mutated. Returns
     ``{ok, problems, composites: {name: payload}, uncovered}``; on an invalid rule
     document it returns ``ok=False`` with the document problems and no composites.
+
+    *context* is the master that ``!if`` blocks — in the rules and in
+    *gc_text* — resolve for (its missing style name is filled from *font*).
     """
     if not gc_text or not gc_text.strip():
         return {"ok": True, "problems": [], "composites": {},
                 "uncovered": uncovered_precomposed(font, set())}
 
-    doc = resolve_stack(layers)
+    context = (context or RuleContext()).for_font(font)
+    doc = resolve_stack(layers, context)
     problems = validate_document(doc)
     if problems:
         return {"ok": False, "problems": problems, "composites": {}, "uncovered": []}
@@ -138,8 +156,44 @@ def build_composite_view(font, layers, gc_text: str) -> dict:
     composites: dict[str, dict] = {}
     with _quiet():
         apply_document(work, doc)
-        for name, composite in _build_composites(work, gc_text).items():
+        try:
+            built = _build_composites(work, gc_text, context)
+        except ValueError as exc:                   # a !if that cannot be evaluated
+            return {"ok": False, "problems": [f"{GC_LABEL}: {exc}"],
+                    "composites": {}, "uncovered": []}
+        for name, composite in built.items():
             composites[name] = _serialize(composite, work)
 
     return {"ok": True, "problems": [], "composites": composites,
             "uncovered": uncovered_precomposed(font, set(composites))}
+
+
+def masters_report(entries, layers, gc_text: str) -> dict:
+    """Compare what the rules (and constructions) give each loaded master.
+
+    *entries* is ``[(label, font, RuleContext), ...]``. Each master is computed
+    with its own context; :func:`~anchorsfactory.conditions.structure_diff`
+    then lists glyphs whose anchor names or composite components differ — a
+    **warning**, since a designer may build composites and strip anchors before
+    interpolating. A master whose rules fail is reported in ``errors`` and left
+    out of the comparison. Returns ``{ok, warnings, errors, masters}``.
+    """
+    anchors, composites, errors = {}, {}, []
+    for label, font, context in entries:
+        context = (context or RuleContext()).for_font(font)
+        try:
+            doc = resolve_stack(layers, context)
+            problems = validate_document(doc)
+            if problems:
+                raise ValueError("; ".join(problems))
+            with _quiet():
+                work = font.copy()
+                anchors[label] = apply_document(work, doc)
+                if gc_text and gc_text.strip():
+                    composites[label] = _build_composites(work, gc_text, context)
+        except Exception as exc:                    # one bad master must not sink the report
+            errors.append(f"{label}: {exc}")
+    diff = structure_diff(anchors=anchors if len(anchors) > 1 else None,
+                          composites=composites if len(composites) > 1 else None)
+    return {"ok": not errors, "warnings": diff.warnings(), "errors": errors,
+            "masters": list(anchors)}

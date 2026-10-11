@@ -18,6 +18,10 @@ from .model import (
     Frame, Axis, HAlign, VEdge, Run, Frac, FONT_METRICS,
     Pos, Centroid, Abs, Y, FontMetric, Sum, Neg, EdgeOffset, AnchorSpec, AnchorRef, LabelRef, VarRef,
     GlyphName, Unicode, UnicodeRange, Glob, Category, Op, Document, Rule, RuleSource,
+    ConditionalSource,
+)
+from .conditions import (
+    ConditionError, block_body_lines, directive_lines, is_directive_line, scan_blocks,
 )
 from .vocabulary import (
     AT_X_EDGES, AT_Y_SIDES, CENTROID, COMPONENT_PATTERN, DIRECTIVES,
@@ -350,6 +354,40 @@ def _parse_suffix_op(op_tok: str, value: str, n: int):
 
 
 def parse_dsl(lines) -> Document:
+    """Parse rule text (an iterable of lines, or one string) to a :class:`Document`.
+
+    Conditional blocks (``!if``/``!elif``/``!else``/``!endif``, see
+    :mod:`anchorsfactory.conditions`) are checked in **every** branch — a bad
+    line in a branch no master takes is still an error here. The returned
+    document's fields hold the unconditional lines only; it keeps its text
+    (``doc.conditional``) so ``doc.resolve(context)`` can produce one master's
+    flat document.
+    """
+    if isinstance(lines, str):
+        lines = lines.splitlines()
+    lines = list(lines)
+    try:
+        blocks = scan_blocks(lines)
+    except ConditionError as e:
+        raise DSLError(str(e)) from None
+    if not blocks:
+        return parse_flat(lines)
+    inside = block_body_lines(blocks)
+    for n in sorted(inside):
+        if lines[n - 1].split("#", 1)[0].strip().startswith("!extends"):
+            raise DSLError(f"line {n}: !extends cannot be conditional")
+    directives = directive_lines(blocks)
+    # every branch, for errors; then the unconditional lines, for the fields
+    parse_flat(["" if n in directives else l for n, l in enumerate(lines, 1)])
+    doc = parse_flat(["" if n in directives or n in inside else l
+                      for n, l in enumerate(lines, 1)])
+    doc.conditional = ConditionalSource(tuple(lines))
+    return doc
+
+
+def parse_flat(lines) -> Document:
+    """Parse rule lines that hold no conditional blocks (the core of
+    :func:`parse_dsl`; :meth:`Document.resolve` feeds it blanked text)."""
     labels: dict[str, list[AnchorSpec]] = {}
     variables: dict[str, object] = {}
     rules: list = []
@@ -394,6 +432,8 @@ def parse_dsl(lines) -> Document:
         return targets
 
     for n, stmt in raw_lines:
+        if is_directive_line(stmt):
+            raise DSLError(f"line {n}: {stmt.split()[0]} must be alone on its line")
         if stmt.startswith("!"):
             body = stmt[1:].strip()
             m = _RULE_RE.match(body)

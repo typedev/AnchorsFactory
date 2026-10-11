@@ -375,6 +375,8 @@ U+0413         = bar (width.center $H)   # Г → [bar(…)] only — the @ defa
 !suffixes  = .alt, .sc     # also place every rule on base+suffix glyph variants
 !shiftx    = -15           # add a constant X offset to every placed anchor
 !propagate = composites    # composites inherit their components' anchors
+!if ital.xvalue == 1       # per-master blocks: see "Conditional blocks" below
+!endif
 ```
 
 `!extends` takes a **rule-set name** (`default`, `default-italics` — no
@@ -460,6 +462,99 @@ U+0413 += hook (outline.right 0)   # Г: defaults plus a hook
 A      -= ogonek                   # A: defaults minus the ogonek anchor
 O       = top (box.center $H)       # O: replace entirely
 ```
+
+## Conditional blocks (per master)
+
+One rule file can serve every master of a family. A block keeps its lines only
+for the masters whose condition holds:
+
+```
+L, l += dot (width*4/7 capHeight*1/2)
+!if ital.xvalue == 1              # italic masters: the dot closer to the stem
+L, l += dot (width*1/2 capHeight*1/2)
+!elif wght.uservalue >= 600
+&dotY = capHeight*5/9
+!else
+&dotY = capHeight*1/2
+!endif
+```
+
+- `!if COND` … `!elif COND` … `!else` … `!endif`. Each directive stands **alone
+  on its line** (a trailing `# comment` is fine, a `;` is not). Blocks nest.
+- A block may hold anything a line can: rules (`=` `+=` `-=`), `&variables`,
+  `@labels`, `!suffixes`, `!shiftx`, `!propagate`. **`!extends` cannot be
+  conditional.**
+- Resolving a block for one master **drops the untaken branches and keeps the
+  taken lines in source order**. Nothing else changes: last definition wins,
+  `=`/`+=`/`-=` accumulate as usual. Above, italic masters get both `dot` rules
+  and the later one wins.
+- Every branch is parsed, so an error in a branch no master takes is still an
+  error. Line numbers in error messages and in rule provenance are those of the
+  file as written.
+
+### Conditions
+
+| Term | Meaning |
+|------|---------|
+| `<axis>.xvalue` | the master's **design** coordinate on that axis |
+| `<axis>.uservalue` | the same location in **user** coordinates (through the axis map) |
+| `styleName` | the master's style name (a string) |
+| `"Bold"`, `700`, `-0.5` | string (double quotes) and number literals |
+
+`<axis>` is the axis **tag or name** from the designspace (`wght.xvalue` and
+`weight.xvalue` are the same thing). The spelling follows the designspace
+(`xvalue`/`uservalue`): with a map of design 0–100 onto user 300–700, a Bold
+master has `wght.xvalue == 100` and `wght.uservalue == 700`.
+
+Operators: `==` `!=` `<` `<=` `>` `>=` between numbers or between strings
+(ordering only on numbers), `in` / `not in` for a substring (`"Bold" in
+styleName`), plus `not`, `and`, `or` (in that order of precedence) and
+parentheses. Comparing a string with a number is an error. There is no `eval`:
+conditions are a small grammar of their own.
+
+Where the values come from:
+
+- **Axis values** come from a designspace (`--designspace` on the CLI;
+  `contexts_from_designspace()` in the API) or are given directly
+  (`--location ital.xvalue=1`; `RuleContext(xvalues=…, uservalues=…)`).
+  Evaluating an axis the context has no value for is an **error** with its line
+  number, never a silent false. With a designspace, naming an axis it does not
+  define is an error even in a branch that is not taken (it is a typo).
+  Conditions short-circuit, so an `!elif` after a taken branch is not
+  evaluated.
+- **`styleName`** is the designspace source's `stylename` when there is a
+  designspace, else the UFO's fontinfo `styleName`, else `""` (where a
+  `styleName` condition is simply false). The source stylename can differ from
+  fontinfo: a Bold Italic master may be `stylename="Bold"` in the designspace,
+  and then `styleName == "Bold"` matches it. A condition sees exactly what the
+  designspace says. `--style-name` overrides both.
+
+### Masters may differ structurally
+
+Branches may give masters different anchor sets, or (in constructions)
+different component bases. That is allowed. Interpolation compatibility is the
+designer's call, since composites may be built and anchors stripped before
+interpolating. The CLI reports such differences as **warnings** when it
+processes several masters, and `structure_diff()` in the API returns them.
+
+### Constructions (`.glyphsConstruction`)
+
+The same blocks work in GlyphConstruction text, so one file can build a
+composite from different bases per master:
+
+```
+!if ital.xvalue == 0
+gbreve = g.ss01 + brevecomb@top
+!else
+gbreve = g + brevecomb@top
+!endif
+```
+
+Untaken lines are **blanked, not removed**, so each construction keeps its
+source line. A `!` at the start of a line cannot clash with GlyphConstruction's
+own `!` (a mark colour, which only follows a glyph name). Stock
+GlyphConstruction does not read such a file. Pass it through
+`anchorsfactory.composites.resolve_conditionals(text, context)` first.
 
 ## A complete example
 
