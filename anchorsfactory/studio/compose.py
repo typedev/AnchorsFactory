@@ -2,10 +2,11 @@
 
 The assembly itself lives in the library core (:mod:`anchorsfactory.composites`),
 which is renderer-neutral and returns live ``ConstructionGlyph`` objects plus each
-construction's source line. This adapter owns the *web* specifics: it applies the
-computed anchors onto a throwaway **copy** of the font (GlyphConstruction reads
-``glyph.anchors``), then draws each composite's components to SVG paths and
-records the anchor-join points — the shape ``app.js`` renders.
+construction's source line. This adapter owns the *web* specifics: it lays the
+computed anchors over the font in an :class:`AnchoredGlyphSet` (GlyphConstruction
+reads ``glyph.anchors``; nothing is copied or mutated), then draws each
+composite's components to SVG paths and records the anchor-join points — the
+shape ``app.js`` renders.
 """
 
 from __future__ import annotations
@@ -18,11 +19,12 @@ from fontTools.misc.transform import Transform
 from fontTools.pens.recordingPen import DecomposingRecordingPen
 from fontTools.pens.svgPathPen import SVGPathPen
 
-from ..apply import apply_document, validate_document
-from ..composites import (_anchor_pos, build_composites as _build_composites,
-                          uncovered_precomposed)
+from ..apply import compute_document, validate_document
+from ..composites import (AnchoredGlyphSet, _anchor_pos,
+                          build_composites as _build_composites,
+                          construction_glyph_names, uncovered_precomposed)
 from ..conditions import RuleContext, inactive_lines, structure_diff
-from .render import resolve_stack
+from .render import cached_path, resolve_stack
 
 #: How construction-text problems are prefixed, so the client can route a
 #: "constructions: line N: …" problem to the constructions editor.
@@ -82,7 +84,7 @@ def _components_bounds(work, comps):
     return [round(min(xs), 2), round(min(ys), 2), round(max(xs), 2), round(max(ys), 2)]
 
 
-def _serialize(composite, work) -> dict:
+def _serialize(composite, work, path_cache=None) -> dict:
     """One library :class:`~anchorsfactory.composites.Composite` → the browser's
     JSON payload (components as SVG paths + transforms, anchor joins, bounds,
     problems, and the construction's source ``line`` for click-to-rule)."""
@@ -95,7 +97,7 @@ def _serialize(composite, work) -> dict:
     # Render only components that actually exist — missing ones are flagged in
     # problems, and drawing them would raise MissingComponentError.
     components = [{"base": g, "transform": [round(v, 3) for v in t],
-                   "path": _glyph_path(work, g)}
+                   "path": cached_path(path_cache, g, lambda g=g: _glyph_path(work, g))}
                   for g, t in raw if g in work]
     # Join points: where each mark's _anchor snapped onto the base's anchor, in
     # composite space (base component transform applied).
@@ -129,11 +131,19 @@ def gc_inactive_lines(gc_text: str, context) -> list:
         return []
 
 
-def build_composite_view(font, layers, gc_text: str, context=None) -> dict:
+def _anchored_view(font, doc, gc_text, context):
+    """*font* as GlyphConstruction should see it: the anchors *doc* computes
+    for the glyphs *gc_text* uses, laid over the font's own."""
+    names = construction_glyph_names(gc_text, font, context)
+    return AnchoredGlyphSet(font, compute_document(font, doc, names=names))
+
+
+def build_composite_view(font, layers, gc_text: str, context=None,
+                         path_cache=None) -> dict:
     """Assemble the composites *gc_text* describes from the anchors *layers* place,
     serialized for the browser.
 
-    *font* is the shared Studio font — it is **copied**, never mutated. Returns
+    *font* is the shared Studio font — it is only read, never mutated. Returns
     ``{ok, problems, composites: {name: payload}, uncovered}``; on an invalid rule
     document it returns ``ok=False`` with the document problems and no composites.
 
@@ -150,19 +160,19 @@ def build_composite_view(font, layers, gc_text: str, context=None) -> dict:
     if problems:
         return {"ok": False, "problems": problems, "composites": {}, "uncovered": []}
 
-    # Apply the computed anchors onto a throwaway copy so GlyphConstruction can
-    # read them; the shared font stays untouched.
-    work = font.copy()
+    # GlyphConstruction reads anchors off the glyphs: give it a view of the
+    # font with the computed anchors in place (no copy, nothing mutated), and
+    # compute only the glyphs the constructions actually use.
     composites: dict[str, dict] = {}
     with _quiet():
-        apply_document(work, doc)
         try:
+            work = _anchored_view(font, doc, gc_text, context)
             built = _build_composites(work, gc_text, context)
         except ValueError as exc:                   # a !if that cannot be evaluated
             return {"ok": False, "problems": [f"{GC_LABEL}: {exc}"],
                     "composites": {}, "uncovered": []}
         for name, composite in built.items():
-            composites[name] = _serialize(composite, work)
+            composites[name] = _serialize(composite, work, path_cache)
 
     return {"ok": True, "problems": [], "composites": composites,
             "uncovered": uncovered_precomposed(font, set(composites))}
@@ -187,9 +197,10 @@ def masters_report(entries, layers, gc_text: str) -> dict:
             if problems:
                 raise ValueError("; ".join(problems))
             with _quiet():
-                work = font.copy()
-                anchors[label] = apply_document(work, doc)
+                placed = compute_document(font, doc)
+                anchors[label] = placed
                 if gc_text and gc_text.strip():
+                    work = AnchoredGlyphSet(font, placed)
                     composites[label] = _build_composites(work, gc_text, context)
         except Exception as exc:                    # one bad master must not sink the report
             errors.append(f"{label}: {exc}")

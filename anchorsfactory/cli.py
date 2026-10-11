@@ -20,6 +20,7 @@ from datetime import datetime
 
 from dataclasses import replace
 
+from . import speedups
 from .apply import validate_document
 from .conditions import (RuleContext, contexts_from_designspace, parse_location,
                          structure_diff)
@@ -96,6 +97,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     _setup_console_logging(args.verbose)
+    speedups.enable()                     # O(1) glyph lookups in fontParts (see speedups)
 
     try:
         xvalues, uservalues = parse_location(args.location)

@@ -23,7 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from pathlib import Path
 
-from .. import vocabulary
+from .. import speedups, vocabulary
 from .. import presets
 from ..presets import (construction_text, has_construction, is_preset,
                        list_presets, preset_text, set_search_paths)
@@ -183,7 +183,7 @@ class Studio:
     def __init__(self, font, rules_text: str, font_name: str, save_path=None,
                  gc_text: str | None = None, context: RuleContext | None = None):
         self.fonts = [{"name": font_name, "font": font, "tmpdir": None, "allglyphs": None,
-                       "base": context, "location": None, "styleName": None}]
+                       "base": context, "location": None, "styleName": None, "paths": {}}]
         self.active = 0
         self.rules_text = rules_text
         self.lock = threading.Lock()
@@ -207,6 +207,12 @@ class Studio:
     @property
     def font(self):
         return self.fonts[self.active]["font"]
+
+    @property
+    def paths(self) -> dict:
+        """The active font's ``{glyph: svg path}`` cache (outlines never change
+        during a session, whatever the rules)."""
+        return self.fonts[self.active].setdefault("paths", {})
 
     @property
     def context(self) -> RuleContext:
@@ -250,7 +256,8 @@ class Studio:
     def add_font(self, font, name: str, tmpdir=None, context: RuleContext | None = None):
         """Append a font and make it active."""
         self.fonts.append({"name": name, "font": font, "tmpdir": tmpdir, "allglyphs": None,
-                           "base": context, "location": None, "styleName": None})
+                           "base": context, "location": None, "styleName": None,
+                           "paths": {}})
         self.active = len(self.fonts) - 1
         self._sync_active()
 
@@ -290,7 +297,7 @@ class Studio:
         entry (caller holds the lock)."""
         e = self.fonts[self.active]
         if e["allglyphs"] is None:
-            e["allglyphs"] = all_glyph_geometry(e["font"])
+            e["allglyphs"] = all_glyph_geometry(e["font"], e.setdefault("paths", {}))
         return e["allglyphs"]
 
 
@@ -383,13 +390,14 @@ class _Handler(BaseHTTPRequestHandler):
         with self.studio.lock:
             # the master the active font stands for: what `!if` blocks see
             context = self.studio.context.for_font(self.studio.font)
-            view = build_view(self.studio.font, rules, context)
+            view = build_view(self.studio.font, rules, context, self.studio.paths)
             view["gcInactive"] = gc_inactive_lines(gc_text, context)
             view["gcLabel"] = GC_LABEL
             # GlyphConstruction preview: assemble composites from the anchors just
             # computed (on a copy of the font — see compose.build_composite_view).
             if view.get("ok") and isinstance(rules, list) and gc_text.strip():
-                comp = build_composite_view(self.studio.font, rules, gc_text, context)
+                comp = build_composite_view(self.studio.font, rules, gc_text, context,
+                                            self.studio.paths)
                 view["composites"] = comp["composites"]
                 view["uncovered"] = comp.get("uncovered", [])
                 if comp["problems"]:
@@ -519,6 +527,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
+    speedups.enable()                     # O(1) glyph lookups in fontParts (see speedups)
     logging.basicConfig(
         level=logging.INFO if args.verbose else logging.WARNING,
         format="%(levelname)s %(name)s: %(message)s",

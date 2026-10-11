@@ -36,6 +36,18 @@ def glyph_to_svg_path(glyph) -> str:
     return pen.getCommands()
 
 
+def cached_path(cache, name: str, draw) -> str:
+    """``cache[name]``, drawing it with ``draw()`` the first time. Outlines do
+    not depend on the rules, so a per-font cache lives for the whole session
+    (the server keeps one per loaded font); ``cache=None`` disables it."""
+    if cache is None:
+        return draw()
+    path = cache.get(name)
+    if path is None:
+        path = cache[name] = draw()
+    return path
+
+
 def _anchor_payload(font, target, spec, gname, diagnostics, shift_x, layer, line):
     """Resolve one spec on *target*, returning its JSON dict (or ``None`` on a
     hard geometry failure, which is recorded in *diagnostics*).
@@ -142,7 +154,7 @@ def resolve_document(rules_text: str) -> Document:
 
 
 
-def all_glyph_geometry(font) -> list[dict]:
+def all_glyph_geometry(font, path_cache=None) -> list[dict]:
     """Every glyph's rule-independent geometry, for the studio's "all glyphs" tab.
 
     One dict per glyph — ``{name, order, advance, bounds, path}`` (no anchors,
@@ -165,12 +177,12 @@ def all_glyph_geometry(font) -> list[dict]:
             "order": order_pos.get(glyph.name, i),
             "advance": float(glyph.width),
             "bounds": list(bounds) if bounds is not None else None,
-            "path": glyph_to_svg_path(glyph),
+            "path": cached_path(path_cache, glyph.name, lambda: glyph_to_svg_path(glyph)),
         })
     return out
 
 
-def build_view(font, rules, context=None) -> dict:
+def build_view(font, rules, context=None, path_cache=None) -> dict:
     """Compute everything the UI needs for *rules* against *font*.
 
     *rules* is either a rules string (a single layer) or a list of layers
@@ -182,7 +194,9 @@ def build_view(font, rules, context=None) -> dict:
 
     *context* is the master the ``!if`` blocks resolve for (its missing style
     name is filled from *font*); ``inactive`` maps each layer index to the
-    lines those blocks drop, so the editor can dim them.
+    lines those blocks drop, so the editor can dim them. *path_cache* is a
+    per-font ``{glyph: svg path}`` dict reused across calls (see
+    :func:`cached_path`).
     """
     layers = [{"name": "rules", "text": rules}] if isinstance(rules, str) else list(rules)
     names = [l.get("name") for l in layers]
@@ -266,7 +280,8 @@ def build_view(font, rules, context=None) -> dict:
                 "order": order_pos.get(gname, fallback),
                 "advance": float(target.width),
                 "bounds": list(bounds) if bounds is not None else None,
-                "path": glyph_to_svg_path(target),
+                "path": cached_path(path_cache, gname,
+                                    lambda: glyph_to_svg_path(target)),
                 "anchors": list(placed.values()),
             }
             fallback += 1

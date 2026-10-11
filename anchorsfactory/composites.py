@@ -293,6 +293,101 @@ def parse_constructions(gc_text: str, glyphset=None, context=None) -> list[Const
     return out
 
 
+@dataclass(frozen=True)
+class PlacedAnchorView:
+    """A computed anchor as GlyphConstruction reads it (``name``/``x``/``y``)."""
+    name: str
+    x: float
+    y: float
+
+
+class _AnchoredGlyph:
+    """A glyph of *font* whose ``anchors`` are the computed ones; everything
+    else (``draw``, ``width``, ``bounds``, ``unicodes`` …) is the real glyph's."""
+
+    __slots__ = ("_glyph", "anchors")
+
+    def __init__(self, glyph, anchors):
+        self._glyph = glyph
+        self.anchors = anchors
+
+    def __getattr__(self, attr):
+        return getattr(self._glyph, attr)
+
+
+class AnchoredGlyphSet:
+    """A read-only view of *font* with computed anchors in place: what
+    :func:`apply_document` would leave on a copy of the font, without copying
+    or mutating it.
+
+    *placed* is ``{glyph: [(name, x, y), ...]}`` — a
+    :class:`~anchorsfactory.apply.ComputeResult`. With ``clear=True`` (the
+    ``apply_document`` default) a glyph in *placed* has exactly those anchors;
+    with ``clear=False`` they replace same-named existing ones. Glyphs not in
+    *placed* keep their own anchors. Font-level attributes (``info``,
+    ``kerning``, ``groups`` …) are the font's.
+
+    This is what :func:`build_composites` needs, so a preview never pays for
+    ``font.copy()``, which dominates on a big font.
+    """
+
+    def __init__(self, font, placed, *, clear=True):
+        self._font = font
+        self._placed = placed
+        self._clear = clear
+        names = getattr(font, "keys", None)
+        self._names = set(names()) if callable(names) else {g.name for g in font}
+        self._cache: dict = {}
+
+    def __contains__(self, name):
+        return name in self._names
+
+    def __getitem__(self, name):
+        if name not in self._names:
+            raise KeyError(name)
+        g = self._cache.get(name)
+        if g is None:
+            glyph = self._font[name]
+            rows = self._placed.get(name)
+            if rows is None:
+                anchors = list(glyph.anchors)
+            else:
+                anchors = [PlacedAnchorView(n, x, y) for n, x, y in rows]
+                if not self._clear:
+                    mine = {a.name for a in anchors}
+                    anchors = [a for a in glyph.anchors if a.name not in mine] + anchors
+            g = self._cache[name] = _AnchoredGlyph(glyph, anchors)
+        return g
+
+    def __iter__(self):
+        for name in self.keys():
+            yield self[name]
+
+    def __len__(self):
+        return len(self._names)
+
+    def keys(self):
+        return list(self._names)
+
+    def __getattr__(self, attr):
+        return getattr(self._font, attr)
+
+
+def construction_glyph_names(gc_text: str, glyphset=None, context=None) -> set:
+    """Every glyph a construction text uses as a base or a mark (after
+    conditional blocks and ``U+`` references are resolved) — the glyphs whose
+    anchors a composite build needs."""
+    names = set()
+    for c in parse_constructions(gc_text, glyphset, context):
+        parsed = parse_construction(c.text)
+        if parsed:
+            _name, base, marks = parsed
+            if base:
+                names.add(base)
+            names.update(m for m, _ in marks)
+    return names
+
+
 def _anchor_pos(glyph, name):
     for a in glyph.anchors:
         if a.name == name:
@@ -395,7 +490,8 @@ def uncovered_precomposed(font, built) -> list:
     """Precomposed glyphs *font* has that no construction in *built* builds — a
     coverage gap. A glyph counts if a codepoint of it has a **canonical** Unicode
     decomposition (a precomposed accented character) and its name isn't in
-    *built*."""
+    *built*. In the font's glyph order, so the result does not depend on how
+    the font happens to iterate."""
     built = set(built)
     out = []
     for g in font:
@@ -406,4 +502,4 @@ def uncovered_precomposed(font, built) -> list:
             if d and not d.startswith("<"):         # canonical, not <compat>
                 out.append(g.name)
                 break
-    return out
+    return composites_in_glyph_order(font, sorted(out))

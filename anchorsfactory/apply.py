@@ -494,6 +494,28 @@ def substitute_anchor_refs(font, target, specs, doc):
     return eff, info
 
 
+def _glyph_names(font) -> set:
+    """Every glyph name in *font*, as a set, built once per compute.
+
+    ``name in font`` is linear in fontParts' default environment (it rebuilds
+    the full name list per call; see :mod:`anchorsfactory.speedups`), and a
+    compute asks it for every glyph and suffix target."""
+    keys = getattr(font, "keys", None)
+    if callable(keys):
+        try:
+            return set(keys())
+        except Exception:                           # an odd glyphset: iterate instead
+            pass
+    return {g.name for g in font}
+
+
+def _targets_kept(name, sfx_spec, font_names, keep) -> bool:
+    """Whether any (suffixed) target of glyph *name* is in *keep* — so a
+    ``names=``-filtered compute skips the rest without accumulating them.
+    Propagation still reaches skipped glyphs on demand (:func:`_effective_anchors`)."""
+    return any(name + sfx in keep for sfx in sfx_spec.expand(name, font_names))
+
+
 def _existing_anchors(font, gname: str) -> dict:
     """A glyph's pre-existing font anchors as ``{name: (x, y)}`` (fallback source
     when a component produced no computed anchors this run)."""
@@ -611,10 +633,13 @@ def compute_document(font, doc: Document, *, replace=True, round_coords=True,
         raise ValueError(f"on_error must be 'raise' or 'collect', got {on_error!r}")
     keep = None if names is None else set(names)
     sfx_spec = resolve_suffixes(doc.suffix_ops)
-    font_names = {g.name for g in font} if sfx_spec.all else None
+    present = _glyph_names(font)
+    font_names = present if sfx_spec.all else None
     memo: dict[str, dict] = {}                  # glyph name -> effective anchors (propagation)
     placed = ComputeResult()
     for glyph in font:
+        if keep is not None and not _targets_kept(glyph.name, sfx_spec, font_names, keep):
+            continue                            # nothing of this glyph is asked for
         seed = [s for s, _ in propagate_seed(font, glyph, doc, memo,
                                              round_coords=round_coords)]
         specs = accumulate(doc, glyph.name, list(glyph.unicodes), seed=seed)
@@ -622,9 +647,9 @@ def compute_document(font, doc: Document, *, replace=True, round_coords=True,
             continue
         for sfx in sfx_spec.expand(glyph.name, font_names):
             gname = glyph.name + sfx
-            if gname not in font:
-                continue
             if keep is not None and gname not in keep:
+                continue
+            if gname not in present:
                 continue
             anchors = _resolve_specs(font, font[gname], specs, doc, dedup=replace,
                                      round_coords=round_coords, on_error=on_error,
@@ -679,10 +704,13 @@ def explain_document(font, doc: Document, *, replace=True, round_coords=True,
     doc = _for_font(doc, font, context)
     keep = None if names is None else set(names)
     sfx_spec = resolve_suffixes(doc.suffix_ops)
-    font_names = {g.name for g in font} if sfx_spec.all else None
+    present = _glyph_names(font)
+    font_names = present if sfx_spec.all else None
     memo: dict[str, dict] = {}
     out = ExplainResult()
     for glyph in font:
+        if keep is not None and not _targets_kept(glyph.name, sfx_spec, font_names, keep):
+            continue
         seed = [(s, Propagated(src))
                 for s, src in propagate_seed(font, glyph, doc, memo,
                                              round_coords=round_coords)]
@@ -699,9 +727,9 @@ def explain_document(font, doc: Document, *, replace=True, round_coords=True,
         specs = [s for s, _ in prov]
         for sfx in sfx_spec.expand(glyph.name, font_names):
             gname = glyph.name + sfx
-            if gname not in font:
-                continue
             if keep is not None and gname not in keep:
+                continue
+            if gname not in present:
                 continue
             diags: list[ComputeDiagnostic] = []
             anchors = _resolve_specs(font, font[gname], specs, doc, dedup=replace,

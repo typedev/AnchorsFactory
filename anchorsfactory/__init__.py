@@ -40,6 +40,7 @@ from .presets import (list_presets, preset_text, is_preset, is_name,
 from .runner import process_ufo, load_document, merge_documents, resolve_ref
 from .composites import (
     build_composites, parse_constructions, parse_construction, resolve_conditionals,
+    AnchoredGlyphSet, construction_glyph_names,
     composites_in_glyph_order, uncovered_precomposed,
     Composite, Construction, ConstructionGlyph,
     GlyphConstructionBuilder, ParseGlyphConstructionListFromString, GlyphBuilderError,
@@ -105,6 +106,8 @@ __all__ = [
     "blank_inactive",
     "structure_diff",
     "resolve_conditionals",
+    "AnchoredGlyphSet",
+    "construction_glyph_names",
     "aligns_for",
     "completions_after_dot",
     "completions_for_slot",

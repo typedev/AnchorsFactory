@@ -211,6 +211,12 @@ build_composites(font, gc_text, context=ctx)
 
 See "Conditional blocks" in [`docs/anchor-rules.md`](docs/anchor-rules.md).
 
+**Speed with fontParts.** fontParts' default objects look glyph names up in
+linear time, which dominates on big fonts. Call `anchorsfactory.speedups.enable()`
+once at startup to make those lookups O(1). Results are unchanged, and the CLI
+and the Studio already do this. To build composites from computed anchors
+without copying the font, use `AnchoredGlyphSet(font, compute_document(font, doc))`.
+
 ### Compute without mutating (preview)
 
 `compute_document` is the functional core: it returns the anchors a rule

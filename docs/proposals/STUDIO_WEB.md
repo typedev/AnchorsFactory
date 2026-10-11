@@ -52,7 +52,23 @@ dimming and the masters report all work. **Pyodide is about 2× slower than
 CPython**, and on a big font the Studio is already too slow for per-keystroke
 compute **in CPython**.
 
-## Phase 0.5: speed (pays off everywhere, not only in the browser)
+## Phase 0.5: speed: DONE (2026-10-11)
+
+Results on the same real font, with `speedups.enable()` and a warm path cache:
+
+| | before (CPython / Pyodide) | after (CPython / Pyodide) |
+|---|---|---|
+| `build_view` (per keystroke) | 1.0 s / 2.2 s | **0.25 s / 0.57 s** |
+| `build_composite_view` | 3.7 s / 7.4 s | **0.25 s / 0.55 s** |
+| `masters_report` (2 masters) | – / 12 s | – / 1.4 s |
+
+The payloads are identical with and without the speedups (apart from the
+order of `uncovered`, now fixed to glyph order). The composites match the old
+copy-and-apply path exactly on all 161 composites, and golden is unchanged
+(1743/1743, 0 moved). The first view of a font still draws every outline
+(2.8 s in Pyodide); do that while the font loads.
+
+The original analysis:
 
 The profile (CPython, real font) puts the cost in fontParts overhead, not in
 our geometry:

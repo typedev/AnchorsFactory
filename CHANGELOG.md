@@ -11,6 +11,37 @@ changed" without inferring it from a version number.
 
 ## [Unreleased]
 
+### Added
+
+- **`anchorsfactory.speedups.enable()`**, an opt-in fix for fontParts' default
+  (fontshell) objects. There `name in font` and `font[name]` rebuild the whole
+  normalized name list on every call, and `font[name]` does it twice. With the
+  fix, membership is a defcon dict lookup. Results are identical. It applies
+  only while fontParts still inherits its generic implementation, and it is
+  never applied on import. The CLI and the Studio enable it; a host calls it
+  once at startup. On a 3060-glyph font the Studio view drops from 1.0 s to
+  0.25 s.
+- **`AnchoredGlyphSet(font, placed)`**: a read-only view of a font with
+  computed anchors laid over it, which is what `apply_document` would leave on
+  a copy, without copying or mutating anything. `build_composites` accepts it,
+  so a composite preview no longer needs `font.copy()` (5 of the 9.5 s it took
+  on a big font).
+- `construction_glyph_names(gc_text, glyphset, context)`: the base and mark
+  glyphs a construction text uses, after `!if` blocks and `U+` references.
+
+### Changed
+
+- `compute_document` / `explain_document` check glyph existence against a
+  name set built once per call, and with `names=` they skip glyphs none of
+  whose targets were asked for before accumulating them. Propagation still
+  reaches them on demand.
+- `uncovered_precomposed` returns names in the font's glyph order. It used
+  to follow the font's iteration order, which can change between runs.
+- Studio (repository only): composites are built against an
+  `AnchoredGlyphSet` for just the glyphs the constructions use, and SVG paths
+  are cached per font. On the same font, composites drop from 3.7 s to 0.25 s
+  (CPython) and from 7.4 s to 0.55 s (Pyodide).
+
 ## [0.6.0] - 2026-10-11
 
 ### Added
