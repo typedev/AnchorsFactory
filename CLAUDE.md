@@ -28,7 +28,7 @@ to GitHub Pages on each release tag) runs the same API in Pyodide in a Web
 Worker. The page itself has one source, `studio/static/`: `web/` imports it
 and replaces only the transport (`static/api.js` ↔ `web/src/transport.ts`).
 `studio/save.py` writes the rules' anchors back into the opened UFOs (changed
-`.glif`s only, normalized with `ufonormalizer`, a Studio dependency); the page
+`.glif`s only, normalized with `ufonormalizer`, a package dependency); the page
 does the File System Access writes, sessions live in IndexedDB, and
 `web/public/sw.js` gives the site an offline start. See
 `docs/proposals/STUDIO_WEB.md`.

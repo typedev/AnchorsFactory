@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import os
 from fontParts.world import OpenFont
+from ufonormalizer import normalizeUFO
 
 from . import presets
 from .apply import apply_document
@@ -139,6 +140,7 @@ def process_ufo(
     clear: bool = True,
     replace: bool = True,
     round_coords: bool = True,
+    normalize: bool = True,
     document=None,
     search_paths=None,
     context=None,
@@ -150,16 +152,18 @@ def process_ufo(
     *search_paths* resolving it if it is a bare set name. *context* (a
     :class:`~anchorsfactory.conditions.RuleContext`) is the master that
     ``!if`` blocks resolve for; by default only the font's fontinfo
-    ``styleName`` is known.
+    ``styleName`` is known. With *normalize* (the default) the saved UFO is
+    passed through ``ufonormalizer``, so in a normalized font the diff is the
+    anchors alone.
     """
     return _process_ufo(ufo_path, rules_path, output=output, in_place=in_place,
                         backup_dir=backup_dir, clear=clear, replace=replace,
-                        round_coords=round_coords, document=document,
+                        round_coords=round_coords, normalize=normalize, document=document,
                         search_paths=search_paths, context=context)[0]
 
 
 def _process_ufo(ufo_path, rules_path, *, output, in_place, backup_dir, clear,
-                 replace, round_coords, document, search_paths, context):
+                 replace, round_coords, document, search_paths, context, normalize=True):
     """:func:`process_ufo`, also returning what was placed: ``(path, result)``."""
     font = OpenFont(ufo_path)
     doc = (document if document is not None
@@ -183,5 +187,8 @@ def _process_ufo(ufo_path, rules_path, *, output, in_place, backup_dir, clear,
         out = font.path
     else:
         font.save(out)
+    if normalize:
+        # no modTimes file: it would be one more file in the user's UFO
+        normalizeUFO(out, writeModTimes=False)
     log.info("Saved %s", out)
     return out, placed

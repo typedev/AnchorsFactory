@@ -23,7 +23,7 @@ pip install anchorsfactory
 pip install -e .
 ```
 
-Requires Python 3.10+, `fontParts` and `fontTools`.
+Requires Python 3.10+, `fontParts`, `fontTools` and `ufonormalizer`.
 
 ## Quick start
 
@@ -40,7 +40,9 @@ anchorsfactory masters/ --rules-path my-rules --rules default
 ```
 
 By default the source UFO is never overwritten — output goes to
-`*_anchored.ufo` unless you pass `--in-place`.
+`*_anchored.ufo` unless you pass `--in-place`. The saved UFO is passed through
+[ufonormalizer](https://github.com/unified-font-object/ufoNormalizer), so in a
+normalized font the diff is the anchors alone; `--no-normalize` skips that.
 
 ## The rule language
 

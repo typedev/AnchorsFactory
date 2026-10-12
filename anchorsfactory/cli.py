@@ -89,6 +89,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--keep-existing", action="store_true",
                    help="do not clear existing anchors before applying")
     p.add_argument("--no-round", action="store_true", help="keep fractional anchor coordinates")
+    p.add_argument("--no-normalize", action="store_true",
+                   help="do not pass the saved UFO through ufonormalizer")
     p.add_argument("--log-dir", help="write a per-font log file into this directory")
     p.add_argument("-v", "--verbose", action="store_true")
     return p
@@ -162,6 +164,7 @@ def main(argv: list[str] | None = None) -> int:
                 backup_dir=args.backup_dir,
                 clear=not args.keep_existing,
                 round_coords=not args.no_round,
+                normalize=not args.no_normalize,
                 replace=True,
                 document=document,
                 search_paths=args.rules_path,

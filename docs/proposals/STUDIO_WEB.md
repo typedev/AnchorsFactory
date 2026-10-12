@@ -1,5 +1,8 @@
 # Studio as a static web app (Pyodide)
 
+**Status: done (2026-10-11).** Live at <https://typedev.github.io/AnchorsFactory/>.
+The phases below are kept as the record of what was built and why.
+
 **Goal.** Turn the Studio into a site that anyone can open. The Python engine
 runs **in the browser** (Pyodide, in a Web Worker), so fonts never leave the
 tab and there is no server to run or secure. Proprietary fonts can be used on a
@@ -125,64 +128,60 @@ The original plan:
 - Python errors cross the worker as messages (last traceback line only, as in
   `groups-control-web`).
 
-## Phase 2: fonts and files in the browser
+## Phase 2: fonts and files in the browser: DONE (2026-10-11)
 
-**Done (2026-10-11):** opening fonts, in both Studios. A start screen with a
-drop zone (as in `groups-control-web`) is shown until the first font opens;
-the placeholder demo font is then dropped. The page ports `files.ts`'s folder
-reading: drop entries and `showDirectoryPicker` handles behind one interface,
-a designspace chosen at the top of a project folder, `normalizeRelative`
-against `..`, and **only the UFOs it references** are read; reads are retried
-and kept as ArrayBuffers (Chrome sporadically fails file and paged-out Blob
-reads on large folders). Python opens the designspace
-(`upload.open_designspace`, masters with their `!if` contexts); sources missing
-from the drop are listed, the rest open. A zip with several designspaces asks
-via `font/designspace` (the drop waits in `Studio.pending`). Masters of one drop
-share its temp dir until the last is removed. Still open:
-
-- **Rules: DONE (2026-10-11).** A project folder's top-level `.anchors` /
+- **Opening fonts** (both Studios). A start screen with a drop zone (as in
+  `groups-control-web`) is shown until the first font opens; the placeholder
+  demo font is then dropped. The page ports `files.ts`'s folder reading: drop
+  entries and `showDirectoryPicker` handles behind one interface, a
+  designspace chosen at the top of a project folder, `normalizeRelative`
+  against `..`, and **only the UFOs it references** are read. Reads are
+  retried and kept as ArrayBuffers (Chrome sporadically fails file and
+  paged-out Blob reads on large folders). Python opens the designspace
+  (`upload.open_designspace`, masters with their `!if` contexts); sources
+  missing from the drop are listed, the rest open. A zip with several
+  designspaces asks via `font/designspace` (the drop waits in
+  `Studio.pending`). Masters of one drop share its temp dir until the last is
+  removed.
+- **Rules from the folder.** A project folder's top-level `.anchors` /
   `.glyphsConstruction` load as tabs (construction tabs too), `!extends`
   resolves opened project files, Save writes back through File System Access
-  (picker / download elsewhere). File links do not survive a reload yet
-  (handles would need IndexedDB, see below).
-- **Save anchors back: DONE (2026-10-11).** `studio/save.py`: every master
-  computed with its own context, only glyphs whose anchors change; each `.glif`
-  re-read, anchors replaced (identifier/color kept by name) and normalized with
-  `ufonormalizer` (a Studio dependency; a pinned wheel on the web). The page
+  (picker / download elsewhere).
+- **Writing anchors into the font.** `studio/save.py`: every master computed
+  with its own context, only glyphs whose anchors change; each `.glif` re-read,
+  anchors replaced (identifier/color kept by name) and normalized with
+  `ufonormalizer` (a package dependency; a pinned wheel on the web). The page
   writes them into the opened folder after checking each file against what was
-  read (changed on disk → confirm), or downloads a zip; fonts opened from a path
-  are written by the local server. `anchors/plan` → `anchors/commit` / `anchors/zip`.
-  Session: **DONE** — IndexedDB keeps the last folder's handle (or, without one,
-  a copy of its files) and the rule tabs' file handles; the start screen offers
-  Reopen; a rules file changed on disk is reloaded into a clean tab or reported
-  next to unsaved edits. (Headless Chromium crashes reading a stored handle, so
-  that path is checked in real Chrome only.)
-- Original plan: `apply_document` on the font, then write **only the
-  changed `.glif` files**. On Chromium they go into the original folder (File
-  System Access); elsewhere a zip of the changed files is downloaded. The diffs
-  must stay minimal. Check what defcon/ufoLib rewrite, or port
-  `groups-control-web`'s glif patching.
-- Later: IndexedDB session autosave with a "changed on disk" warning.
+  read (changed on disk → confirm), or downloads a zip; fonts opened from a
+  path are written by the local server. `anchors/plan` → `anchors/commit` /
+  `anchors/zip`. The font is not saved through fontParts: only the changed
+  `.glif` texts are produced, so the page can write them itself and the diff
+  stays minimal.
+- **Sessions.** IndexedDB keeps the last folder's handle (or, without one, a
+  copy of its files, up to 200 MB) and the rule tabs' file handles; the start
+  screen offers Reopen; a rules file changed on disk is reloaded into a clean
+  tab or reported next to unsaved edits. Headless Chromium crashes reading a
+  stored handle and cannot answer the File System Access permission prompt,
+  so those paths are checked in real Chrome only.
 
-## Phase 3: deploy
+## Phase 3: deploy: DONE (2026-10-11)
 
-Done in Phase 1 in a simpler form: `.github/workflows/pages.yml` builds `web/`
-on each release tag (or by hand) and deploys it to GitHub Pages; `ci.yml`
-type-checks and bundles `web/` on every push. **Service worker and CSP: DONE
-(2026-10-11)** — `web/public/sw.js` (from groups-control-web: Pyodide, hashed
-assets and wheels cache-first, the rest network-first; the cache is keyed by
-the Pyodide version) gives an offline start after the first visit, and the
-build adds a `<meta>` CSP (`script-src 'self'`; the worker loads Pyodide under
-its own policy). The plan was:
+- `.github/workflows/pages.yml` builds `web/` and deploys it to GitHub Pages
+  on each release tag, or by hand (`gh workflow run pages.yml --ref master`;
+  the `github-pages` environment allows `master` and `v*` tags). `ci.yml`
+  type-checks and bundles `web/` on every push.
+- The engine comes from the checkout (see Phase 1), not a pinned PyPI wheel as
+  first planned; the pure dependencies are pinned wheels checked by sha256.
+- `web/public/sw.js` (from `groups-control-web`: Pyodide, hashed assets and
+  wheels cache-first, the rest network-first; the cache is keyed by the
+  Pyodide version) gives an offline start after the first visit.
+- The build adds a `<meta>` Content-Security-Policy (`script-src 'self'`; the
+  worker loads Pyodide under its own policy).
 
-- `scripts/build_web.py` builds `web/dist/` from the static files, the Studio
-  sources and pinned wheels in `web/wheels/` with a manifest, so nothing is
-  fetched from PyPI at runtime. Python only, no Node toolchain.
-- `.github/workflows/pages.yml` builds and deploys to GitHub Pages on each
-  release tag. The site pins the **released** `anchorsfactory` wheel, so the web
-  Studio always matches a PyPI version.
-- Optional: a service worker for offline use (cache keyed by the Pyodide
-  version), plus a CSP.
+## Next
+
+- A CodeMirror 6 editor in place of the textareas: see
+  [STUDIO_EDITOR.md](STUDIO_EDITOR.md).
 
 ## Decisions (2026-10-11)
 
@@ -195,7 +194,5 @@ its own policy). The plan was:
    replace the textarea editor. React only if the UI grows. **Confirmed.**
 3. **Rule library:** the sample sets from `examples/rules/` are offered on the
    site (the spike already loads them from an index).
-4. **First public version: preview only** (superseded 2026-10-11: anchors are
-   now written back, see Phase 2). No writing back into the UFO. Rules
-   and constructions can be downloaded. Saving anchors into the font is a later
-   phase.
+4. **First public version: preview only.** Superseded the same day: rules
+   and anchors are written back (Phase 2).

@@ -54,6 +54,11 @@ changed" without inferring it from a version number.
 
 ### Changed
 
+- **The CLI normalizes what it saves.** `process_ufo` / `anchorsfactory` pass
+  the saved UFO through ufonormalizer (no modTimes file is written), so in a
+  normalized font the diff is the anchors alone; `--no-normalize` /
+  `normalize=False` keep the previous output. `ufonormalizer` is now a
+  dependency of the package.
 - The Studio's session and endpoints moved from `studio/server.py` to
   `studio/api.py` (`Studio.dispatch(method, body)`); the server is now an HTTP
   adapter over it and the web worker calls it directly. The page talks to

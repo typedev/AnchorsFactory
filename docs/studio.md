@@ -294,8 +294,8 @@ are written. A dialog lists them per master before anything is touched.
 - **Local Studio** with a font given on the command line: the server writes
   into that UFO.
 
-The local Studio needs `ufonormalizer` (`make venv` installs it with the dev
-extra); the web Studio ships it.
+`ufonormalizer` is a dependency of the package (the CLI normalizes what it
+saves too); the web Studio ships it.
 
 ## Sessions and offline use
 

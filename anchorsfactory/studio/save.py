@@ -26,10 +26,7 @@ from ..apply import compute_document, validate_document
 from ..conditions import RuleContext
 from .render import resolve_stack
 
-try:                                     # a Studio dependency (the [dev] extra)
-    from ufonormalizer import normalizeGLIFString
-except ImportError:                      # pragma: no cover - reported on use
-    normalizeGLIFString = None
+from ufonormalizer import normalizeGLIFString
 
 
 class _Glyph:
@@ -50,8 +47,6 @@ def _num(v):
 def rewrite_glif(data: bytes, glyph_name: str, anchors) -> str:
     """The ``.glif`` *data* with its anchors replaced by *anchors*
     (``[(name, x, y), ...]``), normalized."""
-    if normalizeGLIFString is None:
-        raise RuntimeError("writing anchors needs ufonormalizer (pip install ufonormalizer)")
     glyph, pen = _Glyph(), RecordingPointPen()
     readGlyphFromString(data, glyph, pen)
     version = getattr(glyph, "formatVersion", None)
