@@ -275,6 +275,40 @@ loaded font (family name, UPM, italic angle); click one to make it active, or
 remove it (its temp dir goes with the last font opened from it). The command line also
 takes more than one UFO up front — `… server Regular.ufo Italic.ufo`.
 
+## Writing anchors into the font
+
+**write anchors** (fonts pane) writes the anchors the current rules place into
+every loaded master. Each master is computed with its own location and style
+name (so `!if` blocks apply per master), and only glyphs whose anchors change
+are written. A dialog lists them per master before anything is touched.
+
+- Each changed `.glif` is re-read from the UFO, its anchors replaced and the
+  file **normalized with [ufonormalizer](https://github.com/unified-font-object/ufoNormalizer)**:
+  in a normalized UFO the diff is the anchors alone. An anchor that keeps its
+  name keeps its `identifier` and `color`.
+- **Chrome, Edge:** **write** saves into the folder you opened (the browser
+  asks once to allow editing). A file that changed on disk since the font was
+  opened is listed and written only if you confirm.
+- **Other browsers**, or a `.ufoz`/zip: **download .zip** gives the changed
+  `.glif` files, at their paths in the folder.
+- **Local Studio** with a font given on the command line: the server writes
+  into that UFO.
+
+The local Studio needs `ufonormalizer` (`make venv` installs it with the dev
+extra); the web Studio ships it.
+
+## Sessions and offline use
+
+The last font you opened is remembered in this browser (IndexedDB): the start
+screen offers **Reopen** (Chrome and Edge reread the folder, so it is never
+stale; elsewhere a copy of its files is kept, up to 200 MB). The rules tabs are
+kept too, linked to their files again: a file changed on disk is reloaded into
+a tab you had not edited, and reported next to one you had (save overwrites
+it). **Forget** drops the record.
+
+After the first visit the web Studio starts without a network: a service
+worker caches Python, the libraries and the page.
+
 ## Typical workflows
 
 **Debug one rule.** Load your font, find the glyph in the grid, click it, then

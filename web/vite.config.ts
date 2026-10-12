@@ -24,6 +24,32 @@ function studioMarkup(): Plugin {
   }
 }
 
+// The built site's Content-Security-Policy (a <meta>: GitHub Pages sets no
+// headers). The page runs only its own bundle; Python and the fonts live in
+// the worker, which fetches Pyodide from jsDelivr under its own policy.
+// Inline style attributes are the editor's and the preview's. Not in dev:
+// Vite's client injects scripts and opens a socket.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "worker-src 'self'",
+  "connect-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'none'",
+].join('; ')
+
+function contentSecurityPolicy(): Plugin {
+  return {
+    name: 'studio-csp',
+    apply: 'build',
+    transformIndexHtml: (html) =>
+      html.replace('<head>', `<head>\n<meta http-equiv="Content-Security-Policy" content="${CSP}">`),
+  }
+}
+
 const version = /^version\s*=\s*"([^"]+)"/m.exec(
   readFileSync(new URL('../pyproject.toml', import.meta.url), 'utf-8'),
 )![1]
@@ -40,7 +66,7 @@ function commit(): string {
 // wheels by absolute URL from the base, so the base must be absolute.
 export default defineConfig(({ command, isPreview }) => ({
   base: command === 'build' || isPreview ? '/AnchorsFactory/' : '/',
-  plugins: [studioMarkup()],
+  plugins: [studioMarkup(), contentSecurityPolicy()],
   worker: { format: 'es' },
   // the engine, the Studio and the sample rules are read from the checkout
   server: { fs: { allow: ['..'] } },

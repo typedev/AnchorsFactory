@@ -290,6 +290,14 @@ header{position:relative;z-index:45}
 .st-barlbl{margin-top:6px;font-family:var(--mono);font-size:11px;color:var(--muted)}
 .st-bar{height:4px;border-radius:4px;overflow:hidden;background:var(--panel2)}
 .st-bar>div{height:100%;width:5%;background:var(--anchor);transition:width .4s}
+.st-session{margin-top:16px;display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:8px;font-size:13px;
+  border:1px solid color-mix(in srgb,var(--anchor) 40%,transparent);background:color-mix(in srgb,var(--anchor) 8%,transparent)}
+.st-session[hidden]{display:none}
+.st-session span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-session b{color:var(--ink);font-weight:500}
+.st-session button{height:30px;padding:0 12px;border-radius:8px;font:500 13px var(--ui);cursor:pointer}
+.st-ghost{background:none;border:0;color:var(--muted)}
+.st-ghost:hover{color:var(--text)}
 .st-error{margin:16px 0 0;padding:8px 12px;border-radius:8px;font-size:13px;color:var(--err);
   background:color-mix(in srgb,var(--err) 12%,transparent)}
 .st-runtime{margin-top:16px;font-size:12px;color:var(--muted)}
@@ -356,10 +364,17 @@ header{position:relative;z-index:45}
 .masters .m-row.muted{color:var(--muted)}
 
 /* ---- designspace picker (a dropped folder with several) ---- */
-#dspick{border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);
+#dspick,#savedlg{border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);
   padding:16px;min-width:min(420px,90vw);max-width:90vw;font-family:var(--mono);font-size:12px}
-#dspick::backdrop{background:rgba(0,0,0,.45)}
+#dspick::backdrop,#savedlg::backdrop{background:rgba(0,0,0,.45)}
 .dp-title{margin-bottom:12px}
 .dp-list{display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow:auto}
 .dp-item{text-align:left;padding:7px 10px}
-.dp-foot{display:flex;justify-content:flex-end;margin-top:12px}
+.dp-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+.sv-list{display:flex;flex-direction:column;gap:8px;max-height:50vh;overflow:auto}
+.sv-row b{color:var(--ink);font-weight:600}
+.sv-row .sv-ufo{color:var(--muted)}
+.sv-row .sv-glyphs{color:var(--muted);margin-top:2px;word-break:break-word}
+.sv-row .warn{color:var(--stem);margin-top:2px}
+.sv-row .err{color:var(--err);margin-top:2px}
+.sv-note{color:var(--muted);font-size:11px;line-height:1.5;margin:12px 0 0;max-width:60ch}

@@ -42,6 +42,11 @@
         </div>
       </div>
     </div>
+    <div class="st-session" id="stsession" hidden>
+      <span>Last session: <b id="stsessname"></b></span>
+      <button id="streopen" class="st-primary">Reopen</button>
+      <button id="stforget" class="st-ghost">Forget</button>
+    </div>
     <p class="st-error" id="sterror" role="alert" hidden></p>
     <div class="st-runtime" id="struntime" aria-live="polite">
       <div class="st-rt-row"><span id="strtlbl">Starting…</span></div>
@@ -49,7 +54,7 @@
     </div>
     <p class="st-privacy"><b>Your fonts never leave this computer.</b>
       <span id="stprivacy">Everything runs inside this browser tab: there is no server and nothing is uploaded, so it is
-      safe for fonts under NDA. The font is only read; rules are saved by downloading an .anchors file.</span></p>
+      safe for fonts under NDA. Rules and anchors are written back into the folder you opened (Chrome, Edge) or downloaded.</span></p>
   </div>
   <footer class="st-credits">
     <span>Made by <a href="https://github.com/typedev" target="_blank" rel="noreferrer">Alexander Lubovenko</a></span>
@@ -65,6 +70,16 @@
   <div class="dp-title">This folder has several designspaces. Open which one?</div>
   <div class="dp-list"></div>
   <div class="dp-foot"><button class="ghost dp-cancel">cancel</button></div>
+</dialog>
+<dialog id="savedlg">
+  <div class="dp-title">Write anchors into the fonts</div>
+  <div class="sv-list"></div>
+  <p class="sv-note">Only glyphs whose anchors change are written; each .glif is normalized with ufonormalizer. Anchors that keep their name keep their identifier and color.</p>
+  <div class="dp-foot">
+    <button class="ghost sv-cancel">cancel</button>
+    <button class="ghost sv-zip">download .zip</button>
+    <button class="primary sv-write">write</button>
+  </div>
 </dialog>
 <main>
   <section class="editor">
@@ -153,6 +168,7 @@
       <div class="pane-head">
         <span class="ln-name">fonts</span>
         <div class="spacer" style="flex:1"></div>
+        <button id="writeAnchors" class="ghost mini-btn" hidden title="write the anchors the rules place into the fonts' .glif files (normalized)">write anchors</button>
         <button id="compareMasters" class="ghost mini-btn" hidden title="compute every loaded master with its own location and list structural differences">compare</button>
         <button id="addfont" class="ghost mini-btn" title="load another .ufoz/.zip (or drop it) — added, not replaced">+ load</button>
         <button id="addfolder" class="ghost mini-btn" title="open a .ufo folder, or a folder with a .designspace and its masters (or drop it)">+ folder</button>

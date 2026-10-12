@@ -174,6 +174,7 @@ class Studio:
                        "base": context, "location": None, "styleName": None, "paths": {}}]
         self.active = 0
         self.pending = None           # a drop with several designspaces, until one is chosen
+        self.save_plan = None         # what anchors/plan computed, until commit
         # draw every outline of a newly loaded font during the load (the web
         # worker sets this: the load already shows progress, a compute does not)
         self.warm_on_load = False
@@ -389,7 +390,7 @@ class Studio:
             self.add_font(font, name, root)
             if self.warm_on_load:
                 self.all_glyphs()
-        return 200, {"ok": True, "state": self.state}
+        return 200, {"ok": True, "state": self.state, "drop": os.path.basename(root)}
 
     def _add_designspace(self, root: str, rel: str) -> tuple[int, dict]:
         """Add every source of designspace *rel* (under *root*) as a master;
@@ -409,7 +410,7 @@ class Studio:
             if self.warm_on_load:
                 self.all_glyphs()
         return 200, {"ok": True, "state": self.state, "designspace": rel,
-                     "masters": len(masters), "problems": problems}
+                     "masters": len(masters), "problems": problems, "drop": os.path.basename(root)}
 
     def _api_designspace(self, body):
         """Answer a ``choose``: open designspace ``path`` from the pending drop,
@@ -465,6 +466,89 @@ class Studio:
         with self.lock:
             return 200, masters_report(self.master_entries(), layers, body.get("gc", "") or "")
 
+    # ------------------------------------------------------------------ #
+    #  Writing anchors into the fonts (see save.py)
+    # ------------------------------------------------------------------ #
+
+    def _api_anchors_plan(self, body):
+        """What writing the rules' anchors into every loaded master changes: per
+        master the changed glyphs, plus the new (normalized) ``.glif`` texts the
+        page writes. The plan is kept for ``anchors/commit`` / ``anchors/zip``."""
+        from .save import plan_master
+        layers = body.get("layers") if isinstance(body.get("layers"), list) else []
+        masters, page_files, plan = [], [], []
+        with self.lock:
+            for i, entry in enumerate(self.fonts):
+                target = _save_target(entry)
+                if target is None:
+                    continue
+                mode, where = target
+                card = {"index": i, "name": entry["name"], "mode": mode,
+                        "ufo": where if mode == "page" else os.path.basename(where)}
+                try:
+                    ctx = entry_context(entry)
+                except ValueError:
+                    ctx = entry.get("base") or RuleContext()
+                try:
+                    result = plan_master(entry["font"], layers, ctx)
+                except (ValueError, RuntimeError) as exc:
+                    masters.append({**card, "glyphs": [], "problems": [str(exc)], "error": True})
+                    continue
+                masters.append({**card, "glyphs": result["glyphs"], "problems": result["problems"]})
+                plan.append((i, mode, where, result["files"]))
+                if mode == "page":
+                    # `drop` names the dropped folder (the session directory the
+                    # page wrote it under), so the page picks that folder's handle
+                    drop = os.path.basename(entry["tmpdir"])
+                    page_files += [{"drop": drop, "path": f"{where}/{f['file']}", "text": f["text"],
+                                    "original": f["original"]} for f in result["files"]]
+            self.save_plan = plan
+        errors = [m for m in masters if m.get("error")]
+        return 200, {"ok": not errors, "masters": masters, "files": page_files,
+                     "python": sum(len(files) for _, mode, _, files in plan if mode == "python"),
+                     "total": sum(len(files) for *_, files in plan)}
+
+    def _api_anchors_commit(self, body):
+        """The planned files are written (by the page): apply the anchors to the
+        fonts in memory and their session copies; write the fonts opened from a
+        path (local server) into their UFOs."""
+        from .save import commit_master
+        with self.lock:
+            plan, self.save_plan = self.save_plan, None
+            if not plan:
+                return 400, {"ok": False, "error": "nothing planned: ask anchors/plan first"}
+            written = 0
+            for i, mode, _where, files in plan:
+                if i < len(self.fonts):
+                    commit_master(self.fonts[i]["font"], files, write_ufo=True)
+                    written += len(files)
+        return 200, {"ok": True, "written": written}
+
+
+    def _api_anchors_zip(self, body):
+        """The planned page files as a zip (for a browser that cannot write into
+        the folder), paths as in the dropped folder."""
+        import base64
+        from .save import zip_files
+        plan = self.save_plan
+        if not plan:
+            return 400, {"ok": False, "error": "nothing planned: ask anchors/plan first"}
+        files = [(f"{where}/{f['file']}", f["text"]) for _, mode, where, fs in plan if mode == "page" for f in fs]
+        return 200, {"ok": True, "data": base64.b64encode(zip_files(files)).decode("ascii")}
+
+
+def _save_target(entry: dict) -> tuple[str, str] | None:
+    """How a loaded font's files are written: ``("page", path under the drop)``
+    for a dropped font (the page writes into the folder it opened), ``("python",
+    ufo path)`` for one opened from a path (the local server writes it), or
+    None for a font with no files (the placeholder demo)."""
+    path = getattr(entry["font"], "path", None)
+    if not path or not os.path.isdir(path):
+        return None
+    if entry.get("tmpdir"):
+        return "page", os.path.relpath(path, entry["tmpdir"]).replace(os.sep, "/")
+    return "python", path
+
 
 def _malformed(method: str) -> dict:
     if method == "compute":
@@ -484,5 +568,8 @@ _METHODS = {
     "font/remove": Studio._api_remove,
     "font/context": Studio._api_context,
     "masters": Studio._api_masters,
+    "anchors/plan": Studio._api_anchors_plan,
+    "anchors/commit": Studio._api_anchors_commit,
+    "anchors/zip": Studio._api_anchors_zip,
 }
 METHODS = tuple(_METHODS)

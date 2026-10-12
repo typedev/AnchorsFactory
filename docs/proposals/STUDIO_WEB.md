@@ -145,7 +145,19 @@ share its temp dir until the last is removed. Still open:
   resolves opened project files, Save writes back through File System Access
   (picker / download elsewhere). File links do not survive a reload yet
   (handles would need IndexedDB, see below).
-- **Save anchors back (after v1, which is preview only):** `apply_document` on the font, then write **only the
+- **Save anchors back: DONE (2026-10-11).** `studio/save.py`: every master
+  computed with its own context, only glyphs whose anchors change; each `.glif`
+  re-read, anchors replaced (identifier/color kept by name) and normalized with
+  `ufonormalizer` (a Studio dependency; a pinned wheel on the web). The page
+  writes them into the opened folder after checking each file against what was
+  read (changed on disk → confirm), or downloads a zip; fonts opened from a path
+  are written by the local server. `anchors/plan` → `anchors/commit` / `anchors/zip`.
+  Session: **DONE** — IndexedDB keeps the last folder's handle (or, without one,
+  a copy of its files) and the rule tabs' file handles; the start screen offers
+  Reopen; a rules file changed on disk is reloaded into a clean tab or reported
+  next to unsaved edits. (Headless Chromium crashes reading a stored handle, so
+  that path is checked in real Chrome only.)
+- Original plan: `apply_document` on the font, then write **only the
   changed `.glif` files**. On Chromium they go into the original folder (File
   System Access); elsewhere a zip of the changed files is downloaded. The diffs
   must stay minimal. Check what defcon/ufoLib rewrite, or port
@@ -156,8 +168,12 @@ share its temp dir until the last is removed. Still open:
 
 Done in Phase 1 in a simpler form: `.github/workflows/pages.yml` builds `web/`
 on each release tag (or by hand) and deploys it to GitHub Pages; `ci.yml`
-type-checks and bundles `web/` on every push. No service worker yet. The plan
-was:
+type-checks and bundles `web/` on every push. **Service worker and CSP: DONE
+(2026-10-11)** — `web/public/sw.js` (from groups-control-web: Pyodide, hashed
+assets and wheels cache-first, the rest network-first; the cache is keyed by
+the Pyodide version) gives an offline start after the first visit, and the
+build adds a `<meta>` CSP (`script-src 'self'`; the worker loads Pyodide under
+its own policy). The plan was:
 
 - `scripts/build_web.py` builds `web/dist/` from the static files, the Studio
   sources and pinned wheels in `web/wheels/` with a manifest, so nothing is
@@ -179,6 +195,7 @@ was:
    replace the textarea editor. React only if the UI grows. **Confirmed.**
 3. **Rule library:** the sample sets from `examples/rules/` are offered on the
    site (the spike already loads them from an index).
-4. **First public version: preview only.** No writing back into the UFO. Rules
+4. **First public version: preview only** (superseded 2026-10-11: anchors are
+   now written back, see Phase 2). No writing back into the UFO. Rules
    and constructions can be downloaded. Saving anchors into the font is a later
    phase.

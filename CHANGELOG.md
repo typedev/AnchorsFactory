@@ -41,6 +41,17 @@ changed" without inferring it from a version number.
   download), unsaved tabs show ●, layers can be closed. The construction pane
   has tabs too, concatenated for the engine with errors mapped to their tab.
 
+- **Studio: write anchors into the font.** The rules' anchors go into every
+  loaded master's `.glif` files (each master with its own `!if` context, only
+  changed glyphs, normalized with ufonormalizer, anchor identifiers and colors
+  kept): into the opened folder after a changed-on-disk check (Chrome, Edge),
+  as a zip elsewhere, or by the local server for a font opened from a path.
+- **Studio: sessions.** The last font and the rules tabs' file links survive a
+  reload (IndexedDB; Reopen on the start screen); rules files changed on disk
+  are reloaded or reported next to unsaved edits.
+- **Web Studio: offline start and CSP.** A service worker caches Pyodide, the
+  wheels and the page; the build sets a Content-Security-Policy.
+
 ### Changed
 
 - The Studio's session and endpoints moved from `studio/server.py` to

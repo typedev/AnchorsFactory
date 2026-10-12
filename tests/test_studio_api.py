@@ -27,7 +27,8 @@ def _layers(text=RULES):
 
 def test_methods_are_the_http_routes():
     assert set(METHODS) == {"state", "allglyphs", "compute", "font", "font/designspace",
-                            "font/activate", "font/remove", "font/context", "masters"}
+                            "font/activate", "font/remove", "font/context", "masters",
+                            "anchors/plan", "anchors/commit", "anchors/zip"}
 
 
 def test_state_carries_the_engine_version(studio):

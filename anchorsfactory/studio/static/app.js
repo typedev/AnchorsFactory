@@ -15,6 +15,7 @@ let activeLayer = 0;                   // which anchor layer the tab strip is ed
 let gcLayers = [], activeGc = 0;        // construction tabs (concatenated for the engine)
 let activeEd = null;
 let projectDir = null;                 // the opened folder's handle (Chromium), for Save as
+const dropHandles = {};                // a drop's id (from Python) -> its folder handle, for writing anchors
 let RENDER_MODE = "fill";              // inspector outline style: "fill" | "outline" (grid is always filled)
 let ZOOM = 1;                          // inspector preview zoom (grid thumbnails ignore it)
 const lastPos = {};                          // glyph -> {anchor -> {x,y}} for tweening
@@ -58,6 +59,7 @@ async function boot(){
   setupView();
   $("#outbar").addEventListener("click", () => $("#output").classList.toggle("open"));
   $("#compareMasters").addEventListener("click", compareMasters);
+  $("#writeAnchors").addEventListener("click", writeAnchors);
   // locally, the start screen only when no font was given (the demo is up)
   if(studioApi.kind !== "worker" && META.font === "demo" && (META.fonts || []).length <= 1) showStart();
   compute();
@@ -79,11 +81,15 @@ function setFontMeta(){
  *  `file = {name, handle, saved}`: Save writes back to it, and an .anchors
  *  file's name is a set `!extends` can inherit.
  * ===================================================================== */
+// a layer as stored: its text, and the file it came from with that file's last
+// known text (the handle itself goes to IndexedDB, see rememberHandles)
+const fileState = l => ({name: l.name, text: l.ed.getValue(),
+                         file: l.file ? l.file.name : null, saved: l.file ? l.file.saved : null});
 const persist = debounce(() => {
   try {
     localStorage.setItem("af.rules", JSON.stringify({
       preset: $("#preset").value,
-      layers: anchorLayers.map(l => ({name: l.name, text: l.ed.getValue(), file: l.file ? l.file.name : null})),
+      layers: anchorLayers.map(fileState),
       active: activeLayer,
     }));
   } catch(_){}
@@ -92,7 +98,7 @@ const persist = debounce(() => {
 const persistGC = debounce(() => {
   try {
     localStorage.setItem("af.gc", JSON.stringify({
-      layers: gcLayers.map(l => ({name: l.name, text: l.ed.getValue(), file: l.file ? l.file.name : null})),
+      layers: gcLayers.map(fileState),
       active: activeGc,
     }));
   } catch(_){}
@@ -173,14 +179,30 @@ function closeLayer(kind, idx){
 }
 
 /** Add a rules file as a layer, or refresh the layer already opened from it. */
+/**
+ * Add a rules file as a layer, or refresh the layer already opened from it.
+ * A layer with unsaved edits keeps them (the file's text becomes its saved
+ * state, so it shows as changed); returns "kept" then, "reloaded" when a
+ * clean layer took a newer text from the file, else "".
+ */
 function addRulesLayer(kind, name, text, file, {activate = true} = {}){
   const st = STACKS[kind], layers = st.layers();
   const stem = name.replace(/\.(anchors|af|dsl|txt|glyphsConstruction|glyphConstruction)$/i, "");
   const same = layers.findIndex(l => l.file && l.file.name === name);
   file = file ? {...file, name, saved: text} : null;
-  if(same >= 0){ layers[same].ed.setValue(text); layers[same].file = file; if(activate) setActive(kind, same); else renderTabs(kind); }
+  let outcome = "";
+  if(same >= 0){
+    const l = layers[same], mine = l.ed.getValue();
+    const clean = !l.file || l.file.saved == null ? mine === text : mine === l.file.saved;
+    if(mine !== text){
+      if(clean){ l.ed.setValue(text); outcome = "reloaded"; } else outcome = "kept";
+    }
+    l.file = file;
+    if(activate) setActive(kind, same); else renderTabs(kind);
+  }
   else addLayer(kind, stem, text, {activate, file});
   st.persist();
+  return outcome;
 }
 
 const GC_FILE = /\.glyphs?Construction$/i;
@@ -197,6 +219,7 @@ async function openRulesFile(kind){
     const text = await (await h.getFile()).text();
     addRulesLayer(kindOf(h.name) || kind, h.name, text, {handle: h});
   }
+  rememberHandles();
   SELECTED = null; HL_ANCHOR = null; compute();
 }
 
@@ -219,7 +242,7 @@ async function saveLayer(kind){
     const w = await handle.createWritable(); await w.write(text); await w.close();
     l.file = {name: handle.name, handle, saved: text};
     if(kind === "anchors" && handle.name.toLowerCase().endsWith(".anchors")) l.name = handle.name.replace(/\.anchors$/i, "");
-    renderTabs(kind); st.persist();
+    renderTabs(kind); st.persist(); rememberHandles();
     status.className = "pill ok"; status.textContent = `saved ${handle.name}`;
     if(kind === "anchors") compute();                // the file name may now be an !extends target
   } catch(err){
@@ -274,10 +297,15 @@ async function loadProjectRules(nodes, dir){
   };
   anchors.forEach(f => visit(f));
   const gcs = files.filter(f => f.kind === "gc").sort((a, b) => a.name.localeCompare(b.name));
+  const notes = [];
   for(const f of [...order, ...gcs]){
     const handle = dir ? await dir.getFileHandle(f.name).catch(() => null) : null;
-    addRulesLayer(f.kind, f.name, f.text, {handle}, {activate: false});
+    const outcome = addRulesLayer(f.kind, f.name, f.text, {handle}, {activate: false});
+    if(outcome === "kept") notes.push(`${f.name} changed on disk: your unsaved edits are kept (save overwrites it)`);
+    else if(outcome === "reloaded") notes.push(`${f.name} changed on disk: reloaded`);
   }
+  loadProjectRules.notes = notes;
+  rememberHandles();
   if(order.length) setActive("anchors", anchorLayers.findIndex(l => l.file && l.file.name === order[order.length - 1].name));
   if(gcs.length) setActive("gc", gcLayers.findIndex(l => l.file && l.file.name === gcs[gcs.length - 1].name));
   return files.map(f => f.name);
@@ -289,7 +317,7 @@ function setupEditors(){
   let gcState = null; try { gcState = JSON.parse(savedGC); } catch(_){ gcState = null; }
   if(gcState && Array.isArray(gcState.layers) && gcState.layers.length){
     gcState.layers.forEach(l => addLayer("gc", l.name || "constructions", l.text || "",
-                                         {file: l.file ? {name: l.file, handle: null, saved: null} : null}));
+                                         {file: l.file ? {name: l.file, handle: null, saved: l.saved ?? null} : null}));
     setActive("gc", Number.isInteger(gcState.active) ? gcState.active : 0);
   } else {                                           // older sessions kept one plain text
     addLayer("gc", "constructions", typeof savedGC === "string" && !gcState ? savedGC : (META.gc || ""));
@@ -304,7 +332,7 @@ function setupEditors(){
       l.name || (idx === 0 ? "default" : `layer ${idx}`),
       // with --save on, the default (bottom) layer is authoritative from disk
       (idx === 0 && META.save) ? META.rules : (l.text || ""),
-      {file: l.file ? {name: l.file, handle: null, saved: null} : null}));
+      {file: l.file ? {name: l.file, handle: null, saved: l.saved ?? null} : null}));
     setActiveLayer(Number.isInteger(saved.active) ? saved.active : 0);
   } else {
     $("#preset").value = presetOf(META.rules) || META.presets[0] || "";
@@ -947,10 +975,10 @@ function normalizeRelative(path){
  * it references (projects hold builds, proofs and other masters too). A source
  * outside the folder or missing from it is left for Python to report.
  */
-async function openFolder(folder, dirPromise = null){
+async function openFolder(folder, dirPromise = null, {prefer = null} = {}){
   progress("Listing the files", 0, 0);
   if(/\.ufo$/i.test(folder.name))
-    return sendFont(folder.name, await readPending(await collect(folder, folder.name, [])));
+    return sendFont(folder.name, await readPending(await collect(folder, folder.name, [])), {rules: [], dir: dirPromise});
   const top = await listRetrying(folder, folder.name);
   // the rules next to the font: loaded once it opens, linked for Save
   const project = {rules: top.filter(n => n.kind === "file" && kindOf(n.name)), dir: dirPromise};
@@ -962,8 +990,8 @@ async function openFolder(folder, dirPromise = null){
     if(!ufo) throw new Error(`${folder.name}: no .designspace or .ufo at the top of this folder.`);
     return sendFont(ufo.name, await readPending(await collect(ufo.folder, `${folder.name}/${ufo.name}`, [])), project);
   }
-  let chosen = found[0];
-  if(found.length > 1){
+  let chosen = found.find(n => n.name === prefer) || found[0];
+  if(found.length > 1 && !found.some(n => n.name === prefer)){
     progress("Choose a designspace", 0, 0);
     const name = await chooseDesignspace(found.map(n => n.name));
     if(!name){ progressDone(); return; }
@@ -980,7 +1008,7 @@ async function openFolder(folder, dirPromise = null){
     if(ufo) await collect(ufo, `${folder.name}/${rel}`, pending);
   }
   const files = [{path: `${folder.name}/${chosen.name}`, file: ds}, ...await readPending(pending)];
-  return sendFont(folder.name, files, project);
+  return sendFont(folder.name, files, {...project, designspace: chosen.name});
 }
 
 // Which designspace of a dropped folder to open: resolves to its path, or null.
@@ -1015,7 +1043,7 @@ function showStart(){
   start.hidden = false;
   if(studioApi.kind !== "worker"){
     $("#stprivacy").textContent = "The Studio runs on this computer as a local server: nothing is sent anywhere. " +
-      "The font is only read; rules are saved by downloading an .anchors file.";
+      "Rules and anchors are written back into the folder you opened (Chrome, Edge) or downloaded.";
   }
   const STAGES = {"starting Python…": .15, "loading font libraries…": .5, "starting the Studio…": .85};
   studioApi.onStatus(text => {
@@ -1023,6 +1051,7 @@ function showStart(){
     $("#strtlbl").textContent = text[0].toUpperCase() + text.slice(1);
     $("#strtbar").style.width = `${STAGES[text] * 100}%`;
   });
+  offerSession();
   studioApi.onReady(info => {
     pythonReady = true;
     $("#struntime").classList.add("ready");
@@ -1059,6 +1088,11 @@ async function sendFont(name, collected, project = null){
   progress("Opening the font", 0, 0);
   await bootDone;
   const status = $("#status");
+  let dir = project ? await Promise.resolve(project.dir).catch(() => null) : null;
+  dir = dir && dir.kind === "directory" ? dir : null;
+  // no folder handle to reopen from: keep a copy of the files for the session
+  // (taken now: the originals are handed over to the worker)
+  const copy = !dir && collected.length ? await snapshotFiles(collected) : null;
   let j;
   try { j = await studioApi.loadFont(name, collected); }
   catch(err){ j = {ok:false, error:String(err.message || err)}; }
@@ -1086,19 +1120,124 @@ async function sendFont(name, collected, project = null){
     box.innerHTML = `<div class="m-row muted">${escapeHtml(j.designspace)}: ${j.masters} master${j.masters === 1 ? "" : "s"}</div>` +
       (j.problems || []).map(m => `<div class="m-row warn">${escapeHtml(m)}</div>`).join("");
   }
+  if(dir && j.drop) dropHandles[j.drop] = dir;
   if(project){
     if(!j.designspace) box.innerHTML = "";
-    const dir = await Promise.resolve(project.dir).catch(() => null);
-    const names = await loadProjectRules(project.rules, dir && dir.kind === "directory" ? dir : null);
+    const names = await loadProjectRules(project.rules || [], dir);
     if(names.length){
       box.hidden = false;
-      box.insertAdjacentHTML("beforeend", `<div class="m-row muted">rules: ${escapeHtml([...names].sort().join(", "))}</div>`);
+      box.insertAdjacentHTML("beforeend", `<div class="m-row muted">rules: ${escapeHtml([...names].sort().join(", "))}</div>` +
+        (loadProjectRules.notes || []).map(n => `<div class="m-row warn">${escapeHtml(n)}</div>`).join(""));
     }
   }
+  rememberSession({name, dir, files: copy, designspace: project && project.designspace});
   SELECTED = null; HL_ANCHOR = null; GLYPHS = {};    // the new font becomes active
   ALLGLYPHS = null; ALLMAP = {};                     // …its all-glyphs geometry is fresh
   for(const k in lastPos) delete lastPos[k];
   compute();
+}
+
+/* -- session: reopen the last font after a reload (IndexedDB) ------------
+ * One record: the last font opened, as its folder handle (Chromium; reread
+ * on reopen, so it is never stale) or, without one, a copy of its files, plus
+ * the handles of the rule files the tabs are linked to. The rules' text is in
+ * localStorage (persist). Only this browser profile sees any of it. */
+
+const SESSION_MAX_BYTES = 200e6;                     // a bigger handle-less drop is not kept
+
+function idb(mode, run){
+  return new Promise((resolve, reject) => {
+    const open = indexedDB.open("anchorsfactory-studio", 1);
+    open.onupgradeneeded = () => open.result.createObjectStore("session");
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result, tx = db.transaction("session", mode), req = run(tx.objectStore("session"));
+      tx.oncomplete = () => { db.close(); resolve(req.result); };
+      tx.onerror = tx.onabort = () => { db.close(); reject(tx.error); };
+    };
+  });
+}
+const sessionGet = () => idb("readonly", st => st.get("current")).catch(() => null);
+const sessionPut = rec => idb("readwrite", st => st.put(rec, "current")).catch(err => console.warn("[studio] session not kept", err));
+const sessionForget = () => idb("readwrite", st => st.delete("current")).catch(() => null);
+
+async function snapshotFiles(collected){
+  let total = 0; const out = [];
+  for(const c of collected){
+    const bytes = (await c.file.arrayBuffer()).slice(0);
+    total += bytes.byteLength; if(total > SESSION_MAX_BYTES) return null;
+    out.push({path: c.path, bytes});
+  }
+  return out;
+}
+
+async function rememberSession({name, dir, files, designspace}){
+  if(!dir && !files) return;
+  await sessionPut({name, dir, files: dir ? null : files, designspace: designspace || null,
+                    savedAt: Date.now(), handles: linkedHandles()});
+}
+
+/** {file name: handle} of every rules tab linked to a file. */
+function linkedHandles(){
+  const out = {};
+  for(const l of [...anchorLayers, ...gcLayers]) if(l.file && l.file.handle) out[l.file.name] = l.file.handle;
+  return out;
+}
+
+/** Keep the tabs' file handles with the session (after a link changes). */
+async function rememberHandles(){
+  const rec = await sessionGet();
+  if(rec){ rec.handles = linkedHandles(); await sessionPut(rec); }
+}
+
+/** Reopen the stored session (from a click: a folder may ask for permission). */
+async function reopenSession(rec){
+  if(rec.dir){
+    let perm = await rec.dir.queryPermission({mode: "read"});
+    if(perm !== "granted") perm = await rec.dir.requestPermission({mode: "read"});
+    if(perm !== "granted") throw new Error(`${rec.dir.name}: reading the folder was not allowed.`);
+    await openFolder(handleFolder(rec.dir), Promise.resolve(rec.dir), {prefer: rec.designspace});
+  } else {
+    await sendFont(rec.name, rec.files.map(f => ({path: f.path, file: inMemory(f.bytes)})),
+                   {rules: [], dir: null, designspace: rec.designspace});
+  }
+  await relinkTabs(rec.handles || {});
+}
+
+/** Give tabs restored from localStorage their file handles back, and check
+ *  those files against the text they were last saved or read with. */
+async function relinkTabs(handles){
+  const notes = [];
+  for(const [kind, layers] of [["anchors", anchorLayers], ["gc", gcLayers]]){
+    for(const l of layers){
+      if(!l.file || l.file.handle || !handles[l.file.name]) continue;
+      const h = handles[l.file.name];
+      try {
+        if((await h.queryPermission({mode: "read"})) !== "granted"
+           && (await h.requestPermission({mode: "read"})) !== "granted") continue;
+        const disk = await (await h.getFile()).text();
+        const outcome = addRulesLayer(kind, l.file.name, disk, {handle: h}, {activate: false});
+        if(outcome === "kept") notes.push(`${l.file.name} changed on disk: your unsaved edits are kept (save overwrites it)`);
+        else if(outcome === "reloaded") notes.push(`${l.file.name} changed on disk: reloaded`);
+      } catch(_){ /* moved or deleted: the tab stays, Save asks where */ }
+    }
+  }
+  if(notes.length){
+    const box = $("#masters"); box.hidden = false;
+    box.insertAdjacentHTML("beforeend", notes.map(n => `<div class="m-row warn">${escapeHtml(n)}</div>`).join(""));
+  }
+  renderTabs("anchors"); renderTabs("gc"); rememberHandles(); compute();
+}
+
+/** The start screen's "last session" row. */
+async function offerSession(){
+  const rec = await sessionGet(); if(!rec) return;
+  const row = $("#stsession");
+  $("#stsessname").textContent = `${rec.dir ? rec.dir.name : rec.name}` +
+    (rec.designspace ? ` · ${rec.designspace}` : "") + ` · ${new Date(rec.savedAt).toLocaleString()}`;
+  row.hidden = false;
+  $("#streopen").onclick = () => { row.hidden = true; guarded(reopenSession(rec)).then(() => { if(startShown()) row.hidden = false; }); };
+  $("#stforget").onclick = async () => { await sessionForget(); row.hidden = true; };
 }
 
 /* ===================================================================== *
@@ -1135,6 +1274,7 @@ function renderFontCards(){
     box.appendChild(card);
   });
   $("#compareMasters").hidden = fonts.length < 2;
+  $("#writeAnchors").hidden = placeholderFont;
 }
 
 async function setFontContext(i, card){
@@ -1183,6 +1323,103 @@ async function activateFont(i){
 
 async function removeFont(i){
   if(await fontOp("font/remove", i)){ if(!GLYPHS[SELECTED]){ SELECTED=null; HL_ANCHOR=null; } GLYPHS={}; compute(); }
+}
+
+/* ===================================================================== *
+ *  Write anchors: the rules' anchors into every loaded master's .glif files.
+ *  Python plans (only changed glyphs, normalized); the page writes them into
+ *  the folder each font was opened from, or downloads a zip.
+ * ===================================================================== */
+async function writeAnchors(){
+  const status = $("#status"); status.className = "pill"; status.textContent = "planning…";
+  let plan;
+  try { plan = await studioApi.call("anchors/plan", {layers: sentLayers()}); }
+  catch(err){ status.className = "pill bad"; status.textContent = "write failed"; return showWriteError(err); }
+  status.className = "pill ok"; status.textContent = "ok";
+  const dlg = $("#savedlg"), list = dlg.querySelector(".sv-list");
+  list.innerHTML = plan.masters.map(m => {
+    const n = m.glyphs.length;
+    const glyphs = n ? m.glyphs.slice(0, 24).join(" ") + (n > 24 ? ` … +${n - 24}` : "") : "no changes";
+    return `<div class="sv-row"><b>${escapeHtml(m.name)}</b> <span class="sv-ufo">${escapeHtml(m.ufo)}</span>` +
+      `<div>${n} glyph${n === 1 ? "" : "s"}${m.mode === "python" ? " · written by the local server" : ""}</div>` +
+      `<div class="sv-glyphs">${escapeHtml(glyphs)}</div>` +
+      (m.problems || []).map(p => `<div class="${m.error ? "err" : "warn"}">${escapeHtml(p)}</div>`).join("") + `</div>`;
+  }).join("") || `<div class="sv-row">No font with files is open.</div>`;
+  const pageFiles = plan.files, canWrite = pageFiles.every(f => dropHandles[f.drop]);
+  const write = dlg.querySelector(".sv-write"), zip = dlg.querySelector(".sv-zip");
+  write.disabled = !plan.ok || !plan.total || (pageFiles.length && !canWrite);
+  write.textContent = plan.total ? `write ${plan.total} file${plan.total === 1 ? "" : "s"}` : "write";
+  write.title = pageFiles.length && !canWrite
+    ? "this browser (or this drop) gave no writable folder: download the zip instead" : "";
+  zip.hidden = !pageFiles.length; zip.disabled = !plan.ok;
+  const choice = await new Promise(resolve => {
+    write.onclick = () => resolve("write"); zip.onclick = () => resolve("zip");
+    dlg.querySelector(".sv-cancel").onclick = () => resolve(null);
+    dlg.oncancel = e => { e.preventDefault(); resolve(null); };
+    dlg.showModal();
+  });
+  dlg.close();
+  if(!choice) return;
+  try {
+    if(choice === "zip"){
+      const z = await studioApi.call("anchors/zip", {});
+      downloadBytes(Uint8Array.from(atob(z.data), c => c.charCodeAt(0)), "anchors.zip", "application/zip");
+      status.className = "pill ok"; status.textContent = `zip: ${pageFiles.length} files`;
+      return;
+    }
+    if(pageFiles.length && !(await writePageFiles(pageFiles))) { status.textContent = "not written"; return; }
+    const done = await studioApi.call("anchors/commit", {});
+    await compute();
+    status.className = "pill ok"; status.textContent = `anchors written: ${done.written} file${done.written === 1 ? "" : "s"}`;
+  } catch(err){ status.className = "pill bad"; status.textContent = "write failed"; showWriteError(err); }
+}
+
+function showWriteError(err){
+  $("#problems").innerHTML = `<div class="row err"><span class="tag">write</span><span>${escapeHtml(String(err.message || err))}</span></div>`;
+  $("#output").classList.add("open");
+}
+
+/** A file handle at `rel` (a/b/c.glif) under a folder handle. */
+async function fileAt(dir, rel){
+  const parts = rel.split("/"), leaf = parts.pop();
+  for(const p of parts) dir = await dir.getDirectoryHandle(p);
+  return dir.getFileHandle(leaf);
+}
+
+/**
+ * Write the planned .glif files into the folders they were opened from. Each
+ * path starts with the dropped folder's own name, which the handle stands for.
+ * A file that changed on disk since the font was opened is listed first, and
+ * written only if confirmed. False when nothing was written.
+ */
+async function writePageFiles(files){
+  const status = $("#status");
+  for(const dir of new Set(files.map(f => dropHandles[f.drop]))){
+    if((await dir.queryPermission({mode: "readwrite"})) !== "granted"
+       && (await dir.requestPermission({mode: "readwrite"})) !== "granted")
+      throw new Error("Writing to the folder was not allowed.");
+  }
+  const rel = f => f.path.split("/").slice(1).join("/");
+  const changed = [];
+  for(const [i, f] of files.entries()){
+    if(i % 50 === 0){ status.textContent = `checking ${i}/${files.length}`; }
+    const disk = await (await (await fileAt(dropHandles[f.drop], rel(f))).getFile()).text();
+    if(disk !== f.original) changed.push(rel(f));
+  }
+  if(changed.length && !confirm(`${changed.length} file${changed.length === 1 ? " has" : "s have"} changed on disk since the font was opened:\n\n` +
+      changed.slice(0, 12).join("\n") + (changed.length > 12 ? `\n… +${changed.length - 12}` : "") +
+      "\n\nOverwrite with the new anchors?")) return false;
+  for(const [i, f] of files.entries()){
+    if(i % 50 === 0){ status.textContent = `writing ${i}/${files.length}`; }
+    const w = await (await fileAt(dropHandles[f.drop], rel(f))).createWritable();
+    await w.write(f.text); await w.close();
+  }
+  return true;
+}
+
+function downloadBytes(bytes, filename, type){
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([bytes], {type}));
+  a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }
 
 function downloadText(text, filename){
